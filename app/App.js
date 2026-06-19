@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 
 import { colors, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
+import { removeItem } from './store';
 
 const STORAGE_KEY = 'wannalog_items_v1';
 const THREE_DAYS_SECONDS = 3 * 24 * 60 * 60;
@@ -98,12 +99,20 @@ export default function App() {
   async function addItem(title, category, due) {
     const item = {
       id: String(Date.now()), title, category, dueTag: due || 'none',
-      createdAt: Date.now(), doneAt: null,
+      createdAt: Date.now(), doneAt: null, notificationId: null,
     };
-    await persist([item, ...items]);
-    await scheduleReminder(item, THREE_DAYS_SECONDS); // 3日後に思い出させる
+    const notificationId = await scheduleReminder(item, THREE_DAYS_SECONDS); // 3日後に思い出させる
+    await persist([{ ...item, notificationId }, ...items]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert('保存しました ✨', '3日後に、そっと思い出させます。');
+  }
+
+  async function deleteItem(id) {
+    const target = items.find((it) => it.id === id);
+    if (target?.notificationId) {
+      await Notifications.cancelScheduledNotificationAsync(target.notificationId).catch(() => {});
+    }
+    await persist(removeItem(items, id));
   }
 
   function runCelebration() {
@@ -138,6 +147,7 @@ export default function App() {
         item={selected}
         onBack={() => setScreen('home')}
         onDone={() => { markDone(selected.id); setScreen('home'); }}
+        onDelete={() => { deleteItem(selected.id); setScreen('home'); }}
       />
     );
   }
@@ -315,7 +325,7 @@ function SaveModal({ visible, onClose, onSave }) {
   );
 }
 
-function DetailScreen({ item, onBack, onDone }) {
+function DetailScreen({ item, onBack, onDone, onDelete }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
@@ -330,11 +340,23 @@ function DetailScreen({ item, onBack, onDone }) {
     Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした'));
   }
 
+  function confirmDelete() {
+    Alert.alert(
+      '削除しますか？',
+      `「${item.title}」を削除します。元に戻せません。`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '削除する', style: 'destructive', onPress: onDelete },
+      ],
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <View style={styles.detailBar}>
+      <View style={[styles.detailBar, { flexDirection: 'row', justifyContent: 'space-between' }]}>
         <Pressable onPress={onBack}><Text style={styles.back}>‹ 戻る</Text></Pressable>
+        <Pressable onPress={confirmDelete}><Text style={styles.deleteLink}>削除</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         <View style={[styles.detailPhoto, { backgroundColor: cat.color }]}>
@@ -416,6 +438,7 @@ const styles = StyleSheet.create({
 
   detailBar: { paddingHorizontal: 16, paddingTop: 8 },
   back: { fontSize: 16, color: colors.charcoal },
+  deleteLink: { fontSize: 14, color: colors.coral, fontWeight: '700' },
   detailPhoto: { height: 220, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   detailEmoji: { fontSize: 72 },
   detailTitle: { fontSize: 22, fontWeight: '800', color: colors.charcoal, marginTop: 16 },

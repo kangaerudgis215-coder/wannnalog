@@ -1,6 +1,7 @@
-// 純粋ロジックのテスト（links.js / theme.js）
+// 純粋ロジックのテスト（links.js / theme.js / store.js）
 import { actionLinks, dueLabel } from '../links';
 import { getCategory, reminderBody, CATEGORIES } from '../theme';
+import { removeItem } from '../store';
 
 describe('actionLinks', () => {
   test('食べたい は 食べログ と Googleマップ を返す', () => {
@@ -61,5 +62,22 @@ describe('theme', () => {
     expect(typeof reminderBody('eat')).toBe('string');
     expect(reminderBody('eat').length).toBeGreaterThan(0);
     expect(typeof reminderBody('unknown')).toBe('string');
+  });
+});
+
+describe('removeItem', () => {
+  const items = [{ id: '1' }, { id: '2' }, { id: '3' }];
+
+  test('指定したidのアイテムだけを取り除く', () => {
+    expect(removeItem(items, '2')).toEqual([{ id: '1' }, { id: '3' }]);
+  });
+
+  test('存在しないidを渡しても元の配列と同じ内容のまま', () => {
+    expect(removeItem(items, 'nope')).toEqual(items);
+  });
+
+  test('元の配列を変更しない（イミュータブル）', () => {
+    removeItem(items, '1');
+    expect(items).toHaveLength(3);
   });
 });

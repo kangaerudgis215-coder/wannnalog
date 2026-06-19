@@ -70,7 +70,7 @@ npx expo start
 ---
 
 ## 技術メモ（参考）
-- React Native + **Expo SDK 56**
+- React Native + **Expo SDK 54**
 - 保存：端末内（AsyncStorage）。クラウド同期はまだ無し。
 - 通知：`expo-notifications` のローカル通知（サーバー不要）。
 - 触覚：`expo-haptics`。
