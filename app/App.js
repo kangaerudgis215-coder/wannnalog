@@ -1,11 +1,11 @@
-// WannaLog — Phase 0 最小スライス（習慣ループ検証版）
-// 目的：保存 → 通知で思い出す → 行動 → 達成チェック、の一連が「気持ちよく回るか」を検証する。
-// この版はあえて最小。写真・AI・スマート通知は後のフェーズで載せる。
+// WannaLog — Phase 0 最小スライス（習慣ループ検証版）+ α
+// 保存 → 通知で思い出す → 行動（導線）→ 達成チェック → 叶えたコレクション。
+// あえて最小構成。写真・AI・スマート通知は後のフェーズで載せる。
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  FlatList, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet,
-  Text, TextInput, View, Alert,
+  Animated, FlatList, Linking, Modal, Pressable, SafeAreaView,
+  ScrollView, StyleSheet, Text, TextInput, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,6 +13,7 @@ import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
 
 import { colors, CATEGORIES, getCategory, reminderBody } from './theme';
+import { actionLinks, dueLabel } from './links';
 
 const STORAGE_KEY = 'wannalog_items_v1';
 const THREE_DAYS_SECONDS = 3 * 24 * 60 * 60;
@@ -29,9 +30,9 @@ Notifications.setNotificationHandler({
 
 // 初回起動時に置くサンプル（ボードを寂しくしないため）
 const SEED = [
-  { id: 's1', title: '一蘭 渋谷店で豚骨ラーメン', category: 'eat', createdAt: Date.now(), doneAt: null },
-  { id: 's2', title: 'モルディブの透明な海', category: 'go', createdAt: Date.now(), doneAt: null },
-  { id: 's3', title: 'DUNE PART2をIMAXで観る', category: 'see', createdAt: Date.now(), doneAt: null },
+  { id: 's1', title: '一蘭 渋谷店で豚骨ラーメン', category: 'eat', dueTag: 'thisWeek', createdAt: Date.now(), doneAt: null },
+  { id: 's2', title: 'モルディブの透明な海', category: 'go', dueTag: 'none', createdAt: Date.now(), doneAt: null },
+  { id: 's3', title: 'DUNE PART2をIMAXで観る', category: 'see', dueTag: 'none', createdAt: Date.now(), doneAt: null },
 ];
 
 async function scheduleReminder(item, seconds) {
@@ -57,10 +58,12 @@ async function scheduleReminder(item, seconds) {
 
 export default function App() {
   const [items, setItems] = useState([]);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('all'); // 'all' | カテゴリkey | 'done'
   const [screen, setScreen] = useState('home'); // 'home' | 'detail'
   const [selectedId, setSelectedId] = useState(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
+  const celebAnim = useRef(new Animated.Value(0)).current;
 
   // 起動時：通知許可 → データ読み込み
   useEffect(() => {
@@ -92,22 +95,42 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  async function addItem(title, category) {
-    const item = { id: String(Date.now()), title, category, createdAt: Date.now(), doneAt: null };
+  async function addItem(title, category, due) {
+    const item = {
+      id: String(Date.now()), title, category, dueTag: due || 'none',
+      createdAt: Date.now(), doneAt: null,
+    };
     await persist([item, ...items]);
     await scheduleReminder(item, THREE_DAYS_SECONDS); // 3日後に思い出させる
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert('保存しました ✨', '3日後に、そっと思い出させます。');
   }
 
+  function runCelebration() {
+    setCelebrating(true);
+    celebAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(celebAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.delay(900),
+      Animated.timing(celebAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
+    ]).start(() => setCelebrating(false));
+  }
+
   async function markDone(id) {
     const next = items.map((it) => (it.id === id ? { ...it, doneAt: Date.now() } : it));
     await persist(next);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    runCelebration();
   }
 
   const selected = items.find((it) => it.id === selectedId);
-  const visible = filter === 'all' ? items : items.filter((it) => it.category === filter);
+  const doneCount = items.filter((it) => it.doneAt).length;
+  const activeCount = items.length - doneCount;
+
+  // 達成済みは普段のボードから外し、「叶えた」フィルタでのみ表示
+  const visible = filter === 'done'
+    ? items.filter((it) => it.doneAt)
+    : items.filter((it) => !it.doneAt && (filter === 'all' || it.category === filter));
 
   if (screen === 'detail' && selected) {
     return (
@@ -124,7 +147,10 @@ export default function App() {
       <StatusBar style="dark" />
       {/* ヘッダー */}
       <View style={styles.topbar}>
-        <Text style={styles.brand}>✨ WannaLog</Text>
+        <View>
+          <Text style={styles.brand}>✨ WannaLog</Text>
+          <Text style={styles.greet}>叶えた {doneCount}・のこり {activeCount}</Text>
+        </View>
         <Text style={styles.bell}>🔔</Text>
       </View>
 
@@ -135,10 +161,13 @@ export default function App() {
           {CATEGORIES.map((c) => (
             <Chip key={c.key} label={`${c.emoji} ${c.label}`} active={filter === c.key} onPress={() => setFilter(c.key)} />
           ))}
+          <Chip label={`🏆 叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
         </ScrollView>
       </View>
 
-      <Text style={styles.sectionTitle}>最近追加したもの</Text>
+      <Text style={styles.sectionTitle}>
+        {filter === 'done' ? '叶えたコレクション 🏆' : '最近追加したもの'}
+      </Text>
 
       <FlatList
         data={visible}
@@ -146,7 +175,11 @@ export default function App() {
         numColumns={2}
         columnWrapperStyle={{ gap: 12, paddingHorizontal: 20 }}
         contentContainerStyle={{ gap: 12, paddingBottom: 120, paddingTop: 4 }}
-        ListEmptyComponent={<Text style={styles.empty}>最初の“したい”を、＋から置いてみよう ✨</Text>}
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            {filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から ✨' : '最初の“したい”を、＋から置いてみよう ✨'}
+          </Text>
+        }
         renderItem={({ item }) => (
           <Card item={item} onPress={() => { setSelectedId(item.id); setScreen('detail'); }} />
         )}
@@ -160,8 +193,16 @@ export default function App() {
       <SaveModal
         visible={saveOpen}
         onClose={() => setSaveOpen(false)}
-        onSave={(title, category) => { addItem(title, category); setSaveOpen(false); }}
+        onSave={(title, category, due) => { addItem(title, category, due); setSaveOpen(false); }}
       />
+
+      {/* 達成セレモニー */}
+      {celebrating && (
+        <Animated.View pointerEvents="none" style={[styles.celebrate, { opacity: celebAnim }]}>
+          <Text style={styles.celebrateEmoji}>🎉</Text>
+          <Text style={styles.celebrateText}>叶えた！</Text>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -177,6 +218,7 @@ function Chip({ label, active, onPress }) {
 function Card({ item, onPress }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
+  const due = dueLabel(item.dueTag);
   return (
     <Pressable style={styles.card} onPress={onPress}>
       <View style={[styles.cardPhoto, { backgroundColor: cat.color }]}>
@@ -187,22 +229,34 @@ function Card({ item, onPress }) {
       </View>
       <View style={styles.cardMeta}>
         <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={[styles.cardSub, done && styles.cardDone]}>
-          {done ? '叶えた ✓' : cat.emoji + ' ' + cat.label}
-        </Text>
+        {done ? (
+          <Text style={styles.cardDone}>叶えた ✓</Text>
+        ) : (
+          <Text style={styles.cardSub}>
+            {cat.emoji} {cat.label}{due ? ` ・ ` : ''}
+            {due ? <Text style={styles.cardDue}>{due}</Text> : null}
+          </Text>
+        )}
       </View>
     </Pressable>
   );
 }
 
+const DUE_OPTIONS = [
+  { key: 'none', label: 'なし' },
+  { key: 'thisWeek', label: '今週' },
+  { key: 'thisMonth', label: '今月' },
+];
+
 function SaveModal({ visible, onClose, onSave }) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('eat');
+  const [due, setDue] = useState('none');
 
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    onSave(title.trim(), category);
-    setTitle(''); setCategory('eat');
+    onSave(title.trim(), category, due);
+    setTitle(''); setCategory('eat'); setDue('none');
   }
 
   return (
@@ -238,6 +292,19 @@ function SaveModal({ visible, onClose, onSave }) {
             ))}
           </View>
 
+          <Text style={styles.label}>いつまでに</Text>
+          <View style={styles.catWrap}>
+            {DUE_OPTIONS.map((d) => (
+              <Pressable
+                key={d.key}
+                onPress={() => setDue(d.key)}
+                style={[styles.catChip, due === d.key && { backgroundColor: colors.coral, borderColor: colors.coral }]}
+              >
+                <Text style={[styles.catChipText, due === d.key && { color: '#fff' }]}>{d.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
           <Pressable style={styles.saveBtn} onPress={handleSave}>
             <Text style={styles.saveBtnText}>保存する</Text>
           </Pressable>
@@ -251,10 +318,16 @@ function SaveModal({ visible, onClose, onSave }) {
 function DetailScreen({ item, onBack, onDone }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
+  const due = dueLabel(item.dueTag);
+  const links = actionLinks(item.category, item.title);
 
   async function testNotify() {
     await scheduleReminder(item, 10); // 10秒後にテスト通知
     Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。アプリを閉じても届きます。');
+  }
+
+  function openLink(url) {
+    Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした'));
   }
 
   return (
@@ -268,11 +341,21 @@ function DetailScreen({ item, onBack, onDone }) {
           <Text style={styles.detailEmoji}>{cat.emoji}</Text>
         </View>
         <Text style={styles.detailTitle}>{item.title}</Text>
-        <Text style={styles.detailCat}>{cat.emoji} {cat.label}</Text>
+        <Text style={styles.detailCat}>
+          {cat.emoji} {cat.label}{due ? `  ・  ${due}まで` : ''}
+        </Text>
 
-        {/* アクション（最小スライスではテスト通知のみ。将来：食べログ/地図/予約） */}
+        {/* アクション（カテゴリ別の行動導線） */}
+        <Text style={styles.actionHeader}>アクション</Text>
+        {links.map((l) => (
+          <Pressable key={l.url} style={styles.actionBtn} onPress={() => openLink(l.url)}>
+            <Text style={styles.actionText}>{l.label}</Text>
+            <Text style={styles.actionArrow}>›</Text>
+          </Pressable>
+        ))}
         <Pressable style={styles.actionBtn} onPress={testNotify}>
           <Text style={styles.actionText}>🔔 今すぐテスト通知（10秒後）</Text>
+          <Text style={styles.actionArrow}>›</Text>
         </Pressable>
 
         <Pressable
@@ -291,6 +374,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.cream },
   topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
   brand: { fontSize: 22, fontWeight: '800', color: colors.charcoal },
+  greet: { fontSize: 12, color: colors.warmgray, marginTop: 3 },
   bell: { fontSize: 20 },
 
   chips: { gap: 8, paddingHorizontal: 20, paddingBottom: 14 },
@@ -310,7 +394,8 @@ const styles = StyleSheet.create({
   cardMeta: { padding: 11 },
   cardTitle: { fontSize: 13.5, fontWeight: '700', color: colors.charcoal, lineHeight: 19 },
   cardSub: { marginTop: 6, fontSize: 11.5, color: colors.warmgray },
-  cardDone: { color: colors.honey, fontWeight: '800' },
+  cardDue: { color: colors.coral, fontWeight: '700' },
+  cardDone: { marginTop: 6, fontSize: 11.5, color: colors.honey, fontWeight: '800' },
 
   fab: { position: 'absolute', right: 22, bottom: 34, width: 62, height: 62, borderRadius: 31, backgroundColor: colors.coral, alignItems: 'center', justifyContent: 'center', shadowColor: colors.coral, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
   fabText: { color: '#fff', fontSize: 32, fontWeight: '300', marginTop: -2 },
@@ -335,8 +420,14 @@ const styles = StyleSheet.create({
   detailEmoji: { fontSize: 72 },
   detailTitle: { fontSize: 22, fontWeight: '800', color: colors.charcoal, marginTop: 16 },
   detailCat: { fontSize: 14, color: colors.warmgray, marginTop: 6 },
-  actionBtn: { marginTop: 22, backgroundColor: colors.white, borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  actionHeader: { marginTop: 24, marginBottom: 10, fontSize: 13, fontWeight: '800', color: colors.charcoal },
+  actionBtn: { marginBottom: 10, backgroundColor: colors.white, borderRadius: 14, paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   actionText: { fontSize: 15, fontWeight: '700', color: colors.charcoal },
-  doneBtn: { marginTop: 12, backgroundColor: colors.coral, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  actionArrow: { fontSize: 20, color: colors.warmgray },
+  doneBtn: { marginTop: 14, backgroundColor: colors.coral, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   doneText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+
+  celebrate: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(250,247,242,0.6)' },
+  celebrateEmoji: { fontSize: 80 },
+  celebrateText: { marginTop: 8, fontSize: 26, fontWeight: '800', color: colors.coral },
 });
