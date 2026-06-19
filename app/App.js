@@ -1,0 +1,342 @@
+// WannaLog — Phase 0 最小スライス（習慣ループ検証版）
+// 目的：保存 → 通知で思い出す → 行動 → 達成チェック、の一連が「気持ちよく回るか」を検証する。
+// この版はあえて最小。写真・AI・スマート通知は後のフェーズで載せる。
+
+import { useEffect, useState } from 'react';
+import {
+  FlatList, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet,
+  Text, TextInput, View, Alert,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import * as Haptics from 'expo-haptics';
+
+import { colors, CATEGORIES, getCategory, reminderBody } from './theme';
+
+const STORAGE_KEY = 'wannalog_items_v1';
+const THREE_DAYS_SECONDS = 3 * 24 * 60 * 60;
+
+// 通知を前面でも表示する設定
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+// 初回起動時に置くサンプル（ボードを寂しくしないため）
+const SEED = [
+  { id: 's1', title: '一蘭 渋谷店で豚骨ラーメン', category: 'eat', createdAt: Date.now(), doneAt: null },
+  { id: 's2', title: 'モルディブの透明な海', category: 'go', createdAt: Date.now(), doneAt: null },
+  { id: 's3', title: 'DUNE PART2をIMAXで観る', category: 'see', createdAt: Date.now(), doneAt: null },
+];
+
+async function scheduleReminder(item, seconds) {
+  const cat = getCategory(item.category);
+  try {
+    return await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `${cat.emoji} ${item.title}`,
+        body: reminderBody(item.category),
+        data: { id: item.id },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds,
+        repeats: false,
+      },
+    });
+  } catch (e) {
+    console.warn('通知の予約に失敗:', e);
+    return null;
+  }
+}
+
+export default function App() {
+  const [items, setItems] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [screen, setScreen] = useState('home'); // 'home' | 'detail'
+  const [selectedId, setSelectedId] = useState(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+
+  // 起動時：通知許可 → データ読み込み
+  useEffect(() => {
+    (async () => {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') await Notifications.requestPermissionsAsync();
+
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        setItems(JSON.parse(raw));
+      } else {
+        setItems(SEED);
+        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
+      }
+    })();
+  }, []);
+
+  // 通知タップで該当アイテムを開く
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((res) => {
+      const id = res.notification.request.content.data?.id;
+      if (id) { setSelectedId(id); setScreen('detail'); }
+    });
+    return () => sub.remove();
+  }, []);
+
+  async function persist(next) {
+    setItems(next);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }
+
+  async function addItem(title, category) {
+    const item = { id: String(Date.now()), title, category, createdAt: Date.now(), doneAt: null };
+    await persist([item, ...items]);
+    await scheduleReminder(item, THREE_DAYS_SECONDS); // 3日後に思い出させる
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert('保存しました ✨', '3日後に、そっと思い出させます。');
+  }
+
+  async function markDone(id) {
+    const next = items.map((it) => (it.id === id ? { ...it, doneAt: Date.now() } : it));
+    await persist(next);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  const selected = items.find((it) => it.id === selectedId);
+  const visible = filter === 'all' ? items : items.filter((it) => it.category === filter);
+
+  if (screen === 'detail' && selected) {
+    return (
+      <DetailScreen
+        item={selected}
+        onBack={() => setScreen('home')}
+        onDone={() => { markDone(selected.id); setScreen('home'); }}
+      />
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style="dark" />
+      {/* ヘッダー */}
+      <View style={styles.topbar}>
+        <Text style={styles.brand}>✨ WannaLog</Text>
+        <Text style={styles.bell}>🔔</Text>
+      </View>
+
+      {/* カテゴリフィルタ */}
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
+          {CATEGORIES.map((c) => (
+            <Chip key={c.key} label={`${c.emoji} ${c.label}`} active={filter === c.key} onPress={() => setFilter(c.key)} />
+          ))}
+        </ScrollView>
+      </View>
+
+      <Text style={styles.sectionTitle}>最近追加したもの</Text>
+
+      <FlatList
+        data={visible}
+        keyExtractor={(it) => it.id}
+        numColumns={2}
+        columnWrapperStyle={{ gap: 12, paddingHorizontal: 20 }}
+        contentContainerStyle={{ gap: 12, paddingBottom: 120, paddingTop: 4 }}
+        ListEmptyComponent={<Text style={styles.empty}>最初の“したい”を、＋から置いてみよう ✨</Text>}
+        renderItem={({ item }) => (
+          <Card item={item} onPress={() => { setSelectedId(item.id); setScreen('detail'); }} />
+        )}
+      />
+
+      {/* 保存ボタン */}
+      <Pressable style={styles.fab} onPress={() => setSaveOpen(true)}>
+        <Text style={styles.fabText}>＋</Text>
+      </Pressable>
+
+      <SaveModal
+        visible={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        onSave={(title, category) => { addItem(title, category); setSaveOpen(false); }}
+      />
+    </SafeAreaView>
+  );
+}
+
+function Chip({ label, active, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function Card({ item, onPress }) {
+  const cat = getCategory(item.category);
+  const done = !!item.doneAt;
+  return (
+    <Pressable style={styles.card} onPress={onPress}>
+      <View style={[styles.cardPhoto, { backgroundColor: cat.color }]}>
+        <Text style={styles.cardEmoji}>{cat.emoji}</Text>
+        <View style={styles.cardTag}>
+          <Text style={styles.cardTagText}>{cat.label}</Text>
+        </View>
+      </View>
+      <View style={styles.cardMeta}>
+        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={[styles.cardSub, done && styles.cardDone]}>
+          {done ? '叶えた ✓' : cat.emoji + ' ' + cat.label}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function SaveModal({ visible, onClose, onSave }) {
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('eat');
+
+  function handleSave() {
+    if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
+    onSave(title.trim(), category);
+    setTitle(''); setCategory('eat');
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.sheet}>
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>何を残す？</Text>
+            <Pressable onPress={onClose}><Text style={styles.sheetClose}>✕</Text></Pressable>
+          </View>
+
+          <TextInput
+            style={styles.input}
+            placeholder="例：鎌倉の海が見えるカフェ"
+            placeholderTextColor={colors.warmgray}
+            value={title}
+            onChangeText={setTitle}
+            autoFocus
+          />
+
+          <Text style={styles.label}>カテゴリ</Text>
+          <View style={styles.catWrap}>
+            {CATEGORIES.map((c) => (
+              <Pressable
+                key={c.key}
+                onPress={() => setCategory(c.key)}
+                style={[styles.catChip, category === c.key && { backgroundColor: c.color, borderColor: c.color }]}
+              >
+                <Text style={[styles.catChipText, category === c.key && { color: '#fff' }]}>
+                  {c.emoji} {c.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Pressable style={styles.saveBtn} onPress={handleSave}>
+            <Text style={styles.saveBtnText}>保存する</Text>
+          </Pressable>
+          <Text style={styles.saveNote}>保存すると、3日後にそっと思い出させます。</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function DetailScreen({ item, onBack, onDone }) {
+  const cat = getCategory(item.category);
+  const done = !!item.doneAt;
+
+  async function testNotify() {
+    await scheduleReminder(item, 10); // 10秒後にテスト通知
+    Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。アプリを閉じても届きます。');
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style="dark" />
+      <View style={styles.detailBar}>
+        <Pressable onPress={onBack}><Text style={styles.back}>‹ 戻る</Text></Pressable>
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        <View style={[styles.detailPhoto, { backgroundColor: cat.color }]}>
+          <Text style={styles.detailEmoji}>{cat.emoji}</Text>
+        </View>
+        <Text style={styles.detailTitle}>{item.title}</Text>
+        <Text style={styles.detailCat}>{cat.emoji} {cat.label}</Text>
+
+        {/* アクション（最小スライスではテスト通知のみ。将来：食べログ/地図/予約） */}
+        <Pressable style={styles.actionBtn} onPress={testNotify}>
+          <Text style={styles.actionText}>🔔 今すぐテスト通知（10秒後）</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.doneBtn, done && { backgroundColor: colors.honey }]}
+          onPress={onDone}
+          disabled={done}
+        >
+          <Text style={styles.doneText}>{done ? '叶えた ✓' : '✅ 達成した！'}</Text>
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.cream },
+  topbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
+  brand: { fontSize: 22, fontWeight: '800', color: colors.charcoal },
+  bell: { fontSize: 20 },
+
+  chips: { gap: 8, paddingHorizontal: 20, paddingBottom: 14 },
+  chip: { backgroundColor: colors.white, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  chipActive: { backgroundColor: colors.charcoal },
+  chipText: { fontSize: 13, fontWeight: '600', color: colors.charcoal },
+  chipTextActive: { color: '#fff' },
+
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.charcoal, paddingHorizontal: 20, paddingBottom: 10 },
+  empty: { textAlign: 'center', color: colors.warmgray, marginTop: 40, paddingHorizontal: 40, lineHeight: 22 },
+
+  card: { flex: 1, backgroundColor: colors.white, borderRadius: 18, overflow: 'hidden' },
+  cardPhoto: { height: 120, alignItems: 'center', justifyContent: 'center' },
+  cardEmoji: { fontSize: 42 },
+  cardTag: { position: 'absolute', left: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999 },
+  cardTagText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  cardMeta: { padding: 11 },
+  cardTitle: { fontSize: 13.5, fontWeight: '700', color: colors.charcoal, lineHeight: 19 },
+  cardSub: { marginTop: 6, fontSize: 11.5, color: colors.warmgray },
+  cardDone: { color: colors.honey, fontWeight: '800' },
+
+  fab: { position: 'absolute', right: 22, bottom: 34, width: 62, height: 62, borderRadius: 31, backgroundColor: colors.coral, alignItems: 'center', justifyContent: 'center', shadowColor: colors.coral, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  fabText: { color: '#fff', fontSize: 32, fontWeight: '300', marginTop: -2 },
+
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: colors.cream, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 40 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: colors.charcoal },
+  sheetClose: { fontSize: 18, color: colors.warmgray },
+  input: { backgroundColor: colors.white, borderRadius: 14, padding: 14, fontSize: 16, color: colors.charcoal },
+  label: { marginTop: 18, marginBottom: 10, fontSize: 13, fontWeight: '700', color: colors.charcoal },
+  catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  catChip: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
+  catChipText: { fontSize: 13, fontWeight: '600', color: colors.charcoal },
+  saveBtn: { marginTop: 22, backgroundColor: colors.coral, borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  saveNote: { textAlign: 'center', color: colors.warmgray, fontSize: 12, marginTop: 10 },
+
+  detailBar: { paddingHorizontal: 16, paddingTop: 8 },
+  back: { fontSize: 16, color: colors.charcoal },
+  detailPhoto: { height: 220, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  detailEmoji: { fontSize: 72 },
+  detailTitle: { fontSize: 22, fontWeight: '800', color: colors.charcoal, marginTop: 16 },
+  detailCat: { fontSize: 14, color: colors.warmgray, marginTop: 6 },
+  actionBtn: { marginTop: 22, backgroundColor: colors.white, borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  actionText: { fontSize: 15, fontWeight: '700', color: colors.charcoal },
+  doneBtn: { marginTop: 12, backgroundColor: colors.coral, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  doneText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+});
