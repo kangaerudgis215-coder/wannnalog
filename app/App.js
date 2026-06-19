@@ -4,13 +4,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  Animated, FlatList, Linking, Modal, Pressable, SafeAreaView,
+  Animated, FlatList, Image, Linking, Modal, Pressable, SafeAreaView,
   ScrollView, StyleSheet, Text, TextInput, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 
 import { colors, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
@@ -95,9 +96,10 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  async function addItem(title, category, due) {
+  async function addItem(title, category, due, imageUri) {
     const item = {
       id: String(Date.now()), title, category, dueTag: due || 'none',
+      imageUri: imageUri || null,
       createdAt: Date.now(), doneAt: null,
     };
     await persist([item, ...items]);
@@ -193,7 +195,7 @@ export default function App() {
       <SaveModal
         visible={saveOpen}
         onClose={() => setSaveOpen(false)}
-        onSave={(title, category, due) => { addItem(title, category, due); setSaveOpen(false); }}
+        onSave={(title, category, due, imageUri) => { addItem(title, category, due, imageUri); setSaveOpen(false); }}
       />
 
       {/* 達成セレモニー */}
@@ -221,8 +223,14 @@ function Card({ item, onPress }) {
   const due = dueLabel(item.dueTag);
   return (
     <Pressable style={styles.card} onPress={onPress}>
-      <View style={[styles.cardPhoto, { backgroundColor: cat.color }]}>
-        <Text style={styles.cardEmoji}>{cat.emoji}</Text>
+      <View style={styles.cardPhotoWrap}>
+        {item.imageUri ? (
+          <Image source={{ uri: item.imageUri }} style={styles.cardPhotoImg} />
+        ) : (
+          <View style={[styles.cardPhoto, { backgroundColor: cat.color }]}>
+            <Text style={styles.cardEmoji}>{cat.emoji}</Text>
+          </View>
+        )}
         <View style={styles.cardTag}>
           <Text style={styles.cardTagText}>{cat.label}</Text>
         </View>
@@ -252,11 +260,19 @@ function SaveModal({ visible, onClose, onSave }) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('eat');
   const [due, setDue] = useState('none');
+  const [image, setImage] = useState(null);
+
+  async function pickImage() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+    if (!res.canceled) setImage(res.assets[0].uri);
+  }
 
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    onSave(title.trim(), category, due);
-    setTitle(''); setCategory('eat'); setDue('none');
+    onSave(title.trim(), category, due, image);
+    setTitle(''); setCategory('eat'); setDue('none'); setImage(null);
   }
 
   return (
@@ -276,6 +292,12 @@ function SaveModal({ visible, onClose, onSave }) {
             onChangeText={setTitle}
             autoFocus
           />
+
+          <Pressable style={styles.photoPick} onPress={pickImage}>
+            {image
+              ? <Image source={{ uri: image }} style={styles.photoPreview} />
+              : <Text style={styles.photoPickText}>🖼️ 写真を選ぶ（任意）</Text>}
+          </Pressable>
 
           <Text style={styles.label}>カテゴリ</Text>
           <View style={styles.catWrap}>
@@ -337,9 +359,13 @@ function DetailScreen({ item, onBack, onDone }) {
         <Pressable onPress={onBack}><Text style={styles.back}>‹ 戻る</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <View style={[styles.detailPhoto, { backgroundColor: cat.color }]}>
-          <Text style={styles.detailEmoji}>{cat.emoji}</Text>
-        </View>
+        {item.imageUri ? (
+          <Image source={{ uri: item.imageUri }} style={styles.detailPhotoImg} />
+        ) : (
+          <View style={[styles.detailPhoto, { backgroundColor: cat.color }]}>
+            <Text style={styles.detailEmoji}>{cat.emoji}</Text>
+          </View>
+        )}
         <Text style={styles.detailTitle}>{item.title}</Text>
         <Text style={styles.detailCat}>
           {cat.emoji} {cat.label}{due ? `  ・  ${due}まで` : ''}
@@ -387,7 +413,9 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', color: colors.warmgray, marginTop: 40, paddingHorizontal: 40, lineHeight: 22 },
 
   card: { flex: 1, backgroundColor: colors.white, borderRadius: 18, overflow: 'hidden' },
+  cardPhotoWrap: { height: 120 },
   cardPhoto: { height: 120, alignItems: 'center', justifyContent: 'center' },
+  cardPhotoImg: { width: '100%', height: 120 },
   cardEmoji: { fontSize: 42 },
   cardTag: { position: 'absolute', left: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999 },
   cardTagText: { color: '#fff', fontSize: 11, fontWeight: '700' },
@@ -406,6 +434,9 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 18, fontWeight: '800', color: colors.charcoal },
   sheetClose: { fontSize: 18, color: colors.warmgray },
   input: { backgroundColor: colors.white, borderRadius: 14, padding: 14, fontSize: 16, color: colors.charcoal },
+  photoPick: { marginTop: 12, height: 120, borderRadius: 14, borderWidth: 1, borderColor: colors.line, borderStyle: 'dashed', backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  photoPickText: { color: colors.warmgray, fontSize: 13, fontWeight: '600' },
+  photoPreview: { width: '100%', height: '100%' },
   label: { marginTop: 18, marginBottom: 10, fontSize: 13, fontWeight: '700', color: colors.charcoal },
   catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   catChip: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
@@ -417,6 +448,7 @@ const styles = StyleSheet.create({
   detailBar: { paddingHorizontal: 16, paddingTop: 8 },
   back: { fontSize: 16, color: colors.charcoal },
   detailPhoto: { height: 220, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  detailPhotoImg: { width: '100%', height: 220, borderRadius: 20 },
   detailEmoji: { fontSize: 72 },
   detailTitle: { fontSize: 22, fontWeight: '800', color: colors.charcoal, marginTop: 16 },
   detailCat: { fontSize: 14, color: colors.warmgray, marginTop: 6 },
