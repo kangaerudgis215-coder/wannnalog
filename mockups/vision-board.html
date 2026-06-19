@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WannaLog — ビジョンボード（モック）</title>
+<style>
+  :root{--cream:#FAF7F2; --white:#FFF; --charcoal:#2B2724; --warmgray:#9A9088; --coral:#FF6B4A;}
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-font-smoothing:antialiased;}
+  body{background:#e9e4dc; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    font-family:-apple-system,"Hiragino Sans","Noto Sans JP","Segoe UI",sans-serif; color:var(--charcoal); padding:24px 0;}
+  .phone{width:390px; min-height:800px; background:var(--cream); border-radius:44px;
+    box-shadow:0 30px 80px rgba(0,0,0,.25); overflow:hidden; position:relative; border:10px solid #1c1b1a;}
+  .notch{height:30px; display:flex; align-items:center; justify-content:center;}
+  .notch::after{content:""; width:120px; height:26px; background:#1c1b1a; border-radius:0 0 16px 16px; margin-top:-10px;}
+  .content{padding:6px 16px 110px;}
+
+  .vbar{display:flex; align-items:center; justify-content:space-between; margin:8px 4px 6px;}
+  .vtitle{display:flex; align-items:center; gap:6px; font-size:17px; font-weight:800;}
+  .vtitle .chev{color:var(--warmgray); font-size:13px;}
+  .vicons{display:flex; gap:14px; font-size:16px; color:var(--warmgray);}
+  .hint{font-size:11.5px; color:var(--warmgray); margin:0 4px 12px;}
+
+  .collage{column-count:2; column-gap:10px;}
+  .tile{break-inside:avoid; margin-bottom:10px; border-radius:16px; overflow:hidden; position:relative;
+    display:flex; align-items:flex-end; box-shadow:0 6px 16px rgba(43,39,36,.10);}
+  .tile .lbl{position:relative; z-index:2; color:#fff; font-weight:800; font-size:14px;
+    padding:12px; line-height:1.35; text-shadow:0 1px 6px rgba(0,0,0,.5);}
+  .tile::after{content:""; position:absolute; inset:0; z-index:1;
+    background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,.55));}
+  .emoji{position:absolute; right:10px; top:10px; z-index:2; font-size:26px; opacity:.9;}
+  .s{height:120px;} .m{height:160px;} .l{height:210px;}
+
+  .g1{background:linear-gradient(135deg,#7ED7C1,#3A8DDE);}
+  .g2{background:linear-gradient(135deg,#FFD36E,#FB8C00);}
+  .g3{background:linear-gradient(135deg,#B6A0FF,#6C5CE7);}
+  .g4{background:linear-gradient(135deg,#FF9A8B,#FF6A88);}
+  .g5{background:linear-gradient(135deg,#A0E8AF,#43A047);}
+  .g6{background:linear-gradient(135deg,#FFB36B,#FF6B4A);}
+  .g7{background:linear-gradient(135deg,#89C7FF,#5A6BFF);}
+
+  .addtile{break-inside:avoid; margin-bottom:10px; height:120px; border-radius:16px;
+    border:2px dashed #d7cfc4; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:var(--warmgray); font-size:13px; gap:4px;}
+  .addtile .plus{font-size:26px; color:var(--coral);}
+
+  .tabbar{position:absolute; left:0; right:0; bottom:0; height:74px; background:rgba(255,255,255,.94);
+    backdrop-filter:blur(8px); display:flex; align-items:flex-start; justify-content:space-around;
+    border-top:1px solid rgba(43,39,36,.05); padding:10px 6px 0;}
+  .tab{display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; color:#cfc8bf;}
+  .tab .ico{font-size:20px;}
+  .tab.on{color:var(--coral);}
+  .tab.add .ico{width:50px; height:50px; margin-top:-18px; border-radius:50%; background:var(--coral);
+    color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:300;
+    box-shadow:0 10px 22px rgba(255,107,74,.45);}
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="content">
+      <div class="vbar">
+        <div class="vtitle">2026 Vision Board <span class="chev">▾</span></div>
+        <div class="vicons">↩︎ ↪︎ ＋ ⋯</div>
+      </div>
+      <div class="hint">写真を自由に配置して、理想の未来をいつも目の前に ✨</div>
+
+      <div class="collage">
+        <div class="tile l g1"><span class="emoji">🏝️</span><div class="lbl">海外旅行に<br>たくさん行く</div></div>
+        <div class="tile m g2"><span class="emoji">💻</span><div class="lbl">自由な<br>働き方をする</div></div>
+        <div class="tile s g3"><span class="emoji">💰</span><div class="lbl">経済的自由</div></div>
+        <div class="tile m g4"><span class="emoji">🧘</span><div class="lbl">心も体も<br>健康でいる</div></div>
+        <div class="tile l g5"><span class="emoji">🏡</span><div class="lbl">理想の家に<br>住む</div></div>
+        <div class="tile s g6"><span class="emoji">☕</span><div class="lbl">丁寧な暮らし</div></div>
+        <div class="tile m g7"><span class="emoji">📚</span><div class="lbl">月に3冊<br>本を読む</div></div>
+        <div class="addtile"><span class="plus">＋</span>写真を追加</div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="tab"><span class="ico">🏠</span>ホーム</div>
+      <div class="tab on"><span class="ico">🗺️</span>ビジョン</div>
+      <div class="tab add"><span class="ico">＋</span></div>
+      <div class="tab"><span class="ico">🔔</span>通知</div>
+      <div class="tab"><span class="ico">👤</span>マイページ</div>
+    </div>
+  </div>
+</body>
+</html>

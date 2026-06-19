@@ -46,7 +46,7 @@
     overflow:hidden; box-shadow:0 6px 18px rgba(43,39,36,.08);}
   .photo{height:140px; display:flex; align-items:center; justify-content:center; font-size:46px; position:relative;}
   .photo.tall{height:188px;}
-  .tag{position:absolute; left:9px; top:9px; color:#fff; font-size:11px; font-weight:700;
+  .tag{position:absolute; left:9px; bottom:9px; color:#fff; font-size:11px; font-weight:700;
     padding:3px 9px; border-radius:999px; backdrop-filter:blur(2px);}
   .t-eat{background:rgba(255,107,74,.92);}
   .t-go{background:rgba(58,141,222,.92);}
@@ -59,6 +59,8 @@
   .meta .row{display:flex; align-items:center; gap:6px; margin-top:7px; font-size:11.5px; color:var(--warmgray);}
   .due{color:var(--coral); font-weight:700;}
   .done{color:var(--honey); font-weight:800;}
+  .price{font-weight:800; color:var(--charcoal); font-size:13px;}
+  .drop{color:#E53935; font-weight:800; font-size:11.5px;}
 
   .g1{background:linear-gradient(135deg,#FFB36B,#FF6B4A);}
   .g2{background:linear-gradient(135deg,#7ED7C1,#3A8DDE);}
@@ -139,16 +141,16 @@
         <div class="card">
           <div class="photo g2">🎧<span class="tag t-want">欲しい</span></div>
           <div class="meta"><div class="title">AirPods Pro 新型</div>
-            <div class="row">🛍️ 2026/06/10</div></div>
+            <div class="row"><span class="price">¥34,800</span> <span class="drop">↓12%</span></div></div>
         </div>
       </div>
     </div>
 
     <div class="tabbar">
       <div class="tab on"><span class="ico">🏠</span>ホーム</div>
-      <div class="tab"><span class="ico">🔍</span>検索</div>
+      <div class="tab"><span class="ico">🗺️</span>ビジョン</div>
       <div class="tab add"><span class="ico">＋</span></div>
-      <div class="tab"><span class="ico">🔔</span>リマインド</div>
+      <div class="tab"><span class="ico">🔔</span>通知</div>
       <div class="tab"><span class="ico">👤</span>マイページ</div>
     </div>
   </div>
