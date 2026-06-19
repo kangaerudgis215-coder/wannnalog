@@ -125,6 +125,15 @@ export default function App() {
     runCelebration();
   }
 
+  async function updateItem(id, patch) {
+    await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  }
+
+  async function deleteItem(id) {
+    await persist(items.filter((it) => it.id !== id));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }
+
   const selected = items.find((it) => it.id === selectedId);
   const doneCount = items.filter((it) => it.doneAt).length;
   const activeCount = items.length - doneCount;
@@ -137,9 +146,12 @@ export default function App() {
   if (screen === 'detail' && selected) {
     return (
       <DetailScreen
+        key={selected.id}
         item={selected}
         onBack={() => setScreen('home')}
         onDone={() => { markDone(selected.id); setScreen('home'); }}
+        onUpdate={(patch) => updateItem(selected.id, patch)}
+        onDelete={() => { deleteItem(selected.id); setScreen('home'); }}
       />
     );
   }
@@ -337,11 +349,14 @@ function SaveModal({ visible, onClose, onSave }) {
   );
 }
 
-function DetailScreen({ item, onBack, onDone }) {
+function DetailScreen({ item, onBack, onDone, onUpdate, onDelete }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
   const links = actionLinks(item.category, item.title);
+
+  const [title, setTitle] = useState(item.title);
+  const [memo, setMemo] = useState(item.memo || '');
 
   async function testNotify() {
     await scheduleReminder(item, 10); // 10秒後にテスト通知
@@ -352,11 +367,19 @@ function DetailScreen({ item, onBack, onDone }) {
     Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした'));
   }
 
+  function confirmDelete() {
+    Alert.alert('削除しますか？', 'この「したい」を削除します。元に戻せません。', [
+      { text: 'キャンセル', style: 'cancel' },
+      { text: '削除', style: 'destructive', onPress: onDelete },
+    ]);
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <View style={styles.detailBar}>
         <Pressable onPress={onBack}><Text style={styles.back}>‹ 戻る</Text></Pressable>
+        <Pressable onPress={confirmDelete}><Text style={styles.deleteLink}>🗑 削除</Text></Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         {item.imageUri ? (
@@ -366,10 +389,56 @@ function DetailScreen({ item, onBack, onDone }) {
             <Text style={styles.detailEmoji}>{cat.emoji}</Text>
           </View>
         )}
-        <Text style={styles.detailTitle}>{item.title}</Text>
+
+        <TextInput
+          style={styles.detailTitleInput}
+          value={title}
+          onChangeText={(t) => { setTitle(t); onUpdate({ title: t }); }}
+          placeholder="タイトル"
+          placeholderTextColor={colors.warmgray}
+        />
         <Text style={styles.detailCat}>
           {cat.emoji} {cat.label}{due ? `  ・  ${due}まで` : ''}
         </Text>
+
+        {/* 編集：カテゴリ */}
+        <Text style={styles.actionHeader}>カテゴリ</Text>
+        <View style={styles.catWrap}>
+          {CATEGORIES.map((c) => (
+            <Pressable
+              key={c.key}
+              onPress={() => onUpdate({ category: c.key })}
+              style={[styles.catChip, item.category === c.key && { backgroundColor: c.color, borderColor: c.color }]}
+            >
+              <Text style={[styles.catChipText, item.category === c.key && { color: '#fff' }]}>{c.emoji} {c.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* 編集：期限 */}
+        <Text style={styles.actionHeader}>いつまでに</Text>
+        <View style={styles.catWrap}>
+          {DUE_OPTIONS.map((d) => (
+            <Pressable
+              key={d.key}
+              onPress={() => onUpdate({ dueTag: d.key })}
+              style={[styles.catChip, item.dueTag === d.key && { backgroundColor: colors.coral, borderColor: colors.coral }]}
+            >
+              <Text style={[styles.catChipText, item.dueTag === d.key && { color: '#fff' }]}>{d.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* 編集：メモ */}
+        <Text style={styles.actionHeader}>メモ</Text>
+        <TextInput
+          style={styles.memoInput}
+          value={memo}
+          onChangeText={(t) => { setMemo(t); onUpdate({ memo: t }); }}
+          placeholder="ひとことメモ（任意）"
+          placeholderTextColor={colors.warmgray}
+          multiline
+        />
 
         {/* アクション（カテゴリ別の行動導線） */}
         <Text style={styles.actionHeader}>アクション</Text>
@@ -445,8 +514,11 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
   saveNote: { textAlign: 'center', color: colors.warmgray, fontSize: 12, marginTop: 10 },
 
-  detailBar: { paddingHorizontal: 16, paddingTop: 8 },
+  detailBar: { paddingHorizontal: 16, paddingTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   back: { fontSize: 16, color: colors.charcoal },
+  deleteLink: { fontSize: 14, color: '#E53935', fontWeight: '700' },
+  detailTitleInput: { fontSize: 22, fontWeight: '800', color: colors.charcoal, marginTop: 16, paddingVertical: 2 },
+  memoInput: { backgroundColor: colors.white, borderRadius: 14, padding: 14, fontSize: 15, color: colors.charcoal, minHeight: 80, textAlignVertical: 'top' },
   detailPhoto: { height: 220, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   detailPhotoImg: { width: '100%', height: 220, borderRadius: 20 },
   detailEmoji: { fontSize: 72 },
