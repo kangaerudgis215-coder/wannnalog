@@ -15,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { colors, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
+import { isUrl, fetchOgp } from './ogp';
 
 const STORAGE_KEY = 'wannalog_items_v1';
 const THREE_DAYS_SECONDS = 3 * 24 * 60 * 60;
@@ -96,10 +97,11 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  async function addItem(title, category, due, imageUri) {
+  async function addItem(title, category, due, imageUri, sourceUrl) {
     const item = {
       id: String(Date.now()), title, category, dueTag: due || 'none',
       imageUri: imageUri || null,
+      sourceUrl: sourceUrl || null,
       createdAt: Date.now(), doneAt: null,
     };
     await persist([item, ...items]);
@@ -207,7 +209,7 @@ export default function App() {
       <SaveModal
         visible={saveOpen}
         onClose={() => setSaveOpen(false)}
-        onSave={(title, category, due, imageUri) => { addItem(title, category, due, imageUri); setSaveOpen(false); }}
+        onSave={(title, category, due, imageUri, sourceUrl) => { addItem(title, category, due, imageUri, sourceUrl); setSaveOpen(false); }}
       />
 
       {/* 達成セレモニー */}
@@ -273,6 +275,8 @@ function SaveModal({ visible, onClose, onSave }) {
   const [category, setCategory] = useState('eat');
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
+  const [sourceUrl, setSourceUrl] = useState(null);
+  const [loadingOgp, setLoadingOgp] = useState(false);
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -281,10 +285,21 @@ function SaveModal({ visible, onClose, onSave }) {
     if (!res.canceled) setImage(res.assets[0].uri);
   }
 
+  async function loadFromUrl() {
+    const url = title.trim();
+    setLoadingOgp(true);
+    const ogp = await fetchOgp(url);
+    setLoadingOgp(false);
+    setSourceUrl(url);
+    if (ogp.title) setTitle(ogp.title);
+    if (ogp.image && !image) setImage(ogp.image);
+    if (!ogp.title && !ogp.image) Alert.alert('リンク先の情報が取得できませんでした', 'タイトルは手で入力してください。');
+  }
+
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    onSave(title.trim(), category, due, image);
-    setTitle(''); setCategory('eat'); setDue('none'); setImage(null);
+    onSave(title.trim(), category, due, image, sourceUrl);
+    setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setSourceUrl(null);
   }
 
   return (
@@ -304,6 +319,12 @@ function SaveModal({ visible, onClose, onSave }) {
             onChangeText={setTitle}
             autoFocus
           />
+
+          {isUrl(title) && (
+            <Pressable style={styles.urlBtn} onPress={loadFromUrl} disabled={loadingOgp}>
+              <Text style={styles.urlBtnText}>{loadingOgp ? '読み込み中…' : '🔗 リンク先を読み込む'}</Text>
+            </Pressable>
+          )}
 
           <Pressable style={styles.photoPick} onPress={pickImage}>
             {image
@@ -353,7 +374,10 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onDelete }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
-  const links = actionLinks(item.category, item.title);
+  const links = [
+    ...(item.sourceUrl ? [{ label: '🔗 リンクを開く', url: item.sourceUrl }] : []),
+    ...actionLinks(item.category, item.title),
+  ];
 
   const [title, setTitle] = useState(item.title);
   const [memo, setMemo] = useState(item.memo || '');
@@ -503,6 +527,8 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 18, fontWeight: '800', color: colors.charcoal },
   sheetClose: { fontSize: 18, color: colors.warmgray },
   input: { backgroundColor: colors.white, borderRadius: 14, padding: 14, fontSize: 16, color: colors.charcoal },
+  urlBtn: { marginTop: 10, backgroundColor: colors.white, borderRadius: 12, paddingVertical: 11, alignItems: 'center', borderWidth: 1, borderColor: colors.coral },
+  urlBtnText: { color: colors.coral, fontSize: 14, fontWeight: '700' },
   photoPick: { marginTop: 12, height: 120, borderRadius: 14, borderWidth: 1, borderColor: colors.line, borderStyle: 'dashed', backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   photoPickText: { color: colors.warmgray, fontSize: 13, fontWeight: '600' },
   photoPreview: { width: '100%', height: '100%' },
