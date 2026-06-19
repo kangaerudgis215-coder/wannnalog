@@ -3,64 +3,63 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WannaLog — ホーム（モックアップ）</title>
+<title>WannaLog — ホーム（モックアップ v2）</title>
 <style>
   :root{
     --cream:#FAF7F2; --white:#FFFFFF; --charcoal:#2B2724;
     --warmgray:#9A9088; --coral:#FF6B4A; --honey:#F2B544;
   }
-  *{box-sizing:border-box; margin:0; padding:0;
-    -webkit-font-smoothing:antialiased;}
-  body{
-    background:#e9e4dc; min-height:100vh;
-    display:flex; align-items:center; justify-content:center;
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-font-smoothing:antialiased;}
+  body{background:#e9e4dc; min-height:100vh; display:flex; align-items:center; justify-content:center;
     font-family:-apple-system,"Hiragino Sans","Noto Sans JP","Segoe UI",sans-serif;
-    color:var(--charcoal); padding:24px 0;
-  }
-  /* スマホの枠 */
-  .phone{
-    width:390px; height:auto; min-height:780px; background:var(--cream);
-    border-radius:44px; box-shadow:0 30px 80px rgba(0,0,0,.25);
-    overflow:hidden; position:relative; border:10px solid #1c1b1a;
-  }
+    color:var(--charcoal); padding:24px 0;}
+  .phone{width:390px; min-height:800px; background:var(--cream); border-radius:44px;
+    box-shadow:0 30px 80px rgba(0,0,0,.25); overflow:hidden; position:relative; border:10px solid #1c1b1a;}
   .notch{height:30px; display:flex; align-items:center; justify-content:center;}
-  .notch::after{content:""; width:120px; height:26px; background:#1c1b1a;
-    border-radius:0 0 16px 16px; margin-top:-10px;}
-  .content{padding:8px 20px 110px;}
+  .notch::after{content:""; width:120px; height:26px; background:#1c1b1a; border-radius:0 0 16px 16px; margin-top:-10px;}
+  .content{padding:6px 20px 110px;}
 
-  /* ヘッダー */
-  .greet{display:flex; align-items:center; justify-content:space-between; margin:6px 2px 16px;}
-  .greet h1{font-size:19px; font-weight:700; letter-spacing:.2px;}
-  .greet .sub{font-size:12px; color:var(--warmgray); margin-top:3px;}
-  .search{width:42px; height:42px; background:var(--white); border-radius:14px;
-    display:flex; align-items:center; justify-content:center; font-size:18px;
-    box-shadow:0 4px 14px rgba(43,39,36,.06);}
+  .topbar{display:flex; align-items:center; justify-content:space-between; margin:8px 2px 14px;}
+  .brand{display:flex; align-items:center; gap:9px;}
+  .brand .logo{width:34px; height:34px; border-radius:10px;
+    background:linear-gradient(135deg,#3a3531,#1c1b1a); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:18px;}
+  .brand .name{font-size:20px; font-weight:800; letter-spacing:.3px;}
+  .bell{position:relative; font-size:20px;}
+  .bell::after{content:""; position:absolute; right:-1px; top:-1px; width:8px; height:8px;
+    background:var(--coral); border-radius:50%; border:2px solid var(--cream);}
 
-  /* カテゴリチップ */
-  .chips{display:flex; gap:8px; overflow-x:auto; padding:2px 2px 14px; scrollbar-width:none;}
+  .searchbar{display:flex; align-items:center; gap:8px; background:var(--white);
+    border-radius:14px; padding:11px 14px; color:var(--warmgray); font-size:14px;
+    box-shadow:0 4px 14px rgba(43,39,36,.05); margin-bottom:14px;}
+
+  .chips{display:flex; gap:8px; overflow-x:auto; padding:2px 2px 16px; scrollbar-width:none;}
   .chips::-webkit-scrollbar{display:none;}
-  .chip{white-space:nowrap; padding:8px 14px; border-radius:999px; font-size:13px;
-    font-weight:600; background:var(--white); color:var(--charcoal);
-    box-shadow:0 3px 10px rgba(43,39,36,.05);}
+  .chip{white-space:nowrap; padding:8px 14px; border-radius:999px; font-size:13px; font-weight:600;
+    background:var(--white); color:var(--charcoal); box-shadow:0 3px 10px rgba(43,39,36,.05);}
   .chip.active{background:var(--charcoal); color:#fff;}
 
-  /* マソンリー風 2列 */
-  .board{column-count:2; column-gap:12px;}
-  .card{break-inside:avoid; margin-bottom:12px; background:var(--white);
-    border-radius:18px; overflow:hidden; box-shadow:0 6px 18px rgba(43,39,36,.08);}
-  .photo{height:140px; display:flex; align-items:center; justify-content:center;
-    font-size:46px; position:relative;}
-  .photo.tall{height:190px;}
-  .photo .ribbon{position:absolute; left:10px; top:10px; background:rgba(0,0,0,.45);
-    color:#fff; font-size:11px; padding:3px 8px; border-radius:999px; backdrop-filter:blur(2px);}
-  .meta{padding:10px 12px 12px;}
-  .meta .title{font-size:14px; font-weight:700; line-height:1.35;}
-  .meta .row{display:flex; align-items:center; gap:6px; margin-top:7px; font-size:11.5px; color:var(--warmgray);}
-  .dot{width:6px;height:6px;border-radius:50%; background:var(--coral); display:inline-block;}
-  .due{color:var(--coral); font-weight:700;}
-  .done{color:var(--honey); font-weight:700;}
+  .sectiontitle{font-size:14px; font-weight:800; margin:2px 2px 12px; color:var(--charcoal);}
 
-  /* グラデ写真（オフラインでも映える） */
+  .board{column-count:2; column-gap:12px;}
+  .card{break-inside:avoid; margin-bottom:12px; background:var(--white); border-radius:18px;
+    overflow:hidden; box-shadow:0 6px 18px rgba(43,39,36,.08);}
+  .photo{height:140px; display:flex; align-items:center; justify-content:center; font-size:46px; position:relative;}
+  .photo.tall{height:188px;}
+  .tag{position:absolute; left:9px; top:9px; color:#fff; font-size:11px; font-weight:700;
+    padding:3px 9px; border-radius:999px; backdrop-filter:blur(2px);}
+  .t-eat{background:rgba(255,107,74,.92);}
+  .t-go{background:rgba(58,141,222,.92);}
+  .t-see{background:rgba(124,92,231,.92);}
+  .t-want{background:rgba(200,109,215,.92);}
+  .t-do{background:rgba(67,160,71,.92);}
+  .t-know{background:rgba(242,150,36,.92);}
+  .meta{padding:10px 12px 12px;}
+  .meta .title{font-size:13.5px; font-weight:700; line-height:1.4;}
+  .meta .row{display:flex; align-items:center; gap:6px; margin-top:7px; font-size:11.5px; color:var(--warmgray);}
+  .due{color:var(--coral); font-weight:700;}
+  .done{color:var(--honey); font-weight:800;}
+
   .g1{background:linear-gradient(135deg,#FFB36B,#FF6B4A);}
   .g2{background:linear-gradient(135deg,#7ED7C1,#3A8DDE);}
   .g3{background:linear-gradient(135deg,#F7A8C4,#C86DD7);}
@@ -69,106 +68,88 @@
   .g6{background:linear-gradient(135deg,#B6A0FF,#6C5CE7);}
   .g7{background:linear-gradient(135deg,#FF9A8B,#FF6A88);}
 
-  /* FAB */
-  .fab{position:absolute; right:22px; bottom:30px; width:62px; height:62px;
-    border-radius:50%; background:var(--coral); color:#fff; font-size:32px; font-weight:300;
-    display:flex; align-items:center; justify-content:center;
-    box-shadow:0 12px 26px rgba(255,107,74,.45);}
-  /* タブバー風 */
-  .tabbar{position:absolute; left:0; right:0; bottom:0; height:70px; background:rgba(255,255,255,.92);
-    backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:space-around;
-    font-size:22px; border-top:1px solid rgba(43,39,36,.05); padding-bottom:10px;}
-  .tabbar .on{color:var(--coral);} .tabbar .off{color:#cfc8bf;}
-  .caption{margin-top:14px; text-align:center; color:#8a8178; font-size:11px;}
+  .tabbar{position:absolute; left:0; right:0; bottom:0; height:74px; background:rgba(255,255,255,.94);
+    backdrop-filter:blur(8px); display:flex; align-items:flex-start; justify-content:space-around;
+    border-top:1px solid rgba(43,39,36,.05); padding:10px 6px 0;}
+  .tab{display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; color:#cfc8bf;}
+  .tab .ico{font-size:20px;}
+  .tab.on{color:var(--coral);}
+  .tab.add .ico{width:50px; height:50px; margin-top:-18px; border-radius:50%; background:var(--coral);
+    color:#fff; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:300;
+    box-shadow:0 10px 22px rgba(255,107,74,.45);}
 </style>
 </head>
 <body>
   <div class="phone">
     <div class="notch"></div>
     <div class="content">
-      <div class="greet">
-        <div>
-          <h1>おかえり 👋</h1>
-          <div class="sub">今日の“したい”は12個。どれ叶える？</div>
-        </div>
-        <div class="search">🔍</div>
+      <div class="topbar">
+        <div class="brand"><div class="logo">✨</div><div class="name">WannaLog</div></div>
+        <div class="bell">🔔</div>
       </div>
+      <div class="searchbar">🔍 キーワードで検索</div>
 
       <div class="chips">
-        <div class="chip active">ぜんぶ</div>
-        <div class="chip">🍜 食べたい</div>
-        <div class="chip">🗺️ 行きたい</div>
-        <div class="chip">👀 見たい</div>
+        <div class="chip active">すべて</div>
+        <div class="chip">🍽️ 食べたい</div>
+        <div class="chip">📍 行きたい</div>
+        <div class="chip">🎬 見たい</div>
         <div class="chip">🛍️ 欲しい</div>
-        <div class="chip">✅ やりたい</div>
+        <div class="chip">💪 やりたい</div>
       </div>
+
+      <div class="sectiontitle">最近追加したもの</div>
 
       <div class="board">
         <div class="card">
-          <div class="photo g1 tall">🍜<span class="ribbon">あと3日 🔥</span></div>
-          <div class="meta">
-            <div class="title">二郎系ラーメン／一蘭 渋谷店</div>
-            <div class="row"><span class="dot"></span>🍜 食べたい <span class="due">・あと3日</span></div>
-          </div>
+          <div class="photo g1 tall">🍜<span class="tag t-eat">食べたい</span></div>
+          <div class="meta"><div class="title">一蘭 渋谷店で豚骨ラーメン</div>
+            <div class="row">🍽️ <span class="due">あと3日 🔥</span></div></div>
         </div>
         <div class="card">
-          <div class="photo g2">🗺️</div>
-          <div class="meta">
-            <div class="title">北欧旅行（オーロラを見る）</div>
-            <div class="row"><span class="dot"></span>🗺️ 行きたい</div>
-          </div>
+          <div class="photo g2">🏝️<span class="tag t-go">行きたい</span></div>
+          <div class="meta"><div class="title">モルディブの透明な海</div>
+            <div class="row">📍 2026/06/14</div></div>
         </div>
         <div class="card">
-          <div class="photo g3 tall">👗</div>
-          <div class="meta">
-            <div class="title">気になってるあのワンピース</div>
-            <div class="row"><span class="dot"></span>🛍️ 欲しい</div>
-          </div>
+          <div class="photo g3 tall">👗<span class="tag t-want">欲しい</span></div>
+          <div class="meta"><div class="title">気になってるあのワンピース</div>
+            <div class="row">🛍️ 2026/06/13</div></div>
         </div>
         <div class="card">
-          <div class="photo g5">🎬</div>
-          <div class="meta">
-            <div class="title">観たい映画リスト</div>
-            <div class="row"><span class="dot"></span>👀 見たい</div>
-          </div>
+          <div class="photo g5">🎬<span class="tag t-see">見たい</span></div>
+          <div class="meta"><div class="title">DUNE PART2をIMAXで観る</div>
+            <div class="row">🎬 2026/06/12</div></div>
         </div>
         <div class="card">
-          <div class="photo g4">☕</div>
-          <div class="meta">
-            <div class="title">鎌倉の海が見えるカフェ</div>
-            <div class="row"><span class="done">叶えた ✓</span> ・ 🍽️</div>
-          </div>
+          <div class="photo g4">☕<span class="tag t-eat">食べたい</span></div>
+          <div class="meta"><div class="title">鎌倉の海が見えるカフェ</div>
+            <div class="row"><span class="done">叶えた ✓</span></div></div>
         </div>
         <div class="card">
-          <div class="photo g6 tall">📖</div>
-          <div class="meta">
-            <div class="title">積んでる新書を読む</div>
-            <div class="row"><span class="dot"></span>📖 知りたい</div>
-          </div>
+          <div class="photo g6 tall">📖<span class="tag t-know">知りたい</span></div>
+          <div class="meta"><div class="title">ワインの選び方を学ぶ</div>
+            <div class="row">📖 2026/06/11</div></div>
         </div>
         <div class="card">
-          <div class="photo g7">💪</div>
-          <div class="meta">
-            <div class="title">毎朝ヨガを習慣にする</div>
-            <div class="row"><span class="dot"></span>✅ やりたい <span class="due">・今週</span></div>
-          </div>
+          <div class="photo g7">💪<span class="tag t-do">やりたい</span></div>
+          <div class="meta"><div class="title">毎朝ヨガを習慣にする</div>
+            <div class="row">💪 <span class="due">今週</span></div></div>
         </div>
         <div class="card">
-          <div class="photo g2">🎧</div>
-          <div class="meta">
-            <div class="title">AirPods Pro 新型</div>
-            <div class="row"><span class="dot"></span>🛍️ 欲しい</div>
-          </div>
+          <div class="photo g2">🎧<span class="tag t-want">欲しい</span></div>
+          <div class="meta"><div class="title">AirPods Pro 新型</div>
+            <div class="row">🛍️ 2026/06/10</div></div>
         </div>
       </div>
     </div>
 
-    <div class="fab">＋</div>
     <div class="tabbar">
-      <span class="on">🏠</span>
-      <span class="off">🔍</span>
-      <span class="off">🏆</span>
-      <span class="off">⚙️</span>
+      <div class="tab on"><span class="ico">🏠</span>ホーム</div>
+      <div class="tab"><span class="ico">🔍</span>検索</div>
+      <div class="tab add"><span class="ico">＋</span></div>
+      <div class="tab"><span class="ico">🔔</span>リマインド</div>
+      <div class="tab"><span class="ico">👤</span>マイページ</div>
     </div>
   </div>
 </body>
