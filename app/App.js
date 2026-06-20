@@ -17,6 +17,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
+import { PERSONAL_SPACE_ID, withSpaceId } from './space';
 import { parseGps, coordsMapsUrl } from './geo';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -39,9 +40,9 @@ Notifications.setNotificationHandler({
 });
 
 const SEED = [
-  { id: 's1', title: '一蘭 渋谷店で豚骨ラーメン', category: 'eat', dueTag: 'thisWeek', remind: 'tomorrow', heat: 3, createdAt: Date.now(), doneAt: null },
-  { id: 's2', title: 'モルディブの透明な海', category: 'go', dueTag: 'none', remind: '3days', heat: 2, createdAt: Date.now(), doneAt: null },
-  { id: 's3', title: 'DUNE PART2をIMAXで観る', category: 'see', dueTag: 'none', remind: 'none', heat: 1, createdAt: Date.now(), doneAt: null },
+  { id: 's1', title: '一蘭 渋谷店で豚骨ラーメン', category: 'eat', dueTag: 'thisWeek', remind: 'tomorrow', heat: 3, spaceId: PERSONAL_SPACE_ID, createdAt: Date.now(), doneAt: null },
+  { id: 's2', title: 'モルディブの透明な海', category: 'go', dueTag: 'none', remind: '3days', heat: 2, spaceId: PERSONAL_SPACE_ID, createdAt: Date.now(), doneAt: null },
+  { id: 's3', title: 'DUNE PART2をIMAXで観る', category: 'see', dueTag: 'none', remind: 'none', heat: 1, spaceId: PERSONAL_SPACE_ID, createdAt: Date.now(), doneAt: null },
 ];
 
 const DUE_OPTIONS = [
@@ -110,7 +111,10 @@ export default function App() {
       const { status } = await Notifications.getPermissionsAsync();
       if (status !== 'granted') await Notifications.requestPermissionsAsync();
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) setItems(JSON.parse(raw)); else { setItems(SEED); AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SEED)); }
+      if (raw) {
+        const loaded = withSpaceId(JSON.parse(raw));
+        setItems(loaded); AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+      } else { setItems(SEED); AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SEED)); }
       const m = await AsyncStorage.getItem(THEME_KEY); if (m) setMode(m);
       const p = await AsyncStorage.getItem(PROFILE_KEY); if (p) setProfileName(p);
       const vs = await AsyncStorage.getItem(VISION_KEY);
@@ -154,7 +158,7 @@ export default function App() {
 
   async function addItem(title, category, due, imageUri, heat, reminder) {
     const rem = reminder || { remind: '3days' };
-    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
+    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, spaceId: PERSONAL_SPACE_ID, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
     item.notifId = await scheduleReminder(item);
     await persist([item, ...items]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
