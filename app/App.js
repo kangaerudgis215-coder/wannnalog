@@ -15,7 +15,6 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { colors, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
-import { isUrl, fetchOgp, cleanTitle } from './ogp';
 import { REMIND_OPTIONS, reminderSeconds, remindLabel } from './notify';
 
 const STORAGE_KEY = 'wannalog_items_v1';
@@ -290,8 +289,6 @@ function SaveModal({ visible, onClose, onSave }) {
   const [category, setCategory] = useState('eat');
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
-  const [sourceUrl, setSourceUrl] = useState(null);
-  const [loadingOgp, setLoadingOgp] = useState(false);
   const [remind, setRemind] = useState('3days');
 
   async function pickImage() {
@@ -301,26 +298,14 @@ function SaveModal({ visible, onClose, onSave }) {
     if (!res.canceled) setImage(res.assets[0].uri);
   }
 
-  async function loadFromUrl() {
-    const url = title.trim();
-    setLoadingOgp(true);
-    const ogp = await fetchOgp(url);
-    setLoadingOgp(false);
-    setSourceUrl(url);
-    const good = cleanTitle(ogp.title, url, '');
-    if (good) setTitle(good); // 「Google マップ」等の汎用名では上書きしない
-    if (ogp.image && !image) setImage(ogp.image);
-    if (!good && !ogp.image) Alert.alert('リンク先の情報が取得できませんでした', '店名・品名は手で入力してください。');
-  }
-
   function resetForm() {
     setTitle(''); setCategory('eat'); setDue('none');
-    setImage(null); setSourceUrl(null); setRemind('3days');
+    setImage(null); setRemind('3days');
   }
 
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    onSave(title.trim(), category, due, image, sourceUrl, remind);
+    onSave(title.trim(), category, due, image, null, remind);
     resetForm();
   }
 
@@ -339,18 +324,12 @@ function SaveModal({ visible, onClose, onSave }) {
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <TextInput
               style={styles.input}
-              placeholder="例：鎌倉の海が見えるカフェ（URLでもOK）"
+              placeholder="例：鎌倉の海が見えるカフェ"
               placeholderTextColor={colors.warmgray}
               value={title}
               onChangeText={setTitle}
               autoFocus
             />
-
-            {isUrl(title) && (
-              <Pressable style={styles.urlBtn} onPress={loadFromUrl} disabled={loadingOgp}>
-                <Text style={styles.urlBtnText}>{loadingOgp ? '読み込み中…' : '🔗 リンク先を読み込む'}</Text>
-              </Pressable>
-            )}
 
             <Pressable style={styles.photoPick} onPress={pickImage}>
               {image
