@@ -44,8 +44,14 @@ const SEED = [
 
 const DUE_OPTIONS = [
   { key: 'none', label: 'なし' },
+  { key: 'today', label: '今日' },
   { key: 'thisWeek', label: '今週' },
+  { key: 'nextWeek', label: '来週' },
   { key: 'thisMonth', label: '今月' },
+  { key: 'q1', label: 'Q1' },
+  { key: 'q2', label: 'Q2' },
+  { key: 'q3', label: 'Q3' },
+  { key: 'q4', label: 'Q4' },
 ];
 
 /* ---------- テーマ ---------- */
@@ -124,6 +130,7 @@ export default function App() {
   async function addVisionSlot() { await persistVision([...visionSlots, { id: String(Date.now()), imageUri: null }]); }
   async function removeVisionSlot(id) { await persistVision(visionSlots.filter((sl) => sl.id !== id)); }
   async function saveVisionTitle(v) { setVisionTitle(v); await AsyncStorage.setItem(VISION_TITLE_KEY, v); }
+  async function setVisionLabel(id, text) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, label: text } : sl))); }
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
@@ -187,7 +194,7 @@ export default function App() {
         ) : (
           <>
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
-            {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} />}
+            {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onLabel={setVisionLabel} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
@@ -305,7 +312,7 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
 }
 
 /* ---------- ビジョンボード（別データ・枠に写真を嵌めるムードボード） ---------- */
-function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove }) {
+function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onLabel }) {
   const t = useTheme(); const s = useStyles();
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
@@ -315,7 +322,7 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove 
       </View>
       <Masonry items={slots} renderTile={(slot, i) => (
         <FadeInView key={slot.id} index={i}>
-          <VisionSlot slot={slot} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length]} onFill={() => onFill(slot.id)} onClear={() => onClear(slot.id)} onRemove={() => onRemove(slot.id)} />
+          <VisionSlot slot={slot} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length]} onFill={() => onFill(slot.id)} onClear={() => onClear(slot.id)} onRemove={() => onRemove(slot.id)} onLabel={(text) => onLabel(slot.id, text)} />
         </FadeInView>
       )} />
       <Pressable style={s.visionAdd} onPress={onAdd}>
@@ -325,10 +332,18 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove 
     </ScrollView>
   );
 }
-function VisionSlot({ slot, height, onFill, onClear, onRemove }) {
+function VisionSlot({ slot, height, onFill, onClear, onRemove, onLabel }) {
   const t = useTheme(); const s = useStyles();
+  function editLabel() {
+    if (Alert.prompt) {
+      Alert.prompt('ひとことコメント', '画像の上にスタイリッシュに表示されます', (text) => onLabel(text), 'plain-text', slot.label || '');
+    } else {
+      Alert.alert('コメント', 'この端末では文字入力ダイアログが使えません。');
+    }
+  }
   if (slot.imageUri) {
-    const menu = () => Alert.alert('この写真', undefined, [
+    const menu = () => Alert.alert('この枠', undefined, [
+      { text: slot.label ? 'コメントを編集' : 'コメントを入れる', onPress: editLabel },
       { text: '写真を変更', onPress: onFill },
       { text: '写真を外す', onPress: onClear },
       { text: '枠を削除', style: 'destructive', onPress: onRemove },
@@ -337,6 +352,11 @@ function VisionSlot({ slot, height, onFill, onClear, onRemove }) {
     return (
       <Pressable style={({ pressed }) => [s.tile, { height }, pressed && s.pressed]} onPress={menu}>
         <Image source={{ uri: slot.imageUri }} style={s.tileImg} />
+        {slot.label ? (
+          <View style={s.visionLabelWrap}>
+            <Text style={s.visionSlotLabel} numberOfLines={3}>{slot.label}</Text>
+          </View>
+        ) : null}
       </Pressable>
     );
   }
@@ -596,9 +616,11 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
+  const heat = item.heat || 2;
   const links = actionLinks(item.category, item.title);
   const [title, setTitle] = useState(item.title);
   const [memo, setMemo] = useState(item.memo || '');
+  const [editMode, setEditMode] = useState(false);
 
   async function testNotify() { await scheduleReminder(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
   function openLink(url) { Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした')); }
@@ -619,63 +641,83 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
     <View style={{ flex: 1 }}>
       <View style={s.detailBar}>
         <Pressable onPress={onBack} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
-        <Pressable onPress={confirmDelete} style={s.detailBarBtn}><Ionicons name="trash-outline" size={20} color="#E5484D" /></Pressable>
+        <View style={s.detailBarRight}>
+          <Pressable onPress={() => setEditMode((v) => !v)} style={[s.editToggle, editMode && { backgroundColor: t.accent, borderColor: t.accent }]}>
+            <Ionicons name={editMode ? 'checkmark' : 'create-outline'} size={15} color={editMode ? '#fff' : t.accent} />
+            <Text style={[s.editToggleText, editMode && { color: '#fff' }]}>{editMode ? '完了' : '編集'}</Text>
+          </Pressable>
+          <Pressable onPress={confirmDelete} style={s.detailBarBtn}><Ionicons name="trash-outline" size={20} color="#E5484D" /></Pressable>
+        </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         {item.imageUri
           ? <Image source={{ uri: item.imageUri }} style={s.detailPhoto} />
           : <View style={[s.detailPhoto, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name={cat.icon} size={72} color="rgba(255,255,255,0.9)" /></View>}
-        <View style={s.photoActions}>
-          <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
-          {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
-        </View>
+        {editMode && (
+          <View style={s.photoActions}>
+            <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
+            {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
+          </View>
+        )}
 
-        <TextInput style={s.detailTitleInput} value={title} onChangeText={(v) => { setTitle(v); onUpdate({ title: v }); }} placeholder="タイトル" placeholderTextColor={t.sub} />
-        <View style={s.detailCatRow}>
-          <Ionicons name={cat.icon} size={14} color={t.sub} />
-          <Text style={s.detailCat}>{cat.label}{due ? `　・　${due}まで` : ''}</Text>
-        </View>
+        {editMode
+          ? <TextInput style={s.detailTitleInput} value={title} onChangeText={(v) => { setTitle(v); onUpdate({ title: v }); }} placeholder="タイトル" placeholderTextColor={t.sub} />
+          : <Text style={s.detailTitleInput}>{item.title}</Text>}
 
-        <Text style={s.sectionLabel}>カテゴリ</Text>
-        <View style={s.catWrap}>
-          {CATEGORIES.map((c) => (
-            <Pressable key={c.key} onPress={() => onUpdate({ category: c.key })} style={optChip(item.category === c.key, c.color)}>
-              <Ionicons name={c.icon} size={13} color={item.category === c.key ? '#fff' : t.text} />
-              <Text style={[s.catChipText, item.category === c.key && { color: '#fff' }]}>{c.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {editMode ? (
+          <>
+            <Text style={s.sectionLabel}>カテゴリ</Text>
+            <View style={s.catWrap}>
+              {CATEGORIES.map((c) => (
+                <Pressable key={c.key} onPress={() => onUpdate({ category: c.key })} style={optChip(item.category === c.key, c.color)}>
+                  <Ionicons name={c.icon} size={13} color={item.category === c.key ? '#fff' : t.text} />
+                  <Text style={[s.catChipText, item.category === c.key && { color: '#fff' }]}>{c.label}</Text>
+                </Pressable>
+              ))}
+            </View>
 
-        <Text style={s.sectionLabel}>熱量（本気度）</Text>
-        <View style={s.catWrap}>
-          {HEAT_OPTIONS.map((h) => (
-            <Pressable key={h.key} onPress={() => onUpdate({ heat: h.key })} style={optChip((item.heat || 2) === h.key, t.accent)}>
-              <Ionicons name="flame" size={13} color={(item.heat || 2) === h.key ? '#fff' : (h.key === 3 ? t.accent : t.sub)} />
-              <Text style={[s.catChipText, (item.heat || 2) === h.key && { color: '#fff' }]}>{h.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+            <Text style={s.sectionLabel}>熱量（本気度）</Text>
+            <View style={s.catWrap}>
+              {HEAT_OPTIONS.map((h) => (
+                <Pressable key={h.key} onPress={() => onUpdate({ heat: h.key })} style={optChip(heat === h.key, t.accent)}>
+                  <Ionicons name="flame" size={13} color={heat === h.key ? '#fff' : (h.key === 3 ? t.accent : t.sub)} />
+                  <Text style={[s.catChipText, heat === h.key && { color: '#fff' }]}>{h.label}</Text>
+                </Pressable>
+              ))}
+            </View>
 
-        <Text style={s.sectionLabel}>いつまでに</Text>
-        <View style={s.catWrap}>
-          {DUE_OPTIONS.map((d) => (
-            <Pressable key={d.key} onPress={() => onUpdate({ dueTag: d.key })} style={optChip(item.dueTag === d.key, t.accent)}>
-              <Text style={[s.catChipText, item.dueTag === d.key && { color: '#fff' }]}>{d.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+            <Text style={s.sectionLabel}>いつまでに</Text>
+            <View style={s.catWrap}>
+              {DUE_OPTIONS.map((d) => (
+                <Pressable key={d.key} onPress={() => onUpdate({ dueTag: d.key })} style={optChip(item.dueTag === d.key, t.accent)}>
+                  <Text style={[s.catChipText, item.dueTag === d.key && { color: '#fff' }]}>{d.label}</Text>
+                </Pressable>
+              ))}
+            </View>
 
-        <Text style={s.sectionLabel}>思い出す（通知）</Text>
-        <View style={s.catWrap}>
-          {REMIND_OPTIONS.map((r) => (
-            <Pressable key={r.key} onPress={() => onRemind(r.key)} style={optChip((item.remind || 'none') === r.key, t.accent)}>
-              <Text style={[s.catChipText, (item.remind || 'none') === r.key && { color: '#fff' }]}>{r.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+            <Text style={s.sectionLabel}>思い出す（通知）</Text>
+            <View style={s.catWrap}>
+              {REMIND_OPTIONS.map((r) => (
+                <Pressable key={r.key} onPress={() => onRemind(r.key)} style={optChip((item.remind || 'none') === r.key, t.accent)}>
+                  <Text style={[s.catChipText, (item.remind || 'none') === r.key && { color: '#fff' }]}>{r.label}</Text>
+                </Pressable>
+              ))}
+            </View>
 
-        <Text style={s.sectionLabel}>メモ</Text>
-        <TextInput style={s.memoInput} value={memo} onChangeText={(v) => { setMemo(v); onUpdate({ memo: v }); }} placeholder="ひとことメモ（任意）" placeholderTextColor={t.sub} multiline />
+            <Text style={s.sectionLabel}>メモ</Text>
+            <TextInput style={s.memoInput} value={memo} onChangeText={(v) => { setMemo(v); onUpdate({ memo: v }); }} placeholder="ひとことメモ（任意）" placeholderTextColor={t.sub} multiline />
+          </>
+        ) : (
+          <>
+            <View style={s.summaryRow}>
+              <View style={[s.pill, { backgroundColor: cat.color }]}><Ionicons name={cat.icon} size={13} color="#fff" /><Text style={s.pillTextOn}>{cat.label}</Text></View>
+              <View style={s.pill}><Ionicons name="flame" size={13} color={t.accent} /><Text style={s.pillText}>{heatLabel(heat)}</Text></View>
+              {due ? <View style={s.pill}><Ionicons name="time-outline" size={13} color={t.sub} /><Text style={s.pillText}>{due}まで</Text></View> : null}
+              <View style={s.pill}><Ionicons name="notifications-outline" size={13} color={t.sub} /><Text style={s.pillText}>{remindLabel(item.remind || 'none')}</Text></View>
+            </View>
+            {memo ? <Text style={s.memoText}>{memo}</Text> : null}
+          </>
+        )}
 
         <Text style={s.sectionLabel}>アクション</Text>
         {links.map((l) => (
@@ -690,7 +732,7 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
         ) : (
           <Pressable style={s.doneBtn} onPress={onDone}><Ionicons name="checkmark" size={18} color="#fff" /><Text style={s.doneText}>達成した！</Text></Pressable>
         )}
-        <Pressable onPress={testNotify}><Text style={s.testNotifyLink}>通知の動作をテスト（10秒後に届きます）</Text></Pressable>
+        {editMode && <Pressable onPress={testNotify}><Text style={s.testNotifyLink}>通知の動作をテスト（10秒後に届きます）</Text></Pressable>}
       </ScrollView>
     </View>
   );
@@ -720,6 +762,8 @@ function makeStyles(t) {
     visionEmptyText: { color: t.sub, fontSize: 12, fontWeight: '600' },
     visionAdd: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 6, marginTop: 18, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, backgroundColor: t.surface },
     visionAddText: { color: t.accent, fontSize: 14, fontWeight: '800' },
+    visionLabelWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: 'rgba(0,0,0,0.22)' },
+    visionSlotLabel: { color: '#fff', fontSize: 19, fontWeight: '900', letterSpacing: 1, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 8 },
 
     masonryRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 2 },
     masonryCol: { flex: 1, gap: 12 },
@@ -728,7 +772,7 @@ function makeStyles(t) {
     // 写真前面タイル
     tile: { borderRadius: 20, overflow: 'hidden', justifyContent: 'flex-end', backgroundColor: t.surface },
     tileImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-    tileShade: { ...StyleSheet.absoluteFillObject, backgroundColor: t.shadeBottom, top: '45%' },
+    tileShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)', top: '55%' },
     tileTag: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
     tileTagText: { color: '#fff', fontSize: 11, fontWeight: '800' },
     tileDone: { position: 'absolute', right: 10, top: 10 },
@@ -800,6 +844,14 @@ function makeStyles(t) {
     // 詳細
     detailBar: { paddingHorizontal: 12, paddingTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     detailBarBtn: { padding: 6 },
+    detailBarRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    editToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: t.accent },
+    editToggleText: { color: t.accent, fontWeight: '800', fontSize: 13 },
+    summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+    pill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+    pillText: { color: t.text, fontWeight: '700', fontSize: 12.5 },
+    pillTextOn: { color: '#fff', fontWeight: '700', fontSize: 12.5 },
+    memoText: { color: t.sub, fontSize: 14, lineHeight: 21, marginTop: 14 },
     detailPhoto: { width: '100%', height: 240, borderRadius: 22 },
     photoActions: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 12 },
     photoActBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },

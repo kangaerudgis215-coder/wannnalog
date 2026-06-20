@@ -41,8 +41,14 @@ export function actionLinks(categoryKey, title) {
 // 期限タグの表示名（純粋関数）
 export function dueLabel(dueTag) {
   switch (dueTag) {
+    case 'today': return '今日';
     case 'thisWeek': return '今週';
+    case 'nextWeek': return '来週';
     case 'thisMonth': return '今月';
+    case 'q1': return 'Q1';
+    case 'q2': return 'Q2';
+    case 'q3': return 'Q3';
+    case 'q4': return 'Q4';
     default: return null;
   }
 }

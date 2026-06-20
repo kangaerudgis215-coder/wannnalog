@@ -37,9 +37,13 @@ describe('actionLinks', () => {
 });
 
 describe('dueLabel', () => {
-  test('thisWeek -> 今週 / thisMonth -> 今月', () => {
+  test('期限ラベル各種', () => {
+    expect(dueLabel('today')).toBe('今日');
     expect(dueLabel('thisWeek')).toBe('今週');
+    expect(dueLabel('nextWeek')).toBe('来週');
     expect(dueLabel('thisMonth')).toBe('今月');
+    expect(dueLabel('q1')).toBe('Q1');
+    expect(dueLabel('q4')).toBe('Q4');
   });
   test('none / undefined は null', () => {
     expect(dueLabel('none')).toBeNull();
