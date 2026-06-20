@@ -11,29 +11,29 @@ export function actionLinks(categoryKey, title) {
   switch (categoryKey) {
     case 'eat':
       return [
-        { label: '🗺️ 地図で店を探す', url: maps(t) },
-        { label: '🍴 食べログで探す', url: google(t + ' 食べログ') },
+        { icon: 'map', label: '地図で店を探す', url: maps(t) },
+        { icon: 'search', label: '食べログで探す', url: google(t + ' 食べログ') },
       ];
     case 'go':
       return [
-        { label: '🗺️ 地図で探す', url: maps(t) },
-        { label: '🔎 ネットで調べる', url: google(t) },
+        { icon: 'map', label: '地図で探す', url: maps(t) },
+        { icon: 'search', label: 'ネットで調べる', url: google(t) },
       ];
     case 'want':
       return [
-        { label: '🛍️ 楽天で探す', url: `https://search.rakuten.co.jp/search/mall/${enc(t)}/` },
-        { label: '📦 Amazonで探す', url: `https://www.amazon.co.jp/s?k=${enc(t)}` },
+        { icon: 'bag-handle', label: '楽天で探す', url: `https://search.rakuten.co.jp/search/mall/${enc(t)}/` },
+        { icon: 'cart', label: 'Amazonで探す', url: `https://www.amazon.co.jp/s?k=${enc(t)}` },
       ];
     case 'see':
       return [
-        { label: '🎬 配信を探す', url: google(t + ' 配信') },
-        { label: '🔎 ネットで調べる', url: google(t) },
+        { icon: 'play', label: '配信を探す', url: google(t + ' 配信') },
+        { icon: 'search', label: 'ネットで調べる', url: google(t) },
       ];
     case 'know':
     case 'do':
     default:
       return [
-        { label: '🔎 ネットで調べる', url: google(t) },
+        { icon: 'search', label: 'ネットで調べる', url: google(t) },
       ];
   }
 }

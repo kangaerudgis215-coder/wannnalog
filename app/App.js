@@ -17,6 +17,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
 import { REMIND_OPTIONS, reminderSeconds, remindLabel } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
+import { parseGps, coordsMapsUrl } from './geo';
 
 const STORAGE_KEY = 'wannalog_items_v1';
 const THEME_KEY = 'wannalog_theme';
@@ -617,7 +618,10 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
   const heat = item.heat || 2;
-  const links = actionLinks(item.category, item.title);
+  const links = [
+    ...(item.lat != null ? [{ icon: 'location', label: '撮影場所を地図で開く', url: coordsMapsUrl(item.lat, item.lng) }] : []),
+    ...actionLinks(item.category, item.title),
+  ];
   const [title, setTitle] = useState(item.title);
   const [memo, setMemo] = useState(item.memo || '');
   const [editMode, setEditMode] = useState(false);
@@ -634,6 +638,19 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) onUpdate({ imageUri: res.assets[0].uri });
+  }
+  // 撮影場所を読む：切り抜き無し＋EXIFありで取り込み、GPSがあれば保存
+  async function readLocationFromPhoto() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, exif: true, quality: 0.6 });
+    if (res.canceled) return;
+    const asset = res.assets[0];
+    const gps = parseGps(asset.exif);
+    const patch = { imageUri: asset.uri };
+    if (gps) { patch.lat = gps.lat; patch.lng = gps.lng; Alert.alert('場所を読み取りました', '「撮影場所を地図で開く」から開けます。'); }
+    else { Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
+    onUpdate(patch);
   }
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
 
@@ -656,7 +673,8 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
         {editMode && (
           <View style={s.photoActions}>
             <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
-            {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
+            <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
+            {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
           </View>
         )}
 
@@ -722,7 +740,10 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
         <Text style={s.sectionLabel}>アクション</Text>
         {links.map((l) => (
           <Pressable key={l.url} style={s.actionBtn} onPress={() => openLink(l.url)}>
-            <Text style={s.actionText}>{l.label}</Text>
+            <View style={s.actionLeft}>
+              <Ionicons name={l.icon || 'open-outline'} size={18} color={t.accent} />
+              <Text style={s.actionText}>{l.label}</Text>
+            </View>
             <Ionicons name="chevron-forward" size={18} color={t.sub} />
           </Pressable>
         ))}
@@ -862,6 +883,7 @@ function makeStyles(t) {
     sectionLabel: { marginTop: 24, marginBottom: 10, fontSize: 13, fontWeight: '800', color: t.text },
     memoInput: { backgroundColor: t.surface, borderRadius: 14, padding: 14, fontSize: 15, color: t.text, minHeight: 80, textAlignVertical: 'top' },
     actionBtn: { marginBottom: 10, backgroundColor: t.surface, borderRadius: 14, paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    actionLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     actionText: { fontSize: 15, fontWeight: '700', color: t.text },
     doneBtn: { marginTop: 16, backgroundColor: t.accent, borderRadius: 14, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
     doneText: { color: '#fff', fontSize: 16, fontWeight: '800' },
