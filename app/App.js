@@ -15,9 +15,10 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { palettes, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
-import { REMIND_OPTIONS, reminderSeconds, remindLabel } from './notify';
+import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { parseGps, coordsMapsUrl } from './geo';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const STORAGE_KEY = 'wannalog_items_v1';
 const THEME_KEY = 'wannalog_theme';
@@ -65,14 +66,30 @@ function useStyles() {
   return _styleCache[t.mode];
 }
 
-async function scheduleReminder(item, seconds) {
+async function _schedule(item, trigger) {
   const cat = getCategory(item.category);
   try {
     return await Notifications.scheduleNotificationAsync({
       content: { title: cat.label + '：' + item.title, body: reminderBody(item.category), data: { id: item.id } },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds, repeats: false },
+      trigger,
     });
   } catch (e) { console.warn('通知の予約に失敗:', e); return null; }
+}
+// アイテムの通知設定（remind/at/daily/weekly）に従って予約
+async function scheduleReminder(item) {
+  const plan = reminderPlan(item);
+  if (!plan) return null;
+  const T = Notifications.SchedulableTriggerInputTypes;
+  let trigger;
+  if (plan.kind === 'interval') trigger = { type: T.TIME_INTERVAL, seconds: plan.seconds, repeats: false };
+  else if (plan.kind === 'date') trigger = { type: T.DATE, date: new Date(plan.at) };
+  else if (plan.kind === 'daily') trigger = { type: T.DAILY, hour: plan.hour, minute: plan.minute };
+  else if (plan.kind === 'weekly') trigger = { type: T.WEEKLY, weekday: plan.weekday, hour: plan.hour, minute: plan.minute };
+  else return null;
+  return await _schedule(item, trigger);
+}
+async function scheduleInSeconds(item, seconds) {
+  return await _schedule(item, { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds, repeats: false });
 }
 
 export default function App() {
@@ -135,14 +152,13 @@ export default function App() {
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
-  async function addItem(title, category, due, imageUri, remind, heat) {
-    const r = remind || '3days';
-    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, remind: r, heat: heat || 2, notifId: null, createdAt: Date.now(), doneAt: null };
-    const secs = reminderSeconds(r);
-    if (secs) item.notifId = await scheduleReminder(item, secs);
+  async function addItem(title, category, due, imageUri, heat, reminder) {
+    const rem = reminder || { remind: '3days' };
+    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
+    item.notifId = await scheduleReminder(item);
     await persist([item, ...items]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert('保存しました', r === 'none' ? 'ボードに追加しました。' : `${remindLabel(r)}、そっと思い出させます。`);
+    Alert.alert('保存しました', item.remind === 'none' ? 'ボードに追加しました。' : `${remindSummary(item)} に思い出させます。`);
   }
 
   function runCelebration() {
@@ -159,12 +175,13 @@ export default function App() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); runCelebration();
   }
   async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
-  async function setItemRemind(id, choice) {
+  // 通知設定を丸ごと差し替え：古い予約を取り消し→新設定で予約し直す
+  async function applyReminder(id, reminder) {
     const it = items.find((x) => x.id === id); if (!it) return;
     if (it.notifId) { try { await Notifications.cancelScheduledNotificationAsync(it.notifId); } catch (e) {} }
-    let notifId = null; const secs = reminderSeconds(choice);
-    if (secs) notifId = await scheduleReminder(it, secs);
-    await persist(items.map((x) => (x.id === id ? { ...x, remind: choice, notifId } : x)));
+    const updated = { ...it, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null, ...reminder };
+    const notifId = await scheduleReminder(updated);
+    await persist(items.map((x) => (x.id === id ? { ...updated, notifId } : x)));
   }
   async function deleteItem(id) {
     const it = items.find((x) => x.id === id);
@@ -189,7 +206,7 @@ export default function App() {
             onBack={() => setSelectedId(null)}
             onDone={() => { markDone(selected.id); setSelectedId(null); }}
             onUpdate={(patch) => updateItem(selected.id, patch)}
-            onRemind={(choice) => setItemRemind(selected.id, choice)}
+            onReminder={(reminder) => applyReminder(selected.id, reminder)}
             onDelete={() => { deleteItem(selected.id); setSelectedId(null); }}
           />
         ) : (
@@ -203,7 +220,7 @@ export default function App() {
         )}
 
         <SaveModal visible={saveOpen} onClose={() => setSaveOpen(false)}
-          onSave={(title, category, due, imageUri, remind, heat) => { addItem(title, category, due, imageUri, remind, heat); setSaveOpen(false); }} />
+          onSave={(title, category, due, imageUri, heat, reminder) => { addItem(title, category, due, imageUri, heat, reminder); setSaveOpen(false); }} />
 
         {celebrating && (
           <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim }]}>
@@ -389,7 +406,7 @@ function NotifyTab({ items, onOpen }) {
               <View style={[s.notifyIcon, { backgroundColor: cat.color }]}><Ionicons name={cat.icon} size={18} color="#fff" /></View>
               <View style={{ flex: 1 }}>
                 <Text style={s.notifyTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={s.notifySub}>{remindLabel(item.remind)}に思い出します</Text>
+                <Text style={s.notifySub}>{remindSummary(item)}に思い出します</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={t.sub} />
             </Pressable>
@@ -520,6 +537,79 @@ function Chip({ icon, label, active, onPress }) {
   );
 }
 
+/* ---------- 通知タイミングの編集 ---------- */
+const REMIND_MODES = [
+  { key: 'none', label: 'なし' },
+  { key: 'tomorrow', label: '明日' },
+  { key: '3days', label: '3日後' },
+  { key: 'week', label: '1週間後' },
+  { key: 'at', label: '日時を指定' },
+  { key: 'daily', label: '毎日' },
+  { key: 'weekly', label: '毎週' },
+];
+const WEEKDAYS = [
+  { k: 1, l: '日' }, { k: 2, l: '月' }, { k: 3, l: '火' }, { k: 4, l: '水' },
+  { k: 5, l: '木' }, { k: 6, l: '金' }, { k: 7, l: '土' },
+];
+// 既定の指定日時：明日の9:00
+function defaultFutureDate() { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; }
+
+// 通知タイミングを選ぶUI。value/onChange は { remind, remindAt, remindHour, remindMinute, remindWeekday }
+function ReminderEditor({ value, onChange }) {
+  const t = useTheme(); const s = useStyles();
+  const v = value || { remind: 'none' };
+  const remind = v.remind || 'none';
+  function set(patch) { onChange({ ...v, ...patch }); }
+  function choose(key) {
+    if (key === 'at' && !v.remindAt) set({ remind: key, remindAt: defaultFutureDate().getTime() });
+    else set({ remind: key });
+  }
+  const optChip = (selected) => [s.catChip, selected && { backgroundColor: t.accent, borderColor: t.accent }];
+  const atDate = v.remindAt ? new Date(v.remindAt) : defaultFutureDate();
+  const timeDate = (() => { const d = new Date(); d.setHours(v.remindHour ?? 9, v.remindMinute ?? 0, 0, 0); return d; })();
+  return (
+    <View>
+      <View style={s.catWrap}>
+        {REMIND_MODES.map((r) => (
+          <Pressable key={r.key} onPress={() => choose(r.key)} style={optChip(remind === r.key)}>
+            <Text style={[s.catChipText, remind === r.key && { color: '#fff' }]}>{r.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {remind === 'at' && (
+        <View style={s.reminderPickRow}>
+          <Text style={s.reminderHint}>日時</Text>
+          <DateTimePicker value={atDate} mode="datetime" display="compact"
+            onChange={(e, d) => { if (d) set({ remindAt: d.getTime() }); }} />
+        </View>
+      )}
+
+      {(remind === 'daily' || remind === 'weekly') && (
+        <View style={s.reminderPickRow}>
+          <Text style={s.reminderHint}>時刻</Text>
+          <DateTimePicker value={timeDate} mode="time" display="compact"
+            onChange={(e, d) => { if (d) set({ remindHour: d.getHours(), remindMinute: d.getMinutes() }); }} />
+        </View>
+      )}
+
+      {remind === 'weekly' && (
+        <View style={[s.catWrap, { marginTop: 10 }]}>
+          {WEEKDAYS.map((w) => (
+            <Pressable key={w.k} onPress={() => set({ remindWeekday: w.k })} style={optChip((v.remindWeekday ?? 1) === w.k)}>
+              <Text style={[s.catChipText, (v.remindWeekday ?? 1) === w.k && { color: '#fff' }]}>{w.l}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      <Text style={s.reminderSummary}>
+        {remind === 'none' ? '通知なし' : remindSummary(v) + ' に思い出します'}
+      </Text>
+    </View>
+  );
+}
+
 /* ---------- 保存シート ---------- */
 function SaveModal({ visible, onClose, onSave }) {
   const t = useTheme(); const s = useStyles();
@@ -528,10 +618,10 @@ function SaveModal({ visible, onClose, onSave }) {
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
   const [heat, setHeat] = useState(2);
-  const [remind, setRemind] = useState('3days');
+  const [reminder, setReminder] = useState({ remind: '3days' });
 
   // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
-  function chooseHeat(h) { setHeat(h); setRemind(defaultRemindForHeat(h)); }
+  function chooseHeat(h) { setHeat(h); setReminder({ remind: defaultRemindForHeat(h) }); }
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -539,10 +629,10 @@ function SaveModal({ visible, onClose, onSave }) {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) setImage(res.assets[0].uri);
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setHeat(2); setRemind('3days'); }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    onSave(title.trim(), category, due, image, remind, heat); resetForm();
+    onSave(title.trim(), category, due, image, heat, reminder); resetForm();
   }
 
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
@@ -594,16 +684,10 @@ function SaveModal({ visible, onClose, onSave }) {
             </View>
 
             <Text style={s.label}>思い出す（通知）</Text>
-            <View style={s.catWrap}>
-              {REMIND_OPTIONS.map((r) => (
-                <Pressable key={r.key} onPress={() => setRemind(r.key)} style={optChip(remind === r.key, t.accent)}>
-                  <Text style={[s.catChipText, remind === r.key && { color: '#fff' }]}>{r.label}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <ReminderEditor value={reminder} onChange={setReminder} />
 
             <Pressable style={s.saveBtn} onPress={handleSave}><Text style={s.saveBtnText}>保存する</Text></Pressable>
-            <Text style={s.saveNote}>{remind === 'none' ? 'ボードに追加します（通知なし）。' : `保存すると、${remindLabel(remind)}そっと思い出させます。`}</Text>
+            <Text style={s.saveNote}>{reminder.remind === 'none' ? 'ボードに追加します（通知なし）。' : 'タイミングが来たら、そっと思い出させます。'}</Text>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -612,7 +696,7 @@ function SaveModal({ visible, onClose, onSave }) {
 }
 
 /* ---------- 詳細 ---------- */
-function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
+function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
@@ -626,7 +710,7 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
   const [memo, setMemo] = useState(item.memo || '');
   const [editMode, setEditMode] = useState(false);
 
-  async function testNotify() { await scheduleReminder(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
+  async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
   function openLink(url) { Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした')); }
   function confirmDelete() {
     Alert.alert('削除しますか？', 'この「したい」を削除します。元に戻せません。', [
@@ -714,13 +798,9 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
             </View>
 
             <Text style={s.sectionLabel}>思い出す（通知）</Text>
-            <View style={s.catWrap}>
-              {REMIND_OPTIONS.map((r) => (
-                <Pressable key={r.key} onPress={() => onRemind(r.key)} style={optChip((item.remind || 'none') === r.key, t.accent)}>
-                  <Text style={[s.catChipText, (item.remind || 'none') === r.key && { color: '#fff' }]}>{r.label}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <ReminderEditor
+              value={{ remind: item.remind || 'none', remindAt: item.remindAt, remindHour: item.remindHour, remindMinute: item.remindMinute, remindWeekday: item.remindWeekday }}
+              onChange={onReminder} />
 
             <Text style={s.sectionLabel}>メモ</Text>
             <TextInput style={s.memoInput} value={memo} onChangeText={(v) => { setMemo(v); onUpdate({ memo: v }); }} placeholder="ひとことメモ（任意）" placeholderTextColor={t.sub} multiline />
@@ -731,7 +811,7 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
               <View style={[s.pill, { backgroundColor: cat.color }]}><Ionicons name={cat.icon} size={13} color="#fff" /><Text style={s.pillTextOn}>{cat.label}</Text></View>
               <View style={s.pill}><Ionicons name="flame" size={13} color={t.accent} /><Text style={s.pillText}>{heatLabel(heat)}</Text></View>
               {due ? <View style={s.pill}><Ionicons name="time-outline" size={13} color={t.sub} /><Text style={s.pillText}>{due}まで</Text></View> : null}
-              <View style={s.pill}><Ionicons name="notifications-outline" size={13} color={t.sub} /><Text style={s.pillText}>{remindLabel(item.remind || 'none')}</Text></View>
+              <View style={s.pill}><Ionicons name="notifications-outline" size={13} color={t.sub} /><Text style={s.pillText}>{remindSummary(item)}</Text></View>
             </View>
             {memo ? <Text style={s.memoText}>{memo}</Text> : null}
           </>
@@ -858,6 +938,9 @@ function makeStyles(t) {
     catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     catChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
     catChipText: { fontSize: 13, fontWeight: '600', color: t.text },
+    reminderPickRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+    reminderHint: { fontSize: 13, fontWeight: '700', color: t.sub },
+    reminderSummary: { marginTop: 12, fontSize: 13, fontWeight: '700', color: t.accent },
     saveBtn: { marginTop: 22, backgroundColor: t.accent, borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
     saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
     saveNote: { textAlign: 'center', color: t.sub, fontSize: 12, marginTop: 10 },
