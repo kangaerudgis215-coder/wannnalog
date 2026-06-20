@@ -62,3 +62,35 @@ export async function fetchOgp(url) {
     return { title: null, image: null, description: null };
   }
 }
+
+// 汎用タイトル（店名でない）の判定
+const GENERIC_TITLE = /^(google\s*マップ|google\s*maps|マップ|ストリートビュー)$/i;
+
+// Googleマップ等のURLから店名/場所名を復元（純粋関数）
+export function extractPlaceFromUrl(url) {
+  if (!url) return null;
+  const m = url.match(/\/maps\/place\/([^/@?]+)/i);
+  if (!m) return null;
+  try {
+    const name = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim();
+    return name || null;
+  } catch (e) {
+    return m[1].replace(/\+/g, ' ').trim() || null;
+  }
+}
+
+// 取得タイトルを「店名/品名」に整える（純粋関数）
+// 優先：良い非汎用タイトル > URL由来の店名 > fallback（入力）
+export function cleanTitle(rawTitle, url, fallback) {
+  const place = extractPlaceFromUrl(url);
+  let t = (rawTitle || '').trim();
+  // 「店名 - Google マップ」→ 先頭の店名
+  if (t.includes(' - ')) {
+    const head = t.split(' - ')[0].trim();
+    if (head && !GENERIC_TITLE.test(head)) t = head;
+  }
+  if (!t || GENERIC_TITLE.test(t)) {
+    return place || (fallback || '').trim() || null;
+  }
+  return t;
+}

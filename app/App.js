@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { colors, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
-import { isUrl, fetchOgp } from './ogp';
+import { isUrl, fetchOgp, cleanTitle } from './ogp';
 import { REMIND_OPTIONS, reminderSeconds, remindLabel } from './notify';
 
 const STORAGE_KEY = 'wannalog_items_v1';
@@ -307,9 +307,10 @@ function SaveModal({ visible, onClose, onSave }) {
     const ogp = await fetchOgp(url);
     setLoadingOgp(false);
     setSourceUrl(url);
-    if (ogp.title) setTitle(ogp.title);
+    const good = cleanTitle(ogp.title, url, '');
+    if (good) setTitle(good); // 「Google マップ」等の汎用名では上書きしない
     if (ogp.image && !image) setImage(ogp.image);
-    if (!ogp.title && !ogp.image) Alert.alert('リンク先の情報が取得できませんでした', 'タイトルは手で入力してください。');
+    if (!good && !ogp.image) Alert.alert('リンク先の情報が取得できませんでした', '店名・品名は手で入力してください。');
   }
 
   function resetForm() {
@@ -444,6 +445,13 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
     ]);
   }
 
+  async function changePhoto() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
+    if (!res.canceled) onUpdate({ imageUri: res.assets[0].uri });
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
@@ -463,6 +471,14 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
             <Text style={styles.detailEmoji}>{cat.emoji}</Text>
           </View>
         )}
+        <View style={styles.photoActions}>
+          <Pressable onPress={changePhoto}><Text style={styles.photoActionText}>📷 写真を変更</Text></Pressable>
+          {item.imageUri && (
+            <Pressable onPress={() => onUpdate({ imageUri: null })}>
+              <Text style={[styles.photoActionText, { color: '#E53935' }]}>✕ 写真を外す</Text>
+            </Pressable>
+          )}
+        </View>
 
         <TextInput
           style={styles.detailTitleInput}
@@ -536,13 +552,15 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
             <Text style={styles.actionArrow}>›</Text>
           </Pressable>
         ))}
-        <Pressable
-          style={[styles.doneBtn, done && { backgroundColor: colors.honey }]}
-          onPress={onDone}
-          disabled={done}
-        >
-          <Text style={styles.doneText}>{done ? '叶えた ✓' : '✅ 達成した！'}</Text>
-        </Pressable>
+        {done ? (
+          <Pressable style={styles.undoneBtn} onPress={() => onUpdate({ doneAt: null })}>
+            <Text style={styles.undoneText}>↩︎ 未達成に戻す</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.doneBtn} onPress={onDone}>
+            <Text style={styles.doneText}>✅ 達成した！</Text>
+          </Pressable>
+        )}
 
         <Pressable onPress={testNotify}>
           <Text style={styles.testNotifyLink}>🔔 通知の動作をテスト（10秒後に届きます）</Text>
@@ -619,6 +637,10 @@ const styles = StyleSheet.create({
   actionArrow: { fontSize: 20, color: colors.warmgray },
   doneBtn: { marginTop: 14, backgroundColor: colors.coral, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   doneText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  undoneBtn: { marginTop: 14, backgroundColor: colors.white, borderRadius: 14, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.line },
+  undoneText: { color: colors.warmgray, fontSize: 15, fontWeight: '700' },
+  photoActions: { flexDirection: 'row', justifyContent: 'center', gap: 22, marginTop: 10 },
+  photoActionText: { color: colors.coral, fontSize: 13, fontWeight: '700' },
   testNotifyLink: { textAlign: 'center', color: colors.warmgray, fontSize: 12, marginTop: 16, textDecorationLine: 'underline' },
 
   celebrate: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(250,247,242,0.6)' },

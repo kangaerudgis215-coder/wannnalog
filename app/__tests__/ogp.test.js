@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle } from '../ogp';
 
 describe('isUrl', () => {
   test('http/https をURLと判定', () => {
@@ -65,5 +65,36 @@ describe('resolveImage', () => {
   test('絶対URLはそのまま / null は null', () => {
     expect(resolveImage('https://a/b.jpg', 'https://a.com')).toBe('https://a/b.jpg');
     expect(resolveImage(null, 'https://a.com')).toBeNull();
+  });
+});
+
+describe('extractPlaceFromUrl', () => {
+  test('Googleマップ /place/ から店名を復元', () => {
+    expect(extractPlaceFromUrl('https://www.google.com/maps/place/鎌倉+蕎麦屋/@35.3,139.5'))
+      .toBe('鎌倉 蕎麦屋');
+    expect(extractPlaceFromUrl('https://maps.google.com/maps/place/%E4%B8%80%E8%98%AD/data=x'))
+      .toBe('一蘭');
+  });
+  test('該当しないURLは null', () => {
+    expect(extractPlaceFromUrl('https://example.com/x')).toBeNull();
+    expect(extractPlaceFromUrl(undefined)).toBeNull();
+  });
+});
+
+describe('cleanTitle', () => {
+  test('汎用タイトル(Google マップ)は URL由来の店名に置換', () => {
+    expect(cleanTitle('Google マップ', 'https://www.google.com/maps/place/一蘭+渋谷/@x', '入力'))
+      .toBe('一蘭 渋谷');
+  });
+  test('「店名 - Google マップ」は店名を取り出す', () => {
+    expect(cleanTitle('スターバックス 鎌倉店 - Google マップ', 'https://maps.google.com/x', ''))
+      .toBe('スターバックス 鎌倉店');
+  });
+  test('良いタイトルはそのまま', () => {
+    expect(cleanTitle('AirPods Pro 第2世代', 'https://amazon.co.jp/x', '')).toBe('AirPods Pro 第2世代');
+  });
+  test('汎用かつ手掛かり無しは fallback、それも無ければ null', () => {
+    expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '手入力')).toBe('手入力');
+    expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '')).toBeNull();
   });
 });
