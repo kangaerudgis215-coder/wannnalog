@@ -150,7 +150,7 @@ export default function App() {
   const selected = items.find((it) => it.id === selectedId);
   const doneCount = items.filter((it) => it.doneAt).length;
   const activeCount = items.length - doneCount;
-  const openItem = (it) => setSelectedId(it.id);
+  const openItem = (it) => { Haptics.selectionAsync(); setSelectedId(it.id); };
 
   // 詳細はフルスクリーンで重ねる
   if (selected) {
@@ -223,37 +223,36 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
     ? items.filter((it) => it.doneAt)
     : items.filter((it) => !it.doneAt && (filter === 'all' || it.category === filter));
   return (
-    <View style={{ flex: 1 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={styles.topbar}>
         <View>
           <Text style={styles.brand}>✨ WannaLog</Text>
           <Text style={styles.greet}>叶えた {doneCount}・のこり {activeCount}</Text>
         </View>
       </View>
-      <View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
-          {CATEGORIES.map((c) => (
-            <Chip key={c.key} label={`${c.emoji} ${c.label}`} active={filter === c.key} onPress={() => setFilter(c.key)} />
-          ))}
-          <Chip label={`🏆 叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
-        </ScrollView>
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
+        {CATEGORIES.map((c) => (
+          <Chip key={c.key} label={`${c.emoji} ${c.label}`} active={filter === c.key} onPress={() => setFilter(c.key)} />
+        ))}
+        <Chip label={`🏆 叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
+      </ScrollView>
       <Text style={styles.sectionTitle}>{filter === 'done' ? '叶えたコレクション 🏆' : '最近追加したもの'}</Text>
-      <FlatList
-        data={visible}
-        keyExtractor={(it) => it.id}
-        numColumns={2}
-        columnWrapperStyle={{ gap: 12, paddingHorizontal: 20 }}
-        contentContainerStyle={{ gap: 12, paddingBottom: 110, paddingTop: 4 }}
-        ListEmptyComponent={
-          <Text style={styles.empty}>
-            {filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から ✨' : '最初の“したい”を、＋から置いてみよう ✨'}
-          </Text>
-        }
-        renderItem={({ item }) => <Card item={item} onPress={() => onOpen(item)} />}
-      />
-    </View>
+      {visible.length === 0 ? (
+        <Text style={styles.empty}>
+          {filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から ✨' : '最初の“したい”を、＋から置いてみよう ✨'}
+        </Text>
+      ) : (
+        <Masonry
+          items={visible}
+          renderTile={(it, i) => (
+            <FadeInView key={it.id} index={i}>
+              <Card item={it} photoHeight={TILE_HEIGHTS[i % TILE_HEIGHTS.length]} onPress={() => onOpen(it)} />
+            </FadeInView>
+          )}
+        />
+      )}
+    </ScrollView>
   );
 }
 
@@ -261,29 +260,32 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
 function VisionTab({ items, onOpen }) {
   const active = items.filter((it) => !it.doneAt);
   return (
-    <View style={{ flex: 1 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={styles.topbar}>
         <View>
           <Text style={styles.brand}>ビジョンボード</Text>
           <Text style={styles.greet}>夢を、いつも目の前に ✨</Text>
         </View>
       </View>
-      <FlatList
-        data={active}
-        keyExtractor={(it) => it.id}
-        numColumns={2}
-        columnWrapperStyle={{ gap: 12, paddingHorizontal: 20 }}
-        contentContainerStyle={{ gap: 12, paddingTop: 8, paddingBottom: 110 }}
-        ListEmptyComponent={<Text style={styles.empty}>叶えたいことを＋から置くと、{'\n'}ここに“夢のボード”ができます ✨</Text>}
-        renderItem={({ item }) => <VisionTile item={item} onPress={() => onOpen(item)} />}
-      />
-    </View>
+      {active.length === 0 ? (
+        <Text style={styles.empty}>叶えたいことを＋から置くと、{'\n'}ここに“夢のボード”ができます ✨</Text>
+      ) : (
+        <Masonry
+          items={active}
+          renderTile={(it, i) => (
+            <FadeInView key={it.id} index={i}>
+              <VisionTile item={it} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length] + 14} onPress={() => onOpen(it)} />
+            </FadeInView>
+          )}
+        />
+      )}
+    </ScrollView>
   );
 }
-function VisionTile({ item, onPress }) {
+function VisionTile({ item, onPress, height = 180 }) {
   const cat = getCategory(item.category);
   return (
-    <Pressable style={styles.visionTile} onPress={onPress}>
+    <Pressable style={({ pressed }) => [styles.visionTile, { height }, pressed && styles.pressed]} onPress={onPress}>
       {item.imageUri ? (
         <Image source={{ uri: item.imageUri }} style={styles.visionImg} />
       ) : (
@@ -379,17 +381,46 @@ function Chip({ label, active, onPress }) {
   );
 }
 
-function Card({ item, onPress }) {
+// 登場アニメ（下からふわっと）
+function FadeInView({ index = 0, children }) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(a, { toValue: 1, duration: 340, delay: Math.min(index, 8) * 45, useNativeDriver: true }).start();
+  }, []);
+  return (
+    <Animated.View style={{ opacity: a, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }}>
+      {children}
+    </Animated.View>
+  );
+}
+
+// マソンリー（2列・高さバラバラ）
+const TILE_HEIGHTS = [150, 205, 168, 230, 158, 200];
+function Masonry({ items, renderTile }) {
+  const cols = [[], []];
+  items.forEach((it, i) => cols[i % 2].push({ it, i }));
+  return (
+    <View style={styles.masonryRow}>
+      {cols.map((col, c) => (
+        <View key={c} style={styles.masonryCol}>
+          {col.map(({ it, i }) => renderTile(it, i))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function Card({ item, onPress, photoHeight = 130 }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
   return (
-    <Pressable style={styles.card} onPress={onPress}>
-      <View style={styles.cardPhotoWrap}>
+    <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]} onPress={onPress}>
+      <View style={{ height: photoHeight }}>
         {item.imageUri ? (
-          <Image source={{ uri: item.imageUri }} style={styles.cardPhotoImg} />
+          <Image source={{ uri: item.imageUri }} style={{ width: '100%', height: photoHeight }} />
         ) : (
-          <View style={[styles.cardPhoto, { backgroundColor: cat.color }]}>
+          <View style={[styles.cardPhoto, { backgroundColor: cat.color, height: photoHeight }]}>
             <Text style={styles.cardEmoji}>{cat.emoji}</Text>
           </View>
         )}
@@ -639,10 +670,11 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.charcoal, paddingHorizontal: 20, paddingBottom: 10, paddingTop: 6 },
   empty: { textAlign: 'center', color: colors.warmgray, marginTop: 40, paddingHorizontal: 40, lineHeight: 22 },
 
-  card: { flex: 1, backgroundColor: colors.white, borderRadius: 18, overflow: 'hidden' },
-  cardPhotoWrap: { height: 120 },
-  cardPhoto: { height: 120, alignItems: 'center', justifyContent: 'center' },
-  cardPhotoImg: { width: '100%', height: 120 },
+  card: { backgroundColor: colors.white, borderRadius: 18, overflow: 'hidden' },
+  pressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
+  masonryRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 4 },
+  masonryCol: { flex: 1, gap: 12 },
+  cardPhoto: { alignItems: 'center', justifyContent: 'center' },
   cardEmoji: { fontSize: 42 },
   cardTag: { position: 'absolute', left: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999 },
   cardTagText: { color: '#fff', fontSize: 11, fontWeight: '700' },
@@ -652,7 +684,7 @@ const styles = StyleSheet.create({
   cardDone: { marginTop: 6, fontSize: 11.5, color: colors.honey, fontWeight: '800' },
 
   // ビジョンボード
-  visionTile: { flex: 1, height: 170, borderRadius: 18, overflow: 'hidden', justifyContent: 'flex-end' },
+  visionTile: { borderRadius: 18, overflow: 'hidden', justifyContent: 'flex-end' },
   visionImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   visionShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.28)' },
   visionLabel: { color: '#fff', fontWeight: '800', fontSize: 14, padding: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
