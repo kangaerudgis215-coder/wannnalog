@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { palettes, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
 import { REMIND_OPTIONS, reminderSeconds, remindLabel } from './notify';
+import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 
 const STORAGE_KEY = 'wannalog_items_v1';
 const THEME_KEY = 'wannalog_theme';
@@ -36,9 +37,9 @@ Notifications.setNotificationHandler({
 });
 
 const SEED = [
-  { id: 's1', title: '一蘭 渋谷店で豚骨ラーメン', category: 'eat', dueTag: 'thisWeek', remind: '3days', createdAt: Date.now(), doneAt: null },
-  { id: 's2', title: 'モルディブの透明な海', category: 'go', dueTag: 'none', remind: '3days', createdAt: Date.now(), doneAt: null },
-  { id: 's3', title: 'DUNE PART2をIMAXで観る', category: 'see', dueTag: 'none', remind: '3days', createdAt: Date.now(), doneAt: null },
+  { id: 's1', title: '一蘭 渋谷店で豚骨ラーメン', category: 'eat', dueTag: 'thisWeek', remind: 'tomorrow', heat: 3, createdAt: Date.now(), doneAt: null },
+  { id: 's2', title: 'モルディブの透明な海', category: 'go', dueTag: 'none', remind: '3days', heat: 2, createdAt: Date.now(), doneAt: null },
+  { id: 's3', title: 'DUNE PART2をIMAXで観る', category: 'see', dueTag: 'none', remind: 'none', heat: 1, createdAt: Date.now(), doneAt: null },
 ];
 
 const DUE_OPTIONS = [
@@ -126,9 +127,9 @@ export default function App() {
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
-  async function addItem(title, category, due, imageUri, remind) {
+  async function addItem(title, category, due, imageUri, remind, heat) {
     const r = remind || '3days';
-    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, remind: r, notifId: null, createdAt: Date.now(), doneAt: null };
+    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, remind: r, heat: heat || 2, notifId: null, createdAt: Date.now(), doneAt: null };
     const secs = reminderSeconds(r);
     if (secs) item.notifId = await scheduleReminder(item, secs);
     await persist([item, ...items]);
@@ -194,7 +195,7 @@ export default function App() {
         )}
 
         <SaveModal visible={saveOpen} onClose={() => setSaveOpen(false)}
-          onSave={(title, category, due, imageUri, remind) => { addItem(title, category, due, imageUri, remind); setSaveOpen(false); }} />
+          onSave={(title, category, due, imageUri, remind, heat) => { addItem(title, category, due, imageUri, remind, heat); setSaveOpen(false); }} />
 
         {celebrating && (
           <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim }]}>
@@ -248,12 +249,19 @@ function PhotoTile({ item, onPress, height = 180 }) {
       {done && <View style={s.tileDone}><Ionicons name="checkmark-circle" size={22} color={t.gold} /></View>}
       <View style={s.tileBottom}>
         <Text style={s.tileTitle} numberOfLines={2}>{item.title}</Text>
-        {!done && due && (
-          <View style={s.tileDueRow}>
-            <Ionicons name="time-outline" size={12} color="#fff" />
-            <Text style={s.tileDue}>{due}まで</Text>
+        <View style={s.tileMetaRow}>
+          {!done && due ? (
+            <View style={s.tileDueRow}>
+              <Ionicons name="time-outline" size={12} color="#fff" />
+              <Text style={s.tileDue}>{due}まで</Text>
+            </View>
+          ) : <View />}
+          <View style={s.tileFlames}>
+            {[1, 2, 3].map((n) => (
+              <Ionicons key={n} name="flame" size={11} color={n <= (item.heat || 2) ? t.gold : 'rgba(255,255,255,0.32)'} />
+            ))}
           </View>
-        )}
+        </View>
       </View>
     </Pressable>
   );
@@ -262,9 +270,10 @@ function PhotoTile({ item, onPress, height = 180 }) {
 /* ---------- ホーム ---------- */
 function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
-  const visible = filter === 'done'
-    ? items.filter((it) => it.doneAt)
-    : items.filter((it) => !it.doneAt && (filter === 'all' || it.category === filter));
+  let visible;
+  if (filter === 'done') visible = items.filter((it) => it.doneAt);
+  else if (filter === 'serious') visible = items.filter((it) => !it.doneAt && (it.heat || 2) === 3).slice().sort(byHeatThenNew);
+  else visible = items.filter((it) => !it.doneAt && (filter === 'all' || it.category === filter)).slice().sort(byHeatThenNew);
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
@@ -276,6 +285,7 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
+        <Chip icon="flame" label="本気" active={filter === 'serious'} onPress={() => setFilter('serious')} />
         {CATEGORIES.map((c) => (
           <Chip key={c.key} icon={c.icon} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
         ))}
@@ -375,6 +385,10 @@ function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return
 function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
+  const total = items.length;
+  const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+  const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
+  const casualDone = done.filter((it) => (it.heat || 2) === 1).length;
   // 直近7日の達成数バー
   const today = startOfDay(Date.now());
   const week = [...Array(7)].map((_, i) => today - (6 - i) * DAY_MS);
@@ -406,8 +420,11 @@ function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen 
 
       {/* 達成サマリー＋グラフ */}
       <View style={s.statCard}>
-        <Text style={s.statNum}>{doneCount}</Text>
-        <Text style={s.statLabel}>叶えた</Text>
+        <View style={s.statTopRow}>
+          <View style={s.statBlock}><Text style={s.statNum}>{doneCount}</Text><Text style={s.statLabel}>叶えた</Text></View>
+          <View style={s.statDivider} />
+          <View style={s.statBlock}><Text style={s.statNum}>{rate}<Text style={s.statPct}>%</Text></Text><Text style={s.statLabel}>達成率</Text></View>
+        </View>
         <View style={s.graphRow}>
           {counts.map((c, i) => (
             <View key={i} style={s.graphCol}>
@@ -419,6 +436,9 @@ function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen 
           ))}
         </View>
         <Text style={s.statSub}>この1週間で {counts.reduce((a, b) => a + b, 0)} 個 達成</Text>
+        {(seriousDone > 0 || casualDone > 0) && (
+          <Text style={s.statSub}>本気で叶えた {seriousDone}　／　気になっただけ {casualDone}</Text>
+        )}
       </View>
 
       {/* 達成コレクション（小さく敷き詰め） */}
@@ -486,7 +506,11 @@ function SaveModal({ visible, onClose, onSave }) {
   const [category, setCategory] = useState('eat');
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
+  const [heat, setHeat] = useState(2);
   const [remind, setRemind] = useState('3days');
+
+  // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
+  function chooseHeat(h) { setHeat(h); setRemind(defaultRemindForHeat(h)); }
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -494,10 +518,10 @@ function SaveModal({ visible, onClose, onSave }) {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) setImage(res.assets[0].uri);
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setRemind('3days'); }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setHeat(2); setRemind('3days'); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    onSave(title.trim(), category, due, image, remind); resetForm();
+    onSave(title.trim(), category, due, image, remind, heat); resetForm();
   }
 
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
@@ -525,6 +549,16 @@ function SaveModal({ visible, onClose, onSave }) {
                 <Pressable key={c.key} onPress={() => setCategory(c.key)} style={optChip(category === c.key, c.color)}>
                   <Ionicons name={c.icon} size={13} color={category === c.key ? '#fff' : t.text} />
                   <Text style={[s.catChipText, category === c.key && { color: '#fff' }]}>{c.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={s.label}>熱量（本気度）</Text>
+            <View style={s.catWrap}>
+              {HEAT_OPTIONS.map((h) => (
+                <Pressable key={h.key} onPress={() => chooseHeat(h.key)} style={optChip(heat === h.key, t.accent)}>
+                  <Ionicons name="flame" size={13} color={heat === h.key ? '#fff' : (h.key === 3 ? t.accent : t.sub)} />
+                  <Text style={[s.catChipText, heat === h.key && { color: '#fff' }]}>{h.label}</Text>
                 </Pressable>
               ))}
             </View>
@@ -612,6 +646,16 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
           ))}
         </View>
 
+        <Text style={s.sectionLabel}>熱量（本気度）</Text>
+        <View style={s.catWrap}>
+          {HEAT_OPTIONS.map((h) => (
+            <Pressable key={h.key} onPress={() => onUpdate({ heat: h.key })} style={optChip((item.heat || 2) === h.key, t.accent)}>
+              <Ionicons name="flame" size={13} color={(item.heat || 2) === h.key ? '#fff' : (h.key === 3 ? t.accent : t.sub)} />
+              <Text style={[s.catChipText, (item.heat || 2) === h.key && { color: '#fff' }]}>{h.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
         <Text style={s.sectionLabel}>いつまでに</Text>
         <View style={s.catWrap}>
           {DUE_OPTIONS.map((d) => (
@@ -690,8 +734,10 @@ function makeStyles(t) {
     tileDone: { position: 'absolute', right: 10, top: 10 },
     tileBottom: { padding: 12 },
     tileTitle: { color: '#fff', fontSize: 14.5, fontWeight: '800', lineHeight: 19, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
-    tileDueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 },
+    tileMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
+    tileDueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     tileDue: { color: '#fff', fontSize: 11.5, fontWeight: '700' },
+    tileFlames: { flexDirection: 'row', gap: 1 },
 
     // 通知
     notifyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 16, padding: 14 },
@@ -709,8 +755,12 @@ function makeStyles(t) {
     settingText: { fontSize: 15, fontWeight: '700', color: t.text },
 
     statCard: { margin: 20, marginTop: 16, backgroundColor: t.surface, borderRadius: 22, paddingVertical: 24, paddingHorizontal: 20, alignItems: 'center' },
-    statNum: { fontSize: 54, fontWeight: '900', color: t.accent },
-    statLabel: { fontSize: 14, fontWeight: '800', color: t.text, marginTop: -2 },
+    statTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+    statBlock: { alignItems: 'center', paddingHorizontal: 26 },
+    statDivider: { width: 1, height: 46, backgroundColor: t.line },
+    statNum: { fontSize: 46, fontWeight: '900', color: t.accent },
+    statPct: { fontSize: 24, fontWeight: '900', color: t.accent },
+    statLabel: { fontSize: 13, fontWeight: '800', color: t.text, marginTop: 0 },
     graphRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginTop: 20, height: 76 },
     graphCol: { alignItems: 'center', gap: 6 },
     graphBarTrack: { height: 64, justifyContent: 'flex-end' },
