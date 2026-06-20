@@ -20,6 +20,14 @@ import { REMIND_OPTIONS, reminderSeconds, remindLabel } from './notify';
 const STORAGE_KEY = 'wannalog_items_v1';
 const THEME_KEY = 'wannalog_theme';
 const PROFILE_KEY = 'wannalog_profile';
+const VISION_KEY = 'wannalog_vision_v1';
+const VISION_TITLE_KEY = 'wannalog_vision_title';
+
+// ビジョンボードは「したい」とは別データ。テンプレの枠に写真を嵌める。
+const VISION_SEED = [
+  { id: 'v1', imageUri: null }, { id: 'v2', imageUri: null }, { id: 'v3', imageUri: null },
+  { id: 'v4', imageUri: null }, { id: 'v5', imageUri: null }, { id: 'v6', imageUri: null },
+];
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -63,6 +71,8 @@ export default function App() {
   const [mode, setMode] = useState('dark');
   const [profileName, setProfileName] = useState('あなた');
   const [items, setItems] = useState([]);
+  const [visionSlots, setVisionSlots] = useState(VISION_SEED);
+  const [visionTitle, setVisionTitle] = useState('2026 VISION');
   const [filter, setFilter] = useState('all');
   const [tab, setTab] = useState('home');
   const [selectedId, setSelectedId] = useState(null);
@@ -78,6 +88,9 @@ export default function App() {
       if (raw) setItems(JSON.parse(raw)); else { setItems(SEED); AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SEED)); }
       const m = await AsyncStorage.getItem(THEME_KEY); if (m) setMode(m);
       const p = await AsyncStorage.getItem(PROFILE_KEY); if (p) setProfileName(p);
+      const vs = await AsyncStorage.getItem(VISION_KEY);
+      if (vs) setVisionSlots(JSON.parse(vs)); else AsyncStorage.setItem(VISION_KEY, JSON.stringify(VISION_SEED));
+      const vt = await AsyncStorage.getItem(VISION_TITLE_KEY); if (vt) setVisionTitle(vt);
     })();
   }, []);
 
@@ -97,6 +110,19 @@ export default function App() {
     Haptics.selectionAsync();
   }
   async function saveName(name) { setProfileName(name); await AsyncStorage.setItem(PROFILE_KEY, name); }
+
+  // ビジョンボード操作（「したい」とは別データ）
+  async function persistVision(next) { setVisionSlots(next); await AsyncStorage.setItem(VISION_KEY, JSON.stringify(next)); }
+  async function fillVisionSlot(id) {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
+    if (!res.canceled) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, imageUri: res.assets[0].uri } : sl))); Haptics.selectionAsync(); }
+  }
+  async function clearVisionSlot(id) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, imageUri: null } : sl))); }
+  async function addVisionSlot() { await persistVision([...visionSlots, { id: String(Date.now()), imageUri: null }]); }
+  async function removeVisionSlot(id) { await persistVision(visionSlots.filter((sl) => sl.id !== id)); }
+  async function saveVisionTitle(v) { setVisionTitle(v); await AsyncStorage.setItem(VISION_TITLE_KEY, v); }
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
@@ -160,7 +186,7 @@ export default function App() {
         ) : (
           <>
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
-            {tab === 'vision' && <VisionTab items={items} onOpen={openItem} />}
+            {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
@@ -268,26 +294,47 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
   );
 }
 
-/* ---------- ビジョン（暫定：次の増分で“別データ＋テンプレ”に刷新） ---------- */
-function VisionTab({ items, onOpen }) {
-  const s = useStyles();
-  const active = items.filter((it) => !it.doneAt);
+/* ---------- ビジョンボード（別データ・枠に写真を嵌めるムードボード） ---------- */
+function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove }) {
+  const t = useTheme(); const s = useStyles();
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
-        <Text style={s.screenTitle}>ビジョンボード</Text>
-        <Text style={s.greet}>夢を、いつも目の前に</Text>
+        <Text style={s.greet}>なりたい自分・叶えたい夢</Text>
+        <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="2026 VISION" placeholderTextColor={t.sub} maxLength={24} />
       </View>
-      {active.length === 0 ? (
-        <Text style={s.empty}>叶えたいことを＋から置くと、{'\n'}ここに“夢のボード”ができます。</Text>
-      ) : (
-        <Masonry items={active} renderTile={(it, i) => (
-          <FadeInView key={it.id} index={i}>
-            <PhotoTile item={it} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length] + 14} onPress={() => onOpen(it)} />
-          </FadeInView>
-        )} />
-      )}
+      <Masonry items={slots} renderTile={(slot, i) => (
+        <FadeInView key={slot.id} index={i}>
+          <VisionSlot slot={slot} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length]} onFill={() => onFill(slot.id)} onClear={() => onClear(slot.id)} onRemove={() => onRemove(slot.id)} />
+        </FadeInView>
+      )} />
+      <Pressable style={s.visionAdd} onPress={onAdd}>
+        <Ionicons name="add" size={18} color={t.accent} />
+        <Text style={s.visionAddText}>枠を追加</Text>
+      </Pressable>
     </ScrollView>
+  );
+}
+function VisionSlot({ slot, height, onFill, onClear, onRemove }) {
+  const t = useTheme(); const s = useStyles();
+  if (slot.imageUri) {
+    const menu = () => Alert.alert('この写真', undefined, [
+      { text: '写真を変更', onPress: onFill },
+      { text: '写真を外す', onPress: onClear },
+      { text: '枠を削除', style: 'destructive', onPress: onRemove },
+      { text: 'キャンセル', style: 'cancel' },
+    ]);
+    return (
+      <Pressable style={({ pressed }) => [s.tile, { height }, pressed && s.pressed]} onPress={menu}>
+        <Image source={{ uri: slot.imageUri }} style={s.tileImg} />
+      </Pressable>
+    );
+  }
+  return (
+    <Pressable style={[s.visionEmpty, { height }]} onPress={onFill}>
+      <Ionicons name="add-circle-outline" size={28} color={t.sub} />
+      <Text style={s.visionEmptyText}>写真を入れる</Text>
+    </Pressable>
   );
 }
 
@@ -623,6 +670,12 @@ function makeStyles(t) {
 
     sectionTitle: { fontSize: 16, fontWeight: '800', color: t.text, paddingHorizontal: 20, paddingBottom: 10, paddingTop: 8 },
     empty: { textAlign: 'center', color: t.sub, marginTop: 44, paddingHorizontal: 40, lineHeight: 22 },
+
+    visionTitle: { fontSize: 30, fontWeight: '900', color: t.text, letterSpacing: 2, marginTop: 4, padding: 0 },
+    visionEmpty: { borderRadius: 20, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed', backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center', gap: 6 },
+    visionEmptyText: { color: t.sub, fontSize: 12, fontWeight: '600' },
+    visionAdd: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 6, marginTop: 18, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, backgroundColor: t.surface },
+    visionAddText: { color: t.accent, fontSize: 14, fontWeight: '800' },
 
     masonryRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 2 },
     masonryCol: { flex: 1, gap: 12 },
