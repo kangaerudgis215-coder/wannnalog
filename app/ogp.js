@@ -16,31 +16,39 @@ function decodeEntities(s) {
     .replace(/&#x27;/g, "'");
 }
 
-// HTML文字列から og:title / og:image / description を抜き出す（純粋関数）
+// HTML文字列から og:title / 画像 / description を抜き出す（純粋関数）
+// 画像は og:image → twitter:image → <link rel="image_src"> の順でフォールバック。
 export function parseOgp(html) {
   if (!html) return { title: null, image: null, description: null };
   const pick = (re) => {
     const m = html.match(re);
     return m ? decodeEntities(m[1].trim()) : null;
   };
-  const title =
-    pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
-    pick(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i) ||
-    pick(/<title[^>]*>([^<]+)<\/title>/i);
+  const metaContent = (prop) =>
+    pick(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i')) ||
+    pick(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'));
+
+  const title = metaContent('og:title') || pick(/<title[^>]*>([^<]+)<\/title>/i);
   const image =
-    pick(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-    pick(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-  const description =
-    pick(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
-    pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+    metaContent('og:image') ||
+    metaContent('twitter:image') ||
+    metaContent('twitter:image:src') ||
+    pick(/<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["']/i);
+  const description = metaContent('og:description') || metaContent('description');
   return { title, image, description };
 }
 
-// プロトコル相対URL（//example.com/x.jpg）を https に正規化
-export function normalizeImage(image) {
+// 画像URLを絶対URLに解決（プロトコル相対・ルート相対・パス相対に対応）。純粋関数。
+export function resolveImage(image, baseUrl) {
   if (!image) return null;
   if (image.startsWith('//')) return 'https:' + image;
-  return image;
+  if (/^https?:\/\//i.test(image)) return image;
+  const m = (baseUrl || '').match(/^(https?:\/\/[^/]+)(\/[^?#]*)?/i);
+  if (!m) return image;
+  const origin = m[1];
+  if (image.startsWith('/')) return origin + image;
+  const basePath = (m[2] || '/').replace(/[^/]*$/, '');
+  return origin + basePath + image;
 }
 
 // 実際にリンク先を取得して OGP を返す（失敗しても落ちない）
@@ -49,7 +57,7 @@ export async function fetchOgp(url) {
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     const html = await res.text();
     const ogp = parseOgp(html);
-    return { ...ogp, image: normalizeImage(ogp.image) };
+    return { ...ogp, image: resolveImage(ogp.image, url) };
   } catch (e) {
     return { title: null, image: null, description: null };
   }

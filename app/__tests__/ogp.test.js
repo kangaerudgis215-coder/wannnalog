@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, normalizeImage } from '../ogp';
+import { isUrl, parseOgp, resolveImage } from '../ogp';
 
 describe('isUrl', () => {
   test('http/https をURLと判定', () => {
@@ -32,6 +32,11 @@ describe('parseOgp', () => {
     expect(parseOgp(html).title).toBe('逆順タイトル');
   });
 
+  test('og:image が無ければ twitter:image にフォールバック', () => {
+    const html = `<meta name="twitter:image" content="https://img/tw.jpg">`;
+    expect(parseOgp(html).image).toBe('https://img/tw.jpg');
+  });
+
   test('og:title が無ければ <title> にフォールバック', () => {
     const html = `<title>ページの題名</title>`;
     expect(parseOgp(html).title).toBe('ページの題名');
@@ -47,12 +52,18 @@ describe('parseOgp', () => {
   });
 });
 
-describe('normalizeImage', () => {
+describe('resolveImage', () => {
   test('プロトコル相対を https 化', () => {
-    expect(normalizeImage('//cdn/x.jpg')).toBe('https://cdn/x.jpg');
+    expect(resolveImage('//cdn/x.jpg', 'https://a.com/p')).toBe('https://cdn/x.jpg');
   });
-  test('通常URLはそのまま / null は null', () => {
-    expect(normalizeImage('https://a/b.jpg')).toBe('https://a/b.jpg');
-    expect(normalizeImage(null)).toBeNull();
+  test('ルート相対をオリジンで解決', () => {
+    expect(resolveImage('/img/x.jpg', 'https://a.com/page/1')).toBe('https://a.com/img/x.jpg');
+  });
+  test('パス相対をベースパスで解決', () => {
+    expect(resolveImage('x.jpg', 'https://a.com/page/1')).toBe('https://a.com/page/x.jpg');
+  });
+  test('絶対URLはそのまま / null は null', () => {
+    expect(resolveImage('https://a/b.jpg', 'https://a.com')).toBe('https://a/b.jpg');
+    expect(resolveImage(null, 'https://a.com')).toBeNull();
   });
 });

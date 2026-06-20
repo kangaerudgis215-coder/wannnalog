@@ -4,8 +4,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  Animated, FlatList, Image, Linking, Modal, Pressable, SafeAreaView,
-  ScrollView, StyleSheet, Text, TextInput, View, Alert,
+  Animated, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform,
+  Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,9 +16,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
 import { isUrl, fetchOgp } from './ogp';
+import { REMIND_OPTIONS, reminderSeconds, remindLabel } from './notify';
 
 const STORAGE_KEY = 'wannalog_items_v1';
-const THREE_DAYS_SECONDS = 3 * 24 * 60 * 60;
 
 // 通知を前面でも表示する設定
 Notifications.setNotificationHandler({
@@ -97,17 +97,21 @@ export default function App() {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  async function addItem(title, category, due, imageUri, sourceUrl) {
+  async function addItem(title, category, due, imageUri, sourceUrl, remind) {
+    const r = remind || '3days';
     const item = {
       id: String(Date.now()), title, category, dueTag: due || 'none',
       imageUri: imageUri || null,
       sourceUrl: sourceUrl || null,
+      remind: r,
+      notifId: null,
       createdAt: Date.now(), doneAt: null,
     };
+    const secs = reminderSeconds(r);
+    if (secs) item.notifId = await scheduleReminder(item, secs);
     await persist([item, ...items]);
-    await scheduleReminder(item, THREE_DAYS_SECONDS); // 3日後に思い出させる
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert('保存しました ✨', '3日後に、そっと思い出させます。');
+    Alert.alert('保存しました ✨', r === 'none' ? 'ボードに追加しました。' : `${remindLabel(r)}、そっと思い出させます。`);
   }
 
   function runCelebration() {
@@ -131,8 +135,21 @@ export default function App() {
     await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }
 
+  // 「思い出す時期」を変更し、通知を取り直す
+  async function setItemRemind(id, choice) {
+    const it = items.find((x) => x.id === id);
+    if (!it) return;
+    if (it.notifId) { try { await Notifications.cancelScheduledNotificationAsync(it.notifId); } catch (e) {} }
+    let notifId = null;
+    const secs = reminderSeconds(choice);
+    if (secs) notifId = await scheduleReminder(it, secs);
+    await persist(items.map((x) => (x.id === id ? { ...x, remind: choice, notifId } : x)));
+  }
+
   async function deleteItem(id) {
-    await persist(items.filter((it) => it.id !== id));
+    const it = items.find((x) => x.id === id);
+    if (it?.notifId) { try { await Notifications.cancelScheduledNotificationAsync(it.notifId); } catch (e) {} }
+    await persist(items.filter((x) => x.id !== id));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }
 
@@ -153,6 +170,7 @@ export default function App() {
         onBack={() => setScreen('home')}
         onDone={() => { markDone(selected.id); setScreen('home'); }}
         onUpdate={(patch) => updateItem(selected.id, patch)}
+        onRemind={(choice) => setItemRemind(selected.id, choice)}
         onDelete={() => { deleteItem(selected.id); setScreen('home'); }}
       />
     );
@@ -209,7 +227,7 @@ export default function App() {
       <SaveModal
         visible={saveOpen}
         onClose={() => setSaveOpen(false)}
-        onSave={(title, category, due, imageUri, sourceUrl) => { addItem(title, category, due, imageUri, sourceUrl); setSaveOpen(false); }}
+        onSave={(title, category, due, imageUri, sourceUrl, remind) => { addItem(title, category, due, imageUri, sourceUrl, remind); setSaveOpen(false); }}
       />
 
       {/* 達成セレモニー */}
@@ -253,12 +271,9 @@ function Card({ item, onPress }) {
         <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
         {done ? (
           <Text style={styles.cardDone}>叶えた ✓</Text>
-        ) : (
-          <Text style={styles.cardSub}>
-            {cat.emoji} {cat.label}{due ? ` ・ ` : ''}
-            {due ? <Text style={styles.cardDue}>{due}</Text> : null}
-          </Text>
-        )}
+        ) : due ? (
+          <Text style={styles.cardDue}>⏰ {due}まで</Text>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -277,11 +292,12 @@ function SaveModal({ visible, onClose, onSave }) {
   const [image, setImage] = useState(null);
   const [sourceUrl, setSourceUrl] = useState(null);
   const [loadingOgp, setLoadingOgp] = useState(false);
+  const [remind, setRemind] = useState('3days');
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) setImage(res.assets[0].uri);
   }
 
@@ -296,81 +312,111 @@ function SaveModal({ visible, onClose, onSave }) {
     if (!ogp.title && !ogp.image) Alert.alert('リンク先の情報が取得できませんでした', 'タイトルは手で入力してください。');
   }
 
+  function resetForm() {
+    setTitle(''); setCategory('eat'); setDue('none');
+    setImage(null); setSourceUrl(null); setRemind('3days');
+  }
+
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    onSave(title.trim(), category, due, image, sourceUrl);
-    setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setSourceUrl(null);
+    onSave(title.trim(), category, due, image, sourceUrl, remind);
+    resetForm();
   }
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
+      <KeyboardAvoidingView
+        style={styles.modalBackdrop}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.sheet}>
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>何を残す？</Text>
             <Pressable onPress={onClose}><Text style={styles.sheetClose}>✕</Text></Pressable>
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="例：鎌倉の海が見えるカフェ"
-            placeholderTextColor={colors.warmgray}
-            value={title}
-            onChangeText={setTitle}
-            autoFocus
-          />
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <TextInput
+              style={styles.input}
+              placeholder="例：鎌倉の海が見えるカフェ（URLでもOK）"
+              placeholderTextColor={colors.warmgray}
+              value={title}
+              onChangeText={setTitle}
+              autoFocus
+            />
 
-          {isUrl(title) && (
-            <Pressable style={styles.urlBtn} onPress={loadFromUrl} disabled={loadingOgp}>
-              <Text style={styles.urlBtnText}>{loadingOgp ? '読み込み中…' : '🔗 リンク先を読み込む'}</Text>
+            {isUrl(title) && (
+              <Pressable style={styles.urlBtn} onPress={loadFromUrl} disabled={loadingOgp}>
+                <Text style={styles.urlBtnText}>{loadingOgp ? '読み込み中…' : '🔗 リンク先を読み込む'}</Text>
+              </Pressable>
+            )}
+
+            <Pressable style={styles.photoPick} onPress={pickImage}>
+              {image
+                ? <Image source={{ uri: image }} style={styles.photoPreview} />
+                : <Text style={styles.photoPickText}>🖼️ 写真を選ぶ（任意・切り取りできます）</Text>}
             </Pressable>
-          )}
-
-          <Pressable style={styles.photoPick} onPress={pickImage}>
-            {image
-              ? <Image source={{ uri: image }} style={styles.photoPreview} />
-              : <Text style={styles.photoPickText}>🖼️ 写真を選ぶ（任意）</Text>}
-          </Pressable>
-
-          <Text style={styles.label}>カテゴリ</Text>
-          <View style={styles.catWrap}>
-            {CATEGORIES.map((c) => (
-              <Pressable
-                key={c.key}
-                onPress={() => setCategory(c.key)}
-                style={[styles.catChip, category === c.key && { backgroundColor: c.color, borderColor: c.color }]}
-              >
-                <Text style={[styles.catChipText, category === c.key && { color: '#fff' }]}>
-                  {c.emoji} {c.label}
-                </Text>
+            {image && (
+              <Pressable onPress={() => setImage(null)}>
+                <Text style={styles.photoRemove}>✕ 写真を外す</Text>
               </Pressable>
-            ))}
-          </View>
+            )}
 
-          <Text style={styles.label}>いつまでに</Text>
-          <View style={styles.catWrap}>
-            {DUE_OPTIONS.map((d) => (
-              <Pressable
-                key={d.key}
-                onPress={() => setDue(d.key)}
-                style={[styles.catChip, due === d.key && { backgroundColor: colors.coral, borderColor: colors.coral }]}
-              >
-                <Text style={[styles.catChipText, due === d.key && { color: '#fff' }]}>{d.label}</Text>
-              </Pressable>
-            ))}
-          </View>
+            <Text style={styles.label}>カテゴリ</Text>
+            <View style={styles.catWrap}>
+              {CATEGORIES.map((c) => (
+                <Pressable
+                  key={c.key}
+                  onPress={() => setCategory(c.key)}
+                  style={[styles.catChip, category === c.key && { backgroundColor: c.color, borderColor: c.color }]}
+                >
+                  <Text style={[styles.catChipText, category === c.key && { color: '#fff' }]}>
+                    {c.emoji} {c.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
 
-          <Pressable style={styles.saveBtn} onPress={handleSave}>
-            <Text style={styles.saveBtnText}>保存する</Text>
-          </Pressable>
-          <Text style={styles.saveNote}>保存すると、3日後にそっと思い出させます。</Text>
+            <Text style={styles.label}>いつまでに</Text>
+            <View style={styles.catWrap}>
+              {DUE_OPTIONS.map((d) => (
+                <Pressable
+                  key={d.key}
+                  onPress={() => setDue(d.key)}
+                  style={[styles.catChip, due === d.key && { backgroundColor: colors.coral, borderColor: colors.coral }]}
+                >
+                  <Text style={[styles.catChipText, due === d.key && { color: '#fff' }]}>{d.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.label}>思い出す（通知）</Text>
+            <View style={styles.catWrap}>
+              {REMIND_OPTIONS.map((r) => (
+                <Pressable
+                  key={r.key}
+                  onPress={() => setRemind(r.key)}
+                  style={[styles.catChip, remind === r.key && { backgroundColor: colors.coral, borderColor: colors.coral }]}
+                >
+                  <Text style={[styles.catChipText, remind === r.key && { color: '#fff' }]}>{r.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Pressable style={styles.saveBtn} onPress={handleSave}>
+              <Text style={styles.saveBtnText}>保存する</Text>
+            </Pressable>
+            <Text style={styles.saveNote}>
+              {remind === 'none' ? 'ボードに追加します（通知なし）。' : `保存すると、${remindLabel(remind)}そっと思い出させます。`}
+            </Text>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-function DetailScreen({ item, onBack, onDone, onUpdate, onDelete }) {
+function DetailScreen({ item, onBack, onDone, onUpdate, onRemind, onDelete }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
@@ -405,7 +451,11 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onDelete }) {
         <Pressable onPress={onBack}><Text style={styles.back}>‹ 戻る</Text></Pressable>
         <Pressable onPress={confirmDelete}><Text style={styles.deleteLink}>🗑 削除</Text></Pressable>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView
+        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
         {item.imageUri ? (
           <Image source={{ uri: item.imageUri }} style={styles.detailPhotoImg} />
         ) : (
@@ -453,6 +503,20 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onDelete }) {
           ))}
         </View>
 
+        {/* 編集：思い出す（通知） */}
+        <Text style={styles.actionHeader}>思い出す（通知）</Text>
+        <View style={styles.catWrap}>
+          {REMIND_OPTIONS.map((r) => (
+            <Pressable
+              key={r.key}
+              onPress={() => onRemind(r.key)}
+              style={[styles.catChip, (item.remind || 'none') === r.key && { backgroundColor: colors.coral, borderColor: colors.coral }]}
+            >
+              <Text style={[styles.catChipText, (item.remind || 'none') === r.key && { color: '#fff' }]}>{r.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
         {/* 編集：メモ */}
         <Text style={styles.actionHeader}>メモ</Text>
         <TextInput
@@ -472,17 +536,16 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onDelete }) {
             <Text style={styles.actionArrow}>›</Text>
           </Pressable>
         ))}
-        <Pressable style={styles.actionBtn} onPress={testNotify}>
-          <Text style={styles.actionText}>🔔 今すぐテスト通知（10秒後）</Text>
-          <Text style={styles.actionArrow}>›</Text>
-        </Pressable>
-
         <Pressable
           style={[styles.doneBtn, done && { backgroundColor: colors.honey }]}
           onPress={onDone}
           disabled={done}
         >
           <Text style={styles.doneText}>{done ? '叶えた ✓' : '✅ 達成した！'}</Text>
+        </Pressable>
+
+        <Pressable onPress={testNotify}>
+          <Text style={styles.testNotifyLink}>🔔 通知の動作をテスト（10秒後に届きます）</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -514,15 +577,15 @@ const styles = StyleSheet.create({
   cardTagText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   cardMeta: { padding: 11 },
   cardTitle: { fontSize: 13.5, fontWeight: '700', color: colors.charcoal, lineHeight: 19 },
-  cardSub: { marginTop: 6, fontSize: 11.5, color: colors.warmgray },
-  cardDue: { color: colors.coral, fontWeight: '700' },
+  cardDue: { marginTop: 6, fontSize: 11.5, color: colors.coral, fontWeight: '700' },
   cardDone: { marginTop: 6, fontSize: 11.5, color: colors.honey, fontWeight: '800' },
 
   fab: { position: 'absolute', right: 22, bottom: 34, width: 62, height: 62, borderRadius: 31, backgroundColor: colors.coral, alignItems: 'center', justifyContent: 'center', shadowColor: colors.coral, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
   fabText: { color: '#fff', fontSize: 32, fontWeight: '300', marginTop: -2 },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.cream, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 40 },
+  sheet: { backgroundColor: colors.cream, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 30, maxHeight: '88%' },
+  photoRemove: { textAlign: 'center', color: '#E53935', fontSize: 12, fontWeight: '700', marginTop: 8 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sheetTitle: { fontSize: 18, fontWeight: '800', color: colors.charcoal },
   sheetClose: { fontSize: 18, color: colors.warmgray },
@@ -556,6 +619,7 @@ const styles = StyleSheet.create({
   actionArrow: { fontSize: 20, color: colors.warmgray },
   doneBtn: { marginTop: 14, backgroundColor: colors.coral, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   doneText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  testNotifyLink: { textAlign: 'center', color: colors.warmgray, fontSize: 12, marginTop: 16, textDecorationLine: 'underline' },
 
   celebrate: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(250,247,242,0.6)' },
   celebrateEmoji: { fontSize: 80 },
