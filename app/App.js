@@ -17,6 +17,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody } from './theme';
 import { actionLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
+import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
 import { parseGps, coordsMapsUrl } from './geo';
 import { parseSnsLink, snsMeta } from './sns';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -426,22 +427,18 @@ function NotifyTab({ items, onOpen }) {
 }
 
 /* ---------- マイページ ---------- */
-const DAY_MS = 86400000;
-function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
 function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen, onOpenGift }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
   const total = items.length;
-  const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+  const rate = achievementRate(doneCount, total);
   const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
   const casualDone = done.filter((it) => (it.heat || 2) === 1).length;
   // 直近7日の達成数バー
-  const today = startOfDay(Date.now());
-  const week = [...Array(7)].map((_, i) => today - (6 - i) * DAY_MS);
-  const counts = week.map((d) => done.filter((it) => startOfDay(it.doneAt) === d).length);
+  const { week, counts } = weeklyDoneCounts(done);
   const max = Math.max(1, ...counts);
-  const W = ['日', '月', '火', '水', '木', '金', '土'];
+  const W = WEEKDAY_LABELS;
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
