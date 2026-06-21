@@ -4,7 +4,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated, Image, KeyboardAvoidingView, Linking, Modal, Platform,
-  Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View, Alert,
+  Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -103,6 +103,7 @@ export default function App() {
   const [tab, setTab] = useState('home');
   const [selectedId, setSelectedId] = useState(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [giftOpen, setGiftOpen] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const celebAnim = useRef(new Animated.Value(0)).current;
 
@@ -215,13 +216,15 @@ export default function App() {
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onLabel={setVisionLabel} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
-            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} />}
+            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
           </>
         )}
 
         <SaveModal visible={saveOpen} onClose={() => setSaveOpen(false)}
           onSave={(title, category, due, imageUri, heat, reminder, link) => { addItem(title, category, due, imageUri, heat, reminder, link); setSaveOpen(false); }} />
+
+        <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
 
         {celebrating && (
           <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim }]}>
@@ -425,9 +428,10 @@ function NotifyTab({ items, onOpen }) {
 /* ---------- マイページ ---------- */
 const DAY_MS = 86400000;
 function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
-function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen }) {
+function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen, onOpenGift }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
+  const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
   const total = items.length;
   const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
@@ -460,6 +464,16 @@ function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen 
         </View>
         <Switch value={mode === 'dark'} onValueChange={onToggleMode} trackColor={{ true: t.accent }} />
       </View>
+
+      {/* ギフトページ（ほしいものリストの共有） */}
+      <Pressable style={s.giftCard} onPress={onOpenGift}>
+        <View style={s.giftIcon}><Ionicons name="gift" size={22} color="#fff" /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.giftCardTitle}>ギフトページ</Text>
+          <Text style={s.giftCardSub}>{publicCount > 0 ? `公開中 ${publicCount}件・友だちに共有できます` : '公開した「ほしい」を友だちに共有'}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={t.sub} />
+      </Pressable>
 
       {/* 達成サマリー＋グラフ */}
       <View style={s.statCard}>
@@ -719,6 +733,56 @@ function SaveModal({ visible, onClose, onSave }) {
   );
 }
 
+/* ---------- ギフトページ（プレビュー＆共有） ---------- */
+// 「ギフトに公開」した“ほしい”を、友だちに見せる体で表示。共有は端末標準の共有シート。
+// ここはアプリ内なので商品リンクは“ただの検索リンク”（アフィリ化は将来のWebページ側でのみ）。
+function GiftModal({ visible, onClose, items, name, onOpen }) {
+  const t = useTheme(); const s = useStyles();
+  const list = items.filter((it) => it.isPublic && !it.doneAt);
+  async function share() {
+    if (list.length === 0) { Alert.alert('まだ公開中の「ほしい」がありません', '詳細画面で「ギフトページに公開」をオンにしてください。'); return; }
+    const body = list.map((it) => `・${it.title}`).join('\n');
+    try { await Share.share({ message: `${name}のほしいものリスト\n\n${body}\n\n— WannaLog で作成` }); } catch (e) {}
+  }
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={s.safe}>
+        <View style={s.detailBar}>
+          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+          <Pressable onPress={share} style={s.giftShareBtn}><Ionicons name="share-social-outline" size={16} color="#fff" /><Text style={s.giftShareText}>共有する</Text></Pressable>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <Text style={s.giftHero}>{name}さんへの{'\n'}贈りもの候補</Text>
+          <Text style={s.giftLead}>友だちがこのページから贈れます。{'\n'}（これは将来のWeb公開ページの“見本”です）</Text>
+          {list.length === 0 ? (
+            <Text style={s.empty}>まだ公開中の「ほしい」はありません。{'\n'}詳細画面で「ギフトページに公開」をオンにすると、ここに並びます。</Text>
+          ) : list.map((item) => {
+            const cat = getCategory(item.category);
+            const link = actionLinks(item.category, item.title)[0];
+            return (
+              <View key={item.id} style={s.giftRow}>
+                <Pressable onPress={() => onOpen(item)}>
+                  {item.imageUri
+                    ? <Image source={{ uri: item.imageUri }} style={s.giftThumb} />
+                    : <View style={[s.giftThumb, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name={cat.icon} size={24} color="#fff" /></View>}
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.giftRowTitle} numberOfLines={2}>{item.title}</Text>
+                  <Pressable style={s.giftBuy} onPress={() => link && Linking.openURL(link.url).catch(() => {})}>
+                    <Ionicons name="bag-handle-outline" size={14} color={t.accent} />
+                    <Text style={s.giftBuyText}>{link ? link.label : '見てみる'}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+          {list.length > 0 && <Text style={s.giftDisclaimer}>※ 公開ページのリンクには広告（アフィリエイト）を含む予定です。</Text>}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 /* ---------- 詳細 ---------- */
 function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) {
   const t = useTheme(); const s = useStyles();
@@ -829,6 +893,15 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
 
             <Text style={s.sectionLabel}>メモ</Text>
             <TextInput style={s.memoInput} value={memo} onChangeText={(v) => { setMemo(v); onUpdate({ memo: v }); }} placeholder="ひとことメモ（任意）" placeholderTextColor={t.sub} multiline />
+
+            <View style={s.giftToggleRow}>
+              <View style={s.settingLeft}>
+                <Ionicons name="gift-outline" size={18} color={t.accent} />
+                <Text style={s.settingText}>ギフトページに公開</Text>
+              </View>
+              <Switch value={!!item.isPublic} onValueChange={(v) => onUpdate({ isPublic: v })} trackColor={{ true: t.accent }} />
+            </View>
+            <Text style={s.giftToggleHint}>オンにすると「マイページ → ギフトページ」に並び、友だちに共有できます（誕生日・記念日に便利）。</Text>
           </>
         ) : (
           <>
@@ -837,6 +910,7 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
               <View style={s.pill}><Ionicons name="flame" size={13} color={t.accent} /><Text style={s.pillText}>{heatLabel(heat)}</Text></View>
               {due ? <View style={s.pill}><Ionicons name="time-outline" size={13} color={t.sub} /><Text style={s.pillText}>{due}まで</Text></View> : null}
               <View style={s.pill}><Ionicons name="notifications-outline" size={13} color={t.sub} /><Text style={s.pillText}>{remindSummary(item)}</Text></View>
+              {item.isPublic ? <View style={[s.pill, { backgroundColor: t.accent }]}><Ionicons name="gift" size={13} color="#fff" /><Text style={s.pillTextOn}>ギフト公開中</Text></View> : null}
             </View>
             {memo ? <Text style={s.memoText}>{memo}</Text> : null}
           </>
@@ -924,6 +998,24 @@ function makeStyles(t) {
     settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 12, backgroundColor: t.surface, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12 },
     settingLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     settingText: { fontSize: 15, fontWeight: '700', color: t.text },
+
+    // ギフトページ
+    giftCard: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 20, marginTop: 12, backgroundColor: t.surface, borderRadius: 16, padding: 16 },
+    giftIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
+    giftCardTitle: { fontSize: 15, fontWeight: '800', color: t.text },
+    giftCardSub: { fontSize: 12, color: t.sub, marginTop: 3 },
+    giftToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, backgroundColor: t.surface, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
+    giftToggleHint: { fontSize: 12, color: t.sub, marginTop: 8, lineHeight: 18 },
+    giftShareBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.accent, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999 },
+    giftShareText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+    giftHero: { fontSize: 28, fontWeight: '900', color: t.text, lineHeight: 36, marginTop: 8 },
+    giftLead: { fontSize: 13, color: t.sub, marginTop: 10, lineHeight: 20 },
+    giftRow: { flexDirection: 'row', gap: 14, alignItems: 'center', backgroundColor: t.surface, borderRadius: 16, padding: 12, marginTop: 14 },
+    giftThumb: { width: 72, height: 72, borderRadius: 12, overflow: 'hidden' },
+    giftRowTitle: { fontSize: 15, fontWeight: '800', color: t.text, lineHeight: 20 },
+    giftBuy: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, alignSelf: 'flex-start', backgroundColor: t.bg, borderWidth: 1, borderColor: t.line, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+    giftBuyText: { color: t.accent, fontWeight: '700', fontSize: 12.5 },
+    giftDisclaimer: { fontSize: 11, color: t.sub, marginTop: 20, lineHeight: 16 },
 
     statCard: { margin: 20, marginTop: 16, backgroundColor: t.surface, borderRadius: 22, paddingVertical: 24, paddingHorizontal: 20, alignItems: 'center' },
     statTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
