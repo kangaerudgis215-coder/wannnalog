@@ -18,6 +18,7 @@ import { actionLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { parseGps, coordsMapsUrl } from './geo';
+import { parseSnsLink, snsMeta } from './sns';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 const STORAGE_KEY = 'wannalog_items_v1';
@@ -152,9 +153,9 @@ export default function App() {
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
-  async function addItem(title, category, due, imageUri, heat, reminder) {
+  async function addItem(title, category, due, imageUri, heat, reminder, link) {
     const rem = reminder || { remind: '3days' };
-    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
+    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
     item.notifId = await scheduleReminder(item);
     await persist([item, ...items]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -220,7 +221,7 @@ export default function App() {
         )}
 
         <SaveModal visible={saveOpen} onClose={() => setSaveOpen(false)}
-          onSave={(title, category, due, imageUri, heat, reminder) => { addItem(title, category, due, imageUri, heat, reminder); setSaveOpen(false); }} />
+          onSave={(title, category, due, imageUri, heat, reminder, link) => { addItem(title, category, due, imageUri, heat, reminder, link); setSaveOpen(false); }} />
 
         {celebrating && (
           <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim }]}>
@@ -271,7 +272,11 @@ function PhotoTile({ item, onPress, height = 180 }) {
         <Ionicons name={cat.icon} size={11} color="#fff" />
         <Text style={s.tileTagText}>{cat.label}</Text>
       </View>
-      {done && <View style={s.tileDone}><Ionicons name="checkmark-circle" size={22} color={t.gold} /></View>}
+      {done
+        ? <View style={s.tileDone}><Ionicons name="checkmark-circle" size={22} color={t.gold} /></View>
+        : item.sourcePlatform
+          ? <View style={s.tileSns}><Ionicons name={snsMeta(item.sourcePlatform).icon} size={14} color="#fff" /></View>
+          : null}
       <View style={s.tileBottom}>
         <Text style={s.tileTitle} numberOfLines={2}>{item.title}</Text>
         <View style={s.tileMetaRow}>
@@ -617,8 +622,12 @@ function SaveModal({ visible, onClose, onSave }) {
   const [category, setCategory] = useState('eat');
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
+  const [link, setLink] = useState('');
   const [heat, setHeat] = useState(2);
   const [reminder, setReminder] = useState({ remind: '3days' });
+
+  const sns = parseSnsLink(link);            // SNSリンクを認識（X/Instagram/YouTube など）
+  const previewUri = image || (sns && sns.thumbnail); // 写真未選択でもYouTubeはサムネを表示
 
   // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
   function chooseHeat(h) { setHeat(h); setReminder({ remind: defaultRemindForHeat(h) }); }
@@ -629,10 +638,14 @@ function SaveModal({ visible, onClose, onSave }) {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) setImage(res.assets[0].uri);
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    onSave(title.trim(), category, due, image, heat, reminder); resetForm();
+    const finalImage = image || (sns ? sns.thumbnail : null);
+    const linkInfo = sns
+      ? { url: sns.url, platform: sns.platform }
+      : (link.trim() ? { url: link.trim(), platform: null } : null);
+    onSave(title.trim(), category, due, finalImage, heat, reminder, linkInfo); resetForm();
   }
 
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
@@ -648,8 +661,19 @@ function SaveModal({ visible, onClose, onSave }) {
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <TextInput style={s.input} placeholder="例：鎌倉の海が見えるカフェ" placeholderTextColor={t.sub}
               value={title} onChangeText={setTitle} autoFocus />
+
+            <TextInput style={[s.input, { marginTop: 12 }]} placeholder="リンクを貼る（X・Instagram・YouTube など／任意）"
+              placeholderTextColor={t.sub} value={link} onChangeText={setLink}
+              autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+            {sns && (
+              <View style={s.snsDetected}>
+                <Ionicons name={snsMeta(sns.platform).icon} size={15} color={t.accent} />
+                <Text style={s.snsDetectedText}>{snsMeta(sns.platform).label} のリンクを認識{sns.thumbnail ? '（サムネを表示します）' : ''}</Text>
+              </View>
+            )}
+
             <Pressable style={s.photoPick} onPress={pickImage}>
-              {image ? <Image source={{ uri: image }} style={s.photoPreview} />
+              {previewUri ? <Image source={{ uri: previewUri }} style={s.photoPreview} />
                 : <View style={s.photoPickInner}><Ionicons name="image-outline" size={22} color={t.sub} /><Text style={s.photoPickText}>写真を選ぶ（任意・切り取りできます）</Text></View>}
             </Pressable>
             {image && <Pressable onPress={() => setImage(null)}><Text style={s.removeText}>写真を外す</Text></Pressable>}
@@ -703,6 +727,7 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
   const due = dueLabel(item.dueTag);
   const heat = item.heat || 2;
   const links = [
+    ...(item.sourceUrl ? [{ icon: snsMeta(item.sourcePlatform).icon, label: `${snsMeta(item.sourcePlatform).label}で開く`, url: item.sourceUrl }] : []),
     ...(item.lat != null ? [{ icon: 'location', label: '撮影場所を地図で開く', url: coordsMapsUrl(item.lat, item.lng) }] : []),
     ...actionLinks(item.category, item.title),
   ];
@@ -877,6 +902,7 @@ function makeStyles(t) {
     tileTag: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
     tileTagText: { color: '#fff', fontSize: 11, fontWeight: '800' },
     tileDone: { position: 'absolute', right: 10, top: 10 },
+    tileSns: { position: 'absolute', right: 10, top: 10, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
     tileBottom: { padding: 12 },
     tileTitle: { color: '#fff', fontSize: 14.5, fontWeight: '800', lineHeight: 19, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
     tileMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
@@ -934,6 +960,8 @@ function makeStyles(t) {
     photoPickText: { color: t.sub, fontSize: 13, fontWeight: '600' },
     photoPreview: { width: '100%', height: '100%' },
     removeText: { textAlign: 'center', color: '#E5484D', fontSize: 12, fontWeight: '700', marginTop: 8 },
+    snsDetected: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+    snsDetectedText: { color: t.accent, fontSize: 12.5, fontWeight: '700' },
     label: { marginTop: 18, marginBottom: 10, fontSize: 13, fontWeight: '700', color: t.text },
     catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     catChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
