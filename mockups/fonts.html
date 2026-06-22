@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WannaLog フォント比べ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Sora:wght@400;600;800&family=Poppins:wght@400;600;800;900&family=Space+Grotesk:wght@400;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Murecho:wght@400;600;800&family=M+PLUS+Rounded+1c:wght@400;700;800&family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#0F1115; --surface:#1A1D24; --surface2:#252A33; --text:#F4F2EE; --sub:#969CA8; --accent:#FF6B4A; --gold:#F2B544; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);padding:24px 16px 60px}
+  .wrap{max-width:520px;margin:0 auto}
+  .top{color:var(--sub);font-size:13px;margin-bottom:6px}
+  h1.title{font-size:22px;margin-bottom:18px}
+  .card{background:var(--surface);border-radius:22px;padding:22px;margin-bottom:18px;border:1px solid rgba(255,255,255,.06)}
+  .pairname{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:14px;font-family:-apple-system,sans-serif}
+  .brandrow{display:flex;align-items:center;gap:8px}
+  .spark{width:18px;height:18px;border-radius:6px;background:linear-gradient(135deg,#7C5CFF,#3FA9FF 55%,#FF6B9A)}
+  .brand{font-size:28px;font-weight:900;letter-spacing:.3px}
+  .greet{color:var(--sub);font-size:13px;margin-top:6px}
+  .praise{color:var(--gold);font-size:26px;font-weight:900;margin-top:14px}
+  .cardtitle{font-size:17px;font-weight:800;margin-top:14px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .chip{background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;padding:7px 13px;border-radius:999px}
+  .chip.on{background:var(--accent);color:#fff}
+  .num{font-size:40px;font-weight:900;color:var(--accent)}
+
+  /* ペアごとのフォント指定 */
+  .f1 .brand,.f1 .praise{font-family:'Outfit',sans-serif}
+  .f1 .greet,.f1 .cardtitle,.f1 .chip{font-family:'Zen Kaku Gothic New',sans-serif}
+
+  .f2 .brand,.f2 .praise{font-family:'Sora',sans-serif}
+  .f2 .greet,.f2 .cardtitle,.f2 .chip{font-family:'Murecho',sans-serif}
+
+  .f3 .brand,.f3 .praise{font-family:'Poppins',sans-serif}
+  .f3 .greet,.f3 .cardtitle,.f3 .chip{font-family:'M PLUS Rounded 1c',sans-serif}
+
+  .f4 .brand,.f4 .praise{font-family:'Space Grotesk',sans-serif}
+  .f4 .greet,.f4 .cardtitle,.f4 .chip{font-family:'Zen Maru Gothic',sans-serif}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">WannaLog — フォント候補（同じ画面を4案で）</div>
+    <h1 class="title" style="font-family:-apple-system,sans-serif">どれが好みですか？（番号で教えてください）</h1>
+
+    <div class="card f1">
+      <div class="pairname">① OUTFIT × Zen Kaku Gothic New　- モダンで端正・万能</div>
+      <div class="brandrow"><span class="spark"></span><span class="brand">WannaLog</span></div>
+      <div class="greet">叶えた 9・のこり 12</div>
+      <div class="praise">Dream unlocked!</div>
+      <div class="cardtitle">鎌倉の海が見えるカフェ</div>
+      <div class="chips"><span class="chip on">すべて</span><span class="chip">食べたい</span><span class="chip">行きたい</span><span class="chip">欲しい</span></div>
+    </div>
+
+    <div class="card f2">
+      <div class="pairname">② SORA × Murecho　- 知的・テック感・シャープ</div>
+      <div class="brandrow"><span class="spark"></span><span class="brand">WannaLog</span></div>
+      <div class="greet">叶えた 9・のこり 12</div>
+      <div class="praise">Dream unlocked!</div>
+      <div class="cardtitle">鎌倉の海が見えるカフェ</div>
+      <div class="chips"><span class="chip on">すべて</span><span class="chip">食べたい</span><span class="chip">行きたい</span><span class="chip">欲しい</span></div>
+    </div>
+
+    <div class="card f3">
+      <div class="pairname">③ POPPINS × M PLUS Rounded 1c　- 親しみ・やわらか・ポップ</div>
+      <div class="brandrow"><span class="spark"></span><span class="brand">WannaLog</span></div>
+      <div class="greet">叶えた 9・のこり 12</div>
+      <div class="praise">Dream unlocked!</div>
+      <div class="cardtitle">鎌倉の海が見えるカフェ</div>
+      <div class="chips"><span class="chip on">すべて</span><span class="chip">食べたい</span><span class="chip">行きたい</span><span class="chip">欲しい</span></div>
+    </div>
+
+    <div class="card f4">
+      <div class="pairname">④ SPACE GROTESK × Zen Maru Gothic　- 個性的・プレミアム・少し遊び</div>
+      <div class="brandrow"><span class="spark"></span><span class="brand">WannaLog</span></div>
+      <div class="greet">叶えた 9・のこり 12</div>
+      <div class="praise">Dream unlocked!</div>
+      <div class="cardtitle">鎌倉の海が見えるカフェ</div>
+      <div class="chips"><span class="chip on">すべて</span><span class="chip">食べたい</span><span class="chip">行きたい</span><span class="chip">欲しい</span></div>
+    </div>
+
+    <p style="color:var(--sub);font-size:12px;font-family:-apple-system,sans-serif;line-height:1.7">
+      ※ どれも無料・Expoで使える字体です。番号（①〜④）か「英字は②・日本語は①」のような組み合わせ指定でもOK。決まり次第、全ページに反映します。
+    </p>
+  </div>
+</body>
+</html>

@@ -266,47 +266,41 @@ function Masonry({ items, renderTile }) {
 /* ---------- 達成演出：英語のほめ言葉＆紙吹雪（依存なし） ---------- */
 const PRAISE = ['Amazing!', 'You did it!', 'Dream unlocked!', 'Way to go!', 'Legend!', 'Nailed it!', 'One step closer!'];
 const CONFETTI_COLORS = ['#FF6B4A', '#F2B544', '#3A8DDE', '#7C5CE7', '#C86DD7', '#43A047'];
+// 達成ボタン付近（画面下中央）から、上＆外へ弾けて落ちるバースト型の紙吹雪。
 function Confetti() {
-  const pieces = useRef([...Array(26)].map(() => ({
-    x: Math.random() * 300 - 150,
-    delay: Math.random() * 220,
-    rot: 180 + Math.random() * 540,
-    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-    size: 6 + Math.random() * 8,
-    anim: new Animated.Value(0),
-  }))).current;
+  const pieces = useRef([...Array(40)].map(() => {
+    const dir = Math.random() * 2 - 1;                 // 左右の飛び散り
+    return {
+      vx: dir * (40 + Math.random() * 210),            // 横へ弾ける距離
+      peak: 130 + Math.random() * 250,                 // 上へ弾ける高さ
+      drop: 320 + Math.random() * 340,                 // そのあと落ちる距離
+      rot: 180 + Math.random() * 720,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      size: 7 + Math.random() * 8,
+      delay: Math.random() * 60,
+      anim: new Animated.Value(0),
+    };
+  })).current;
   useEffect(() => {
-    Animated.stagger(18, pieces.map((p) =>
-      Animated.timing(p.anim, { toValue: 1, duration: 1100 + Math.random() * 600, delay: p.delay, useNativeDriver: true })
+    Animated.stagger(6, pieces.map((p) =>
+      Animated.timing(p.anim, { toValue: 1, duration: 1300 + Math.random() * 500, delay: p.delay, useNativeDriver: true })
     )).start();
   }, []);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {pieces.map((p, i) => (
         <Animated.View key={i} style={{
-          position: 'absolute', left: '50%', top: '32%',
-          width: p.size, height: p.size * 0.55, backgroundColor: p.color, borderRadius: 2,
-          opacity: p.anim.interpolate({ inputRange: [0, 0.85, 1], outputRange: [1, 1, 0] }),
+          position: 'absolute', left: '50%', top: '80%',
+          width: p.size, height: p.size * 0.5, backgroundColor: p.color, borderRadius: 2,
+          opacity: p.anim.interpolate({ inputRange: [0, 0.75, 1], outputRange: [1, 1, 0] }),
           transform: [
-            { translateX: p.anim.interpolate({ inputRange: [0, 1], outputRange: [0, p.x] }) },
-            { translateY: p.anim.interpolate({ inputRange: [0, 1], outputRange: [-20, 420] }) },
+            { translateX: p.anim.interpolate({ inputRange: [0, 1], outputRange: [0, p.vx] }) },
+            { translateY: p.anim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, -p.peak, p.drop] }) },
             { rotate: p.anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', p.rot + 'deg'] }) },
           ],
         }} />
       ))}
     </View>
-  );
-}
-
-/* ---------- 写真の下側を黒くするグラデ（依存なし・層を重ねて表現） ---------- */
-function ShadeGradient() {
-  const s = useStyles();
-  return (
-    <>
-      <View style={s.shade1} />
-      <View style={s.shade2} />
-      <View style={s.shade3} />
-    </>
   );
 }
 
@@ -323,7 +317,7 @@ function PhotoTile({ item, onPress, height = 180 }) {
         : <View style={[s.tileImg, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}>
             <Ionicons name={cat.icon} size={46} color="rgba(255,255,255,0.9)" />
           </View>}
-      <ShadeGradient />
+      <View style={s.tileShade} />
       <View style={[s.tileTag, { backgroundColor: cat.color + 'E6' }]}>
         <Ionicons name={cat.icon} size={11} color="#fff" />
         <Text style={s.tileTagText}>{cat.label}</Text>
@@ -1058,9 +1052,7 @@ function makeStyles(t) {
     // 写真前面タイル
     tile: { borderRadius: 20, overflow: 'hidden', justifyContent: 'flex-end', backgroundColor: t.surface },
     tileImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-    shade1: { ...StyleSheet.absoluteFillObject, top: '40%', backgroundColor: 'rgba(0,0,0,0.14)' },
-    shade2: { ...StyleSheet.absoluteFillObject, top: '60%', backgroundColor: 'rgba(0,0,0,0.30)' },
-    shade3: { ...StyleSheet.absoluteFillObject, top: '76%', backgroundColor: 'rgba(0,0,0,0.55)' },
+    tileShade: { ...StyleSheet.absoluteFillObject, top: '66%', backgroundColor: 'rgba(0,0,0,0.5)' },
     tileTag: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
     tileTagText: { color: '#fff', fontSize: 11, fontWeight: '800' },
     tileDone: { position: 'absolute', right: 10, top: 10 },
