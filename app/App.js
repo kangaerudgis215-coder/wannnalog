@@ -105,6 +105,7 @@ export default function App() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [giftOpen, setGiftOpen] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
+  const [praise, setPraise] = useState(PRAISE[0]);
   const celebAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -164,10 +165,11 @@ export default function App() {
   }
 
   function runCelebration() {
+    setPraise(PRAISE[Math.floor(Math.random() * PRAISE.length)]);
     setCelebrating(true); celebAnim.setValue(0);
     Animated.sequence([
-      Animated.timing(celebAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.delay(900),
+      Animated.spring(celebAnim, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }),
+      Animated.delay(1200),
       Animated.timing(celebAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
     ]).start(() => setCelebrating(false));
   }
@@ -227,9 +229,13 @@ export default function App() {
         <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
 
         {celebrating && (
-          <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim }]}>
-            <Ionicons name="sparkles" size={64} color={t.gold} />
-            <Text style={s.celebrateText}>叶えた！</Text>
+          <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) }]}>
+            <Confetti />
+            <Animated.View style={{ alignItems: 'center', transform: [{ scale: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }] }}>
+              <Ionicons name="trophy" size={66} color={t.gold} />
+              <Text style={s.celebrateEn}>{praise}</Text>
+              <Text style={s.celebrateText}>叶えた！</Text>
+            </Animated.View>
           </Animated.View>
         )}
       </SafeAreaView>
@@ -257,6 +263,53 @@ function Masonry({ items, renderTile }) {
   );
 }
 
+/* ---------- 達成演出：英語のほめ言葉＆紙吹雪（依存なし） ---------- */
+const PRAISE = ['Amazing!', 'You did it!', 'Dream unlocked!', 'Way to go!', 'Legend!', 'Nailed it!', 'One step closer!'];
+const CONFETTI_COLORS = ['#FF6B4A', '#F2B544', '#3A8DDE', '#7C5CE7', '#C86DD7', '#43A047'];
+function Confetti() {
+  const pieces = useRef([...Array(26)].map(() => ({
+    x: Math.random() * 300 - 150,
+    delay: Math.random() * 220,
+    rot: 180 + Math.random() * 540,
+    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+    size: 6 + Math.random() * 8,
+    anim: new Animated.Value(0),
+  }))).current;
+  useEffect(() => {
+    Animated.stagger(18, pieces.map((p) =>
+      Animated.timing(p.anim, { toValue: 1, duration: 1100 + Math.random() * 600, delay: p.delay, useNativeDriver: true })
+    )).start();
+  }, []);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {pieces.map((p, i) => (
+        <Animated.View key={i} style={{
+          position: 'absolute', left: '50%', top: '32%',
+          width: p.size, height: p.size * 0.55, backgroundColor: p.color, borderRadius: 2,
+          opacity: p.anim.interpolate({ inputRange: [0, 0.85, 1], outputRange: [1, 1, 0] }),
+          transform: [
+            { translateX: p.anim.interpolate({ inputRange: [0, 1], outputRange: [0, p.x] }) },
+            { translateY: p.anim.interpolate({ inputRange: [0, 1], outputRange: [-20, 420] }) },
+            { rotate: p.anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', p.rot + 'deg'] }) },
+          ],
+        }} />
+      ))}
+    </View>
+  );
+}
+
+/* ---------- 写真の下側を黒くするグラデ（依存なし・層を重ねて表現） ---------- */
+function ShadeGradient() {
+  const s = useStyles();
+  return (
+    <>
+      <View style={s.shade1} />
+      <View style={s.shade2} />
+      <View style={s.shade3} />
+    </>
+  );
+}
+
 /* ---------- 写真前面タイル（ホーム/ビジョン共通） ---------- */
 function PhotoTile({ item, onPress, height = 180 }) {
   const t = useTheme(); const s = useStyles();
@@ -270,7 +323,7 @@ function PhotoTile({ item, onPress, height = 180 }) {
         : <View style={[s.tileImg, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}>
             <Ionicons name={cat.icon} size={46} color="rgba(255,255,255,0.9)" />
           </View>}
-      <View style={s.tileShade} />
+      <ShadeGradient />
       <View style={[s.tileTag, { backgroundColor: cat.color + 'E6' }]}>
         <Ionicons name={cat.icon} size={11} color="#fff" />
         <Text style={s.tileTagText}>{cat.label}</Text>
@@ -303,9 +356,12 @@ function PhotoTile({ item, onPress, height = 180 }) {
 /* ---------- ホーム ---------- */
 function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
+  // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
+  const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
   let visible;
   if (filter === 'done') visible = items.filter((it) => it.doneAt);
   else if (filter === 'serious') visible = items.filter((it) => !it.doneAt && (it.heat || 2) === 3).slice().sort(byHeatThenNew);
+  else if (filter.startsWith('sns:')) { const p = filter.slice(4); visible = items.filter((it) => !it.doneAt && it.sourcePlatform === p).slice().sort(byHeatThenNew); }
   else visible = items.filter((it) => !it.doneAt && (filter === 'all' || it.category === filter)).slice().sort(byHeatThenNew);
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
@@ -321,6 +377,9 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
         <Chip icon="flame" label="本気" active={filter === 'serious'} onPress={() => setFilter('serious')} />
         {CATEGORIES.map((c) => (
           <Chip key={c.key} icon={c.icon} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
+        ))}
+        {snsPresent.map((p) => (
+          <Chip key={p} icon={snsMeta(p).icon} label={snsMeta(p).label} active={filter === 'sns:' + p} onPress={() => setFilter('sns:' + p)} />
         ))}
         <Chip icon="trophy" label={`叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
       </ScrollView>
@@ -436,6 +495,12 @@ function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen,
   const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
   const casualDone = done.filter((it) => (it.heat || 2) === 1).length;
+  // カテゴリ別の達成（そのカテゴリの中で叶えた割合）
+  const byCat = CATEGORIES.map((c) => {
+    const catItems = items.filter((it) => it.category === c.key);
+    const catDone = catItems.filter((it) => it.doneAt).length;
+    return { ...c, total: catItems.length, done: catDone, rate: catItems.length ? catDone / catItems.length : 0 };
+  }).filter((c) => c.total > 0);
   // 直近7日の達成数バー
   const today = startOfDay(Date.now());
   const week = [...Array(7)].map((_, i) => today - (6 - i) * DAY_MS);
@@ -497,6 +562,25 @@ function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen,
           <Text style={s.statSub}>本気で叶えた {seriousDone}　／　気になっただけ {casualDone}</Text>
         )}
       </View>
+
+      {/* カテゴリ別の達成バー（色分け） */}
+      {byCat.length > 0 && (
+        <View style={s.catStatCard}>
+          <Text style={s.catStatTitle}>カテゴリ別の達成</Text>
+          {byCat.map((c) => (
+            <View key={c.key} style={s.catStatRow}>
+              <View style={s.catStatHead}>
+                <Ionicons name={c.icon} size={14} color={c.color} />
+                <Text style={s.catStatLabel}>{c.label}</Text>
+                <Text style={s.catStatNum}>{c.done}/{c.total}</Text>
+              </View>
+              <View style={s.catStatTrack}>
+                <View style={[s.catStatFill, { width: `${Math.round(c.rate * 100)}%`, backgroundColor: c.color }]} />
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* 達成コレクション（小さく敷き詰め） */}
       <Text style={s.sectionTitle}>叶えたコレクション</Text>
@@ -600,6 +684,7 @@ function ReminderEditor({ value, onChange }) {
         <View style={s.reminderPickRow}>
           <Text style={s.reminderHint}>日時</Text>
           <DateTimePicker value={atDate} mode="datetime" display="compact"
+            themeVariant={t.mode} accentColor={t.accent}
             onChange={(e, d) => { if (d) set({ remindAt: d.getTime() }); }} />
         </View>
       )}
@@ -608,6 +693,7 @@ function ReminderEditor({ value, onChange }) {
         <View style={s.reminderPickRow}>
           <Text style={s.reminderHint}>時刻</Text>
           <DateTimePicker value={timeDate} mode="time" display="compact"
+            themeVariant={t.mode} accentColor={t.accent}
             onChange={(e, d) => { if (d) set({ remindHour: d.getHours(), remindMinute: d.getMinutes() }); }} />
         </View>
       )}
@@ -930,7 +1016,7 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
         {done ? (
           <Pressable style={s.undoneBtn} onPress={() => onUpdate({ doneAt: null })}><Text style={s.undoneText}>未達成に戻す</Text></Pressable>
         ) : (
-          <Pressable style={s.doneBtn} onPress={onDone}><Ionicons name="checkmark" size={18} color="#fff" /><Text style={s.doneText}>達成した！</Text></Pressable>
+          <Pressable style={({ pressed }) => [s.doneBtn, pressed && s.doneBtnPressed]} onPress={onDone}><Ionicons name="checkmark-circle" size={24} color="#fff" /><Text style={s.doneText}>達成した！</Text></Pressable>
         )}
         {editMode && <Pressable onPress={testNotify}><Text style={s.testNotifyLink}>通知の動作をテスト（10秒後に届きます）</Text></Pressable>}
       </ScrollView>
@@ -972,7 +1058,9 @@ function makeStyles(t) {
     // 写真前面タイル
     tile: { borderRadius: 20, overflow: 'hidden', justifyContent: 'flex-end', backgroundColor: t.surface },
     tileImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-    tileShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)', top: '55%' },
+    shade1: { ...StyleSheet.absoluteFillObject, top: '40%', backgroundColor: 'rgba(0,0,0,0.14)' },
+    shade2: { ...StyleSheet.absoluteFillObject, top: '60%', backgroundColor: 'rgba(0,0,0,0.30)' },
+    shade3: { ...StyleSheet.absoluteFillObject, top: '76%', backgroundColor: 'rgba(0,0,0,0.55)' },
     tileTag: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
     tileTagText: { color: '#fff', fontSize: 11, fontWeight: '800' },
     tileDone: { position: 'absolute', right: 10, top: 10 },
@@ -1031,6 +1119,16 @@ function makeStyles(t) {
     graphDay: { fontSize: 10, color: t.sub },
     statSub: { fontSize: 12, color: t.sub, marginTop: 14 },
 
+    // カテゴリ別の達成バー
+    catStatCard: { marginHorizontal: 20, marginTop: 4, backgroundColor: t.surface, borderRadius: 22, padding: 20 },
+    catStatTitle: { fontSize: 15, fontWeight: '800', color: t.text, marginBottom: 14 },
+    catStatRow: { marginBottom: 14 },
+    catStatHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+    catStatLabel: { fontSize: 13, fontWeight: '700', color: t.text, flex: 1 },
+    catStatNum: { fontSize: 12, fontWeight: '800', color: t.sub },
+    catStatTrack: { height: 10, borderRadius: 999, backgroundColor: t.surface2, overflow: 'hidden' },
+    catStatFill: { height: '100%', borderRadius: 999, minWidth: 6 },
+
     denseWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 20 },
     denseTile: { width: '23.5%', aspectRatio: 1, borderRadius: 10, overflow: 'hidden' },
     denseImg: { width: '100%', height: '100%' },
@@ -1088,13 +1186,15 @@ function makeStyles(t) {
     actionBtn: { marginBottom: 10, backgroundColor: t.surface, borderRadius: 14, paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     actionLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     actionText: { fontSize: 15, fontWeight: '700', color: t.text },
-    doneBtn: { marginTop: 16, backgroundColor: t.accent, borderRadius: 14, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-    doneText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+    doneBtn: { marginTop: 16, backgroundColor: t.accent, borderRadius: 16, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: t.accent, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+    doneBtnPressed: { transform: [{ scale: 0.96 }], opacity: 0.95 },
+    doneText: { color: '#fff', fontSize: 17, fontWeight: '900' },
     undoneBtn: { marginTop: 16, backgroundColor: t.surface, borderRadius: 14, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: t.line },
     undoneText: { color: t.sub, fontSize: 15, fontWeight: '700' },
     testNotifyLink: { textAlign: 'center', color: t.sub, fontSize: 12, marginTop: 18, textDecorationLine: 'underline' },
 
     celebrate: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: t.mode === 'dark' ? 'rgba(15,17,21,0.7)' : 'rgba(250,247,242,0.7)' },
-    celebrateText: { marginTop: 10, fontSize: 26, fontWeight: '900', color: t.accent },
+    celebrateEn: { marginTop: 12, fontSize: 30, fontWeight: '900', color: t.gold, letterSpacing: 0.5 },
+    celebrateText: { marginTop: 4, fontSize: 22, fontWeight: '900', color: t.text },
   });
 }
