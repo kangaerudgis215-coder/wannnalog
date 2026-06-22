@@ -20,6 +20,25 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { parseSnsLink, snsMeta } from './sns';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useFonts } from 'expo-font';
+import { Poppins_400Regular, Poppins_600SemiBold, Poppins_800ExtraBold, Poppins_900Black } from '@expo-google-fonts/poppins';
+import { MPLUSRounded1c_400Regular, MPLUSRounded1c_500Medium, MPLUSRounded1c_700Bold, MPLUSRounded1c_800ExtraBold } from '@expo-google-fonts/m-plus-rounded-1c';
+import { ShipporiMincho_400Regular } from '@expo-google-fonts/shippori-mincho';
+
+// フォント名（weight→ファミリーの対応。カスタムフォントは weight が自動で効かないため）
+const FONT = {
+  base: 'MPLUSRounded1c_400Regular', med: 'MPLUSRounded1c_500Medium',
+  bold: 'MPLUSRounded1c_700Bold', xbold: 'MPLUSRounded1c_800ExtraBold',
+  enSb: 'Poppins_600SemiBold', enXb: 'Poppins_800ExtraBold', enBlack: 'Poppins_900Black',
+  mincho: 'ShipporiMincho_400Regular',
+};
+function baseFamily(weight) {
+  const w = parseInt(weight, 10) || 400;
+  if (w >= 800) return FONT.xbold;
+  if (w >= 700) return FONT.bold;
+  if (w >= 500) return FONT.med;
+  return FONT.base;
+}
 
 const STORAGE_KEY = 'wannalog_items_v1';
 const THEME_KEY = 'wannalog_theme';
@@ -107,6 +126,11 @@ export default function App() {
   const [celebrating, setCelebrating] = useState(false);
   const [praise, setPraise] = useState(PRAISE[0]);
   const celebAnim = useRef(new Animated.Value(0)).current;
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular, Poppins_600SemiBold, Poppins_800ExtraBold, Poppins_900Black,
+    MPLUSRounded1c_400Regular, MPLUSRounded1c_500Medium, MPLUSRounded1c_700Bold, MPLUSRounded1c_800ExtraBold,
+    ShipporiMincho_400Regular,
+  });
 
   useEffect(() => {
     (async () => {
@@ -199,6 +223,8 @@ export default function App() {
   const openItem = (it) => { Haptics.selectionAsync(); setSelectedId(it.id); };
 
   const s = _styleCache[mode] || (_styleCache[mode] = makeStyles(t));
+
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: t.bg }} />;
 
   return (
     <ThemeCtx.Provider value={t}>
@@ -1020,11 +1046,11 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
 
 /* ---------- スタイル（テーマから生成） ---------- */
 function makeStyles(t) {
-  return StyleSheet.create({
+  const styles = {
     safe: { flex: 1, backgroundColor: t.bg },
     topbar: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
     brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    brand: { fontSize: 23, fontWeight: '900', color: t.text, letterSpacing: 0.5 },
+    brand: { fontSize: 23, fontWeight: '900', color: t.text, letterSpacing: 0.5, fontFamily: FONT.enBlack },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
 
@@ -1037,13 +1063,13 @@ function makeStyles(t) {
     sectionTitle: { fontSize: 16, fontWeight: '800', color: t.text, paddingHorizontal: 20, paddingBottom: 10, paddingTop: 8 },
     empty: { textAlign: 'center', color: t.sub, marginTop: 44, paddingHorizontal: 40, lineHeight: 22 },
 
-    visionTitle: { fontSize: 30, fontWeight: '900', color: t.text, letterSpacing: 2, marginTop: 4, padding: 0 },
+    visionTitle: { fontSize: 32, fontWeight: '400', color: t.text, letterSpacing: 4, marginTop: 6, padding: 0, fontFamily: FONT.mincho },
     visionEmpty: { borderRadius: 20, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed', backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center', gap: 6 },
     visionEmptyText: { color: t.sub, fontSize: 12, fontWeight: '600' },
     visionAdd: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 6, marginTop: 18, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, backgroundColor: t.surface },
     visionAddText: { color: t.accent, fontSize: 14, fontWeight: '800' },
     visionLabelWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: 'rgba(0,0,0,0.22)' },
-    visionSlotLabel: { color: '#fff', fontSize: 19, fontWeight: '900', letterSpacing: 1, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 8 },
+    visionSlotLabel: { color: '#fff', fontSize: 20, fontWeight: '400', letterSpacing: 2, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 8, fontFamily: FONT.mincho },
 
     masonryRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 2 },
     masonryCol: { flex: 1, gap: 12 },
@@ -1101,8 +1127,8 @@ function makeStyles(t) {
     statTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
     statBlock: { alignItems: 'center', paddingHorizontal: 26 },
     statDivider: { width: 1, height: 46, backgroundColor: t.line },
-    statNum: { fontSize: 46, fontWeight: '900', color: t.accent },
-    statPct: { fontSize: 24, fontWeight: '900', color: t.accent },
+    statNum: { fontSize: 46, fontWeight: '900', color: t.accent, fontFamily: FONT.enBlack },
+    statPct: { fontSize: 24, fontWeight: '900', color: t.accent, fontFamily: FONT.enBlack },
     statLabel: { fontSize: 13, fontWeight: '800', color: t.text, marginTop: 0 },
     graphRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginTop: 20, height: 76 },
     graphCol: { alignItems: 'center', gap: 6 },
@@ -1186,7 +1212,15 @@ function makeStyles(t) {
     testNotifyLink: { textAlign: 'center', color: t.sub, fontSize: 12, marginTop: 18, textDecorationLine: 'underline' },
 
     celebrate: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: t.mode === 'dark' ? 'rgba(15,17,21,0.7)' : 'rgba(250,247,242,0.7)' },
-    celebrateEn: { marginTop: 12, fontSize: 30, fontWeight: '900', color: t.gold, letterSpacing: 0.5 },
+    celebrateEn: { marginTop: 12, fontSize: 30, fontWeight: '900', color: t.gold, letterSpacing: 0.5, fontFamily: FONT.enBlack },
     celebrateText: { marginTop: 4, fontSize: 22, fontWeight: '900', color: t.text },
-  });
+  };
+  // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
+  for (const k in styles) {
+    const st = styles[k];
+    if (st && (st.fontSize != null || st.fontWeight != null) && st.fontFamily == null) {
+      st.fontFamily = baseFamily(st.fontWeight);
+    }
+  }
+  return StyleSheet.create(styles);
 }
