@@ -19,6 +19,7 @@ import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { parseGps, coordsMapsUrl } from './geo';
 import { parseSnsLink, snsMeta } from './sns';
+import { isUrl, fetchOgp, cleanTitle } from './ogp';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_800ExtraBold, Poppins_900Black } from '@expo-google-fonts/poppins';
@@ -745,9 +746,26 @@ function SaveModal({ visible, onClose, onSave }) {
   const [link, setLink] = useState('');
   const [heat, setHeat] = useState(2);
   const [reminder, setReminder] = useState({ remind: '3days' });
+  const [ogpImage, setOgpImage] = useState(null);
 
   const sns = parseSnsLink(link);            // SNSリンクを認識（X/Instagram/YouTube など）
-  const previewUri = image || (sns && sns.thumbnail); // 写真未選択でもYouTubeはサムネを表示
+  const previewUri = image || (sns && sns.thumbnail) || ogpImage; // 写真未選択でもサムネ/OGP画像を表示
+
+  // SNS以外のURL（食べログ・お店のページ等）は OGP（リンク先のタイトル・画像）を自動で取り込む
+  useEffect(() => {
+    setOgpImage(null);
+    if (sns || !isUrl(link)) return;
+    const url = link.trim();
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const ogp = await fetchOgp(url);
+      if (cancelled) return;
+      if (ogp.image) setOgpImage(ogp.image);
+      const t = cleanTitle(ogp.title, url, '');
+      setTitle((prev) => (prev.trim() ? prev : t || prev));
+    }, 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [link, sns]);
 
   // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
   function chooseHeat(h) { setHeat(h); setReminder({ remind: defaultRemindForHeat(h) }); }
@@ -758,10 +776,10 @@ function SaveModal({ visible, onClose, onSave }) {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) setImage(res.assets[0].uri);
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); setOgpImage(null); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    const finalImage = image || (sns ? sns.thumbnail : null);
+    const finalImage = image || (sns ? sns.thumbnail : ogpImage);
     const linkInfo = sns
       ? { url: sns.url, platform: sns.platform }
       : (link.trim() ? { url: link.trim(), platform: null } : null);
@@ -789,6 +807,12 @@ function SaveModal({ visible, onClose, onSave }) {
               <View style={s.snsDetected}>
                 <Ionicons name={snsMeta(sns.platform).icon} size={15} color={t.accent} />
                 <Text style={s.snsDetectedText}>{snsMeta(sns.platform).label} のリンクを認識{sns.thumbnail ? '（サムネを表示します）' : ''}</Text>
+              </View>
+            )}
+            {!sns && ogpImage && (
+              <View style={s.snsDetected}>
+                <Ionicons name="link" size={15} color={t.accent} />
+                <Text style={s.snsDetectedText}>リンク先の情報を読み込みました</Text>
               </View>
             )}
 
