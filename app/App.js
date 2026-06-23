@@ -20,6 +20,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { parseSnsLink, snsMeta } from './sns';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
+import { buildWrapped } from './wrapped';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_800ExtraBold, Poppins_900Black } from '@expo-google-fonts/poppins';
@@ -126,6 +127,7 @@ export default function App() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [giftOpen, setGiftOpen] = useState(false);
   const [gardenOpen, setGardenOpen] = useState(false);
+  const [wrappedOpen, setWrappedOpen] = useState(false);
   const [garden, setGarden] = useState({ points: 0, waterDate: '', waterCount: 0 });
   const [celebrating, setCelebrating] = useState(false);
   const [praise, setPraise] = useState(PRAISE[0]);
@@ -260,7 +262,7 @@ export default function App() {
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onLabel={setVisionLabel} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
-            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
+            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} onOpenWrapped={() => setWrappedOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
           </>
         )}
@@ -271,6 +273,7 @@ export default function App() {
         <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
 
         <GardenModal visible={gardenOpen} onClose={() => setGardenOpen(false)} garden={garden} doneCount={doneCount} onWater={waterPlant} />
+        <WrappedModal visible={wrappedOpen} onClose={() => setWrappedOpen(false)} items={items} />
 
         {celebrating && (
           <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) }]}>
@@ -486,7 +489,7 @@ function NotifyTab({ items, onOpen }) {
 /* ---------- マイページ ---------- */
 const DAY_MS = 86400000;
 function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
-function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
+function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden, onOpenWrapped }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
@@ -536,6 +539,16 @@ function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode,
         <View style={{ flex: 1 }}>
           <Text style={s.giftCardTitle}>箱庭</Text>
           <Text style={s.giftCardSub}>{`${PLANT.name}｜Lv.${plantStage.lv} ${plantStage.label}`}{plantStage.maxed ? '（完成！）' : `・あと${plantStage.remaining}回で成長`}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={t.sub} />
+      </Pressable>
+
+      {/* 振り返り（Wrapped）：自分の達成傾向を1枚にまとめて見る */}
+      <Pressable style={s.giftCard} onPress={onOpenWrapped}>
+        <View style={[s.giftIcon, { backgroundColor: '#7C5CFF' }]}><Ionicons name="sparkles" size={22} color="#fff" /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.giftCardTitle}>振り返り</Text>
+          <Text style={s.giftCardSub}>これまでの「したい」傾向を1枚で見る</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={t.sub} />
       </Pressable>
@@ -986,6 +999,46 @@ function GardenModal({ visible, onClose, garden, doneCount, onWater }) {
   );
 }
 
+/* ---------- 振り返り（Wrapped） ---------- */
+function WrappedModal({ visible, onClose, items }) {
+  const t = useTheme(); const s = useStyles();
+  const w = buildWrapped(items);
+  const top = w.topCategoryKey ? getCategory(w.topCategoryKey) : null;
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={s.safe}>
+        <View style={s.detailBar}>
+          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <Text style={s.giftHero}>振り返り</Text>
+          <Text style={s.giftLead}>これまで保存した「したい」を、ひとつのカードにまとめました。</Text>
+
+          <View style={s.wrappedCard}>
+            <Ionicons name="sparkles" size={28} color="#fff" />
+            <Text style={s.wrappedLabel}>{w.label}</Text>
+            <View style={s.wrappedRow}>
+              <View style={s.wrappedBlock}><Text style={s.wrappedNum}>{w.doneCount}</Text><Text style={s.wrappedSub}>叶えた</Text></View>
+              <View style={s.wrappedBlock}><Text style={s.wrappedNum}>{w.rate}%</Text><Text style={s.wrappedSub}>達成率</Text></View>
+            </View>
+            {top && (
+              <View style={s.wrappedTopCat}>
+                <Ionicons name={top.icon} size={16} color="#fff" />
+                <Text style={s.wrappedTopCatText}>いちばん叶えたのは「{top.label}」（{w.topCategoryCount}件）</Text>
+              </View>
+            )}
+          </View>
+
+          {(w.seriousDone > 0 || w.casualDone > 0) && (
+            <Text style={s.statSub}>本気で叶えた {w.seriousDone}　／　気になっただけ {w.casualDone}</Text>
+          )}
+          <Text style={s.plantNote}>※ いまはアプリの中だけで見られます。画像にして共有する機能は近日追加予定です。</Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 /* ---------- 詳細 ---------- */
 function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) {
   const t = useTheme(); const s = useStyles();
@@ -1249,6 +1302,16 @@ function makeStyles(t) {
     dexItem: { alignItems: 'center', gap: 6, flex: 1 },
     dexThumb: { width: 46, height: 46, borderRadius: 12, backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' },
     dexLabel: { fontSize: 11, color: t.sub, fontWeight: '700' },
+
+    // 振り返り（Wrapped）
+    wrappedCard: { marginTop: 20, backgroundColor: '#7C5CFF', borderRadius: 22, paddingVertical: 26, paddingHorizontal: 20, alignItems: 'center' },
+    wrappedLabel: { fontSize: 20, fontWeight: '900', color: '#fff', marginTop: 10 },
+    wrappedRow: { flexDirection: 'row', gap: 36, marginTop: 18 },
+    wrappedBlock: { alignItems: 'center' },
+    wrappedNum: { fontSize: 32, fontWeight: '900', color: '#fff', fontFamily: FONT.enBlack },
+    wrappedSub: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+    wrappedTopCat: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, backgroundColor: 'rgba(255,255,255,0.16)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+    wrappedTopCatText: { fontSize: 12.5, color: '#fff', fontWeight: '700' },
 
     statCard: { margin: 20, marginTop: 16, backgroundColor: t.surface, borderRadius: 22, paddingVertical: 24, paddingHorizontal: 20, alignItems: 'center' },
     statTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
