@@ -256,7 +256,6 @@ export default function App() {
 
         {celebrating && (
           <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) }]}>
-            <Confetti />
             <Animated.View style={{ alignItems: 'center', transform: [{ scale: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }] }}>
               <Ionicons name="trophy" size={66} color={t.gold} />
               <Text style={s.celebrateEn}>{praise}</Text>
@@ -289,46 +288,8 @@ function Masonry({ items, renderTile }) {
   );
 }
 
-/* ---------- 達成演出：英語のほめ言葉＆紙吹雪（依存なし） ---------- */
+/* ---------- 達成演出：英語のほめ言葉（紙吹雪は不自然だったので外した） ---------- */
 const PRAISE = ['Amazing!', 'You did it!', 'Dream unlocked!', 'Way to go!', 'Legend!', 'Nailed it!', 'One step closer!'];
-const CONFETTI_COLORS = ['#FF6B4A', '#F2B544', '#3A8DDE', '#7C5CE7', '#C86DD7', '#43A047'];
-// 達成ボタン付近（画面下中央）から、上＆外へ弾けて落ちるバースト型の紙吹雪。
-function Confetti() {
-  const pieces = useRef([...Array(40)].map(() => {
-    const dir = Math.random() * 2 - 1;                 // 左右の飛び散り
-    return {
-      vx: dir * (40 + Math.random() * 210),            // 横へ弾ける距離
-      peak: 130 + Math.random() * 250,                 // 上へ弾ける高さ
-      drop: 320 + Math.random() * 340,                 // そのあと落ちる距離
-      rot: 180 + Math.random() * 720,
-      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-      size: 7 + Math.random() * 8,
-      delay: Math.random() * 60,
-      anim: new Animated.Value(0),
-    };
-  })).current;
-  useEffect(() => {
-    Animated.stagger(6, pieces.map((p) =>
-      Animated.timing(p.anim, { toValue: 1, duration: 1300 + Math.random() * 500, delay: p.delay, useNativeDriver: true })
-    )).start();
-  }, []);
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {pieces.map((p, i) => (
-        <Animated.View key={i} style={{
-          position: 'absolute', left: '50%', top: '80%',
-          width: p.size, height: p.size * 0.5, backgroundColor: p.color, borderRadius: 2,
-          opacity: p.anim.interpolate({ inputRange: [0, 0.75, 1], outputRange: [1, 1, 0] }),
-          transform: [
-            { translateX: p.anim.interpolate({ inputRange: [0, 1], outputRange: [0, p.vx] }) },
-            { translateY: p.anim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, -p.peak, p.drop] }) },
-            { rotate: p.anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', p.rot + 'deg'] }) },
-          ],
-        }} />
-      ))}
-    </View>
-  );
-}
 
 /* ---------- 写真前面タイル（ホーム/ビジョン共通） ---------- */
 function PhotoTile({ item, onPress, height = 180 }) {
