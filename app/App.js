@@ -19,7 +19,7 @@ import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { parseGps, coordsMapsUrl } from './geo';
 import { parseSnsLink, snsMeta } from './sns';
-import { PLANT, stageForCount, growthProgress, coinsForCount } from './garden';
+import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_800ExtraBold, Poppins_900Black } from '@expo-google-fonts/poppins';
@@ -46,6 +46,7 @@ const THEME_KEY = 'wannalog_theme';
 const PROFILE_KEY = 'wannalog_profile';
 const VISION_KEY = 'wannalog_vision_v1';
 const VISION_TITLE_KEY = 'wannalog_vision_title';
+const GARDEN_KEY = 'wannalog_garden_v1';
 
 // ビジョンボードは「したい」とは別データ。テンプレの枠に写真を嵌める。
 const VISION_SEED = [
@@ -125,6 +126,7 @@ export default function App() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [giftOpen, setGiftOpen] = useState(false);
   const [gardenOpen, setGardenOpen] = useState(false);
+  const [garden, setGarden] = useState({ points: 0, waterDate: '', waterCount: 0 });
   const [celebrating, setCelebrating] = useState(false);
   const [praise, setPraise] = useState(PRAISE[0]);
   const celebAnim = useRef(new Animated.Value(0)).current;
@@ -145,6 +147,7 @@ export default function App() {
       const vs = await AsyncStorage.getItem(VISION_KEY);
       if (vs) setVisionSlots(JSON.parse(vs)); else AsyncStorage.setItem(VISION_KEY, JSON.stringify(VISION_SEED));
       const vt = await AsyncStorage.getItem(VISION_TITLE_KEY); if (vt) setVisionTitle(vt);
+      const g = await AsyncStorage.getItem(GARDEN_KEY); if (g) setGarden(JSON.parse(g));
     })();
   }, []);
 
@@ -181,6 +184,16 @@ export default function App() {
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
+  // 箱庭：成長ポイント・水やり回数を保存
+  async function persistGarden(next) { setGarden(next); await AsyncStorage.setItem(GARDEN_KEY, JSON.stringify(next)); }
+  async function waterPlant() {
+    const key = todayKey();
+    const used = garden.waterDate === key ? (garden.waterCount || 0) : 0;
+    if (used >= WATER_MAX) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); return; }
+    await persistGarden({ ...garden, points: (garden.points || 0) + 1, waterDate: key, waterCount: used + 1 });
+    Haptics.selectionAsync();
+  }
+
   async function addItem(title, category, due, imageUri, heat, reminder, link) {
     const rem = reminder || { remind: '3days' };
     const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
@@ -202,6 +215,7 @@ export default function App() {
 
   async function markDone(id) {
     await persist(items.map((it) => (it.id === id ? { ...it, doneAt: Date.now() } : it)));
+    await persistGarden({ ...garden, points: (garden.points || 0) + ACHIEVE_GAIN }); // 達成ボーナスで植物が大きく育つ
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); runCelebration();
   }
   async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
@@ -246,7 +260,7 @@ export default function App() {
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onLabel={setVisionLabel} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
-            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
+            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
           </>
         )}
@@ -256,7 +270,7 @@ export default function App() {
 
         <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
 
-        <GardenModal visible={gardenOpen} onClose={() => setGardenOpen(false)} doneCount={doneCount} />
+        <GardenModal visible={gardenOpen} onClose={() => setGardenOpen(false)} garden={garden} doneCount={doneCount} onWater={waterPlant} />
 
         {celebrating && (
           <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) }]}>
@@ -472,11 +486,11 @@ function NotifyTab({ items, onOpen }) {
 /* ---------- マイページ ---------- */
 const DAY_MS = 86400000;
 function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
-function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
+function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
-  const plantStage = growthProgress(doneCount);
+  const plantStage = growthProgress((garden && garden.points) || 0);
   const total = items.length;
   const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
@@ -874,48 +888,98 @@ const PLANT_STAGE_ART = [
   { icon: 'flower-outline', size: 76, color: '#7FE0A6', glow: 0.30 }, // Lv4 成木
   { icon: 'sparkles', size: 92, color: '#F2B544', glow: 0.42 }, // Lv5 幻想樹
 ];
-function GardenModal({ visible, onClose, doneCount }) {
+function GardenModal({ visible, onClose, garden, doneCount, onWater }) {
   const t = useTheme(); const s = useStyles();
-  const p = growthProgress(doneCount);
+  const period = dayPeriod();
+  const points = (garden && garden.points) || 0;
+  const p = growthProgress(points);
   const coins = coinsForCount(doneCount);
+  const left = remainingWaterToday(garden);
   const art = PLANT_STAGE_ART[p.lv - 1];
+  const [showDex, setShowDex] = useState(false);
   const pop = useRef(new Animated.Value(0)).current;
+  const sway = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (visible) { pop.setValue(0); Animated.spring(pop, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start(); }
   }, [visible, p.lv]);
+  function water() {
+    onWater();
+    sway.setValue(0);
+    Animated.sequence([
+      Animated.timing(sway, { toValue: 1, duration: 140, useNativeDriver: true }),
+      Animated.spring(sway, { toValue: 0, friction: 3, useNativeDriver: true }),
+    ]).start();
+  }
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={s.safe}>
         <View style={s.detailBar}>
           <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
-          <View style={s.coinPill}><Ionicons name="ellipse" size={12} color={t.gold} /><Text style={s.coinText}>{coins}</Text></View>
+          <View style={s.gardenTopRight}>
+            <View style={s.coinPill}><Ionicons name="ellipse" size={12} color={t.gold} /><Text style={s.coinText}>{coins}</Text></View>
+          </View>
         </View>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
           <Text style={s.giftHero}>箱庭</Text>
-          <Text style={s.giftLead}>叶えるたびに、植物が育ちます。{'\n'}いまの相棒は「{PLANT.name}（{PLANT.reading}）」。</Text>
+          <Text style={s.giftLead}>{period.greet}。{PLANT.name}（{PLANT.reading}）の様子を見にきました。</Text>
 
-          {/* 植物ステージ（仮アート） */}
-          <View style={s.plantStage}>
-            <Animated.View style={[s.plantGlow, { backgroundColor: art.color, opacity: art.glow, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }] }]} />
-            <Animated.View style={{ transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }}>
-              <Ionicons name={art.icon} size={art.size} color={art.color} />
+          {/* お部屋（仮ドット絵：窓の外＝朝昼夜／床に植物を据え置き） */}
+          <View style={s.room}>
+            <View style={[s.roomWindow, { backgroundColor: period.sky }]}>
+              <Ionicons name={period.icon} size={26} color={period.key === 'night' ? '#FCE9A0' : '#FFD66B'} />
+            </View>
+            <View style={s.roomFloor} />
+            <Animated.View style={[s.roomPlant, { transform: [{ rotate: sway.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-6deg'] }) }] }]}>
+              <Animated.View style={[s.plantGlow, { backgroundColor: art.color, opacity: art.glow, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }] }]} />
+              <Animated.View style={{ transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }}>
+                <Ionicons name={art.icon} size={art.size} color={art.color} />
+              </Animated.View>
+              <View style={s.plantPot} />
             </Animated.View>
-            <View style={s.plantPot} />
-            <Text style={s.plantLv}>Lv.{p.lv}　{p.label}</Text>
+            <View style={s.roomLv}><Text style={s.roomLvText}>Lv.{p.lv}　{p.label}</Text></View>
           </View>
 
           {/* 進捗 */}
           {p.maxed ? (
-            <Text style={s.plantMsg}>幻想樹まで育ちました。{'\n'}コレクション（図鑑・お部屋）は近日追加します。</Text>
+            <Text style={s.plantMsg}>幻想樹まで育ちました。{'\n'}（次の植物・お部屋づくりは近日追加）</Text>
           ) : (
             <View style={s.plantProgWrap}>
               <View style={s.plantProgTrack}><View style={[s.plantProgFill, { width: `${Math.round(p.ratio * 100)}%` }]} /></View>
-              <Text style={s.plantMsg}>あと <Text style={{ color: t.accent, fontWeight: '900' }}>{p.remaining}</Text> 回 叶えると「{p.nextLabel}」へ。</Text>
+              <Text style={s.plantMsg}>「{p.nextLabel}」まで あと <Text style={{ color: t.accent, fontWeight: '900' }}>{p.remaining}</Text></Text>
             </View>
           )}
 
-          <Text style={s.plantDesc}>{PLANT.desc}</Text>
-          <Text style={s.plantNote}>※ 今は仮の絵です。きれいなイラストに差し替え予定。</Text>
+          {/* 水やり＋図鑑 */}
+          <View style={s.gardenBtnRow}>
+            <Pressable onPress={water} disabled={left <= 0}
+              style={({ pressed }) => [s.waterBtn, left <= 0 && s.waterBtnOff, pressed && left > 0 && s.doneBtnPressed]}>
+              <Ionicons name="water" size={18} color={left > 0 ? '#fff' : t.sub} />
+              <Text style={[s.waterBtnText, left <= 0 && { color: t.sub }]}>{left > 0 ? `水やり（残り${left}/${WATER_MAX}）` : 'また明日'}</Text>
+            </Pressable>
+            <Pressable onPress={() => setShowDex((v) => !v)} style={s.dexBtn}>
+              <Ionicons name="book-outline" size={18} color={t.accent} />
+              <Text style={s.dexBtnText}>図鑑</Text>
+            </Pressable>
+          </View>
+
+          {showDex && (
+            <View style={s.dex}>
+              {PLANT.stages.map((st) => {
+                const unlocked = p.lv >= st.lv; const a = PLANT_STAGE_ART[st.lv - 1];
+                return (
+                  <View key={st.lv} style={s.dexItem}>
+                    <View style={[s.dexThumb, !unlocked && { opacity: 0.3 }]}>
+                      <Ionicons name={unlocked ? a.icon : 'lock-closed'} size={unlocked ? 22 : 15} color={unlocked ? a.color : t.sub} />
+                    </View>
+                    <Text style={s.dexLabel}>{unlocked ? st.label : '???'}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          <Text style={s.plantMsg2}>叶えると <Text style={{ color: t.accent, fontWeight: '900' }}>＋{ACHIEVE_GAIN}</Text>、水やり1回で ＋1 育ちます。</Text>
+          <Text style={s.plantNote}>※ いまは仮の絵です。ドット絵に差し替え予定（お部屋・インテリアも今後）。</Text>
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -1157,18 +1221,34 @@ function makeStyles(t) {
     giftDisclaimer: { fontSize: 11, color: t.sub, marginTop: 20, lineHeight: 16 },
 
     // 箱庭
+    gardenTopRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     coinPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
     coinText: { color: t.gold, fontWeight: '900', fontSize: 14 },
-    plantStage: { marginTop: 18, height: 240, borderRadius: 24, backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-    plantGlow: { position: 'absolute', width: 200, height: 200, borderRadius: 100 },
-    plantPot: { width: 120, height: 26, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, borderTopLeftRadius: 6, borderTopRightRadius: 6, backgroundColor: '#7A5A3C', marginTop: 10 },
-    plantLv: { marginTop: 14, fontSize: 17, fontWeight: '900', color: t.text, letterSpacing: 0.5 },
+    // お部屋（仮）：壁＋窓（朝昼夜）＋床＋据え置き植物
+    room: { marginTop: 18, height: 300, borderRadius: 24, backgroundColor: t.surface2, overflow: 'hidden' },
+    roomWindow: { position: 'absolute', top: 22, alignSelf: 'center', width: '64%', height: 104, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: 'rgba(0,0,0,0.18)' },
+    roomFloor: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70, backgroundColor: '#3B2F23' },
+    roomPlant: { position: 'absolute', bottom: 52, alignSelf: 'center', alignItems: 'center' },
+    roomLv: { position: 'absolute', top: 12, left: 14, backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+    roomLvText: { color: '#fff', fontWeight: '900', fontSize: 13 },
+    plantGlow: { position: 'absolute', width: 180, height: 180, borderRadius: 90 },
+    plantPot: { width: 110, height: 24, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, borderTopLeftRadius: 6, borderTopRightRadius: 6, backgroundColor: '#7A5A3C', marginTop: 8 },
     plantProgWrap: { marginTop: 18 },
     plantProgTrack: { height: 12, borderRadius: 999, backgroundColor: t.surface2, overflow: 'hidden' },
     plantProgFill: { height: '100%', borderRadius: 999, backgroundColor: t.accent, minWidth: 8 },
     plantMsg: { fontSize: 14, color: t.text, marginTop: 12, lineHeight: 21, textAlign: 'center' },
-    plantDesc: { fontSize: 13, color: t.sub, marginTop: 18, lineHeight: 20, textAlign: 'center' },
-    plantNote: { fontSize: 11, color: t.sub, marginTop: 16, textAlign: 'center' },
+    plantMsg2: { fontSize: 13, color: t.sub, marginTop: 18, lineHeight: 20, textAlign: 'center' },
+    plantNote: { fontSize: 11, color: t.sub, marginTop: 12, textAlign: 'center' },
+    gardenBtnRow: { flexDirection: 'row', gap: 12, marginTop: 20 },
+    waterBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3A8DDE', borderRadius: 16, paddingVertical: 16 },
+    waterBtnOff: { backgroundColor: t.surface },
+    waterBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
+    dexBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: t.surface, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 18, borderWidth: 1, borderColor: t.line },
+    dexBtnText: { color: t.accent, fontWeight: '800', fontSize: 14 },
+    dex: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, backgroundColor: t.surface, borderRadius: 16, padding: 14 },
+    dexItem: { alignItems: 'center', gap: 6, flex: 1 },
+    dexThumb: { width: 46, height: 46, borderRadius: 12, backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' },
+    dexLabel: { fontSize: 11, color: t.sub, fontWeight: '700' },
 
     statCard: { margin: 20, marginTop: 16, backgroundColor: t.surface, borderRadius: 22, paddingVertical: 24, paddingHorizontal: 20, alignItems: 'center' },
     statTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
