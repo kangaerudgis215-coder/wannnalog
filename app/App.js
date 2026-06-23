@@ -19,6 +19,7 @@ import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { parseGps, coordsMapsUrl } from './geo';
 import { parseSnsLink, snsMeta } from './sns';
+import { PLANT, stageForCount, growthProgress, coinsForCount } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_800ExtraBold, Poppins_900Black } from '@expo-google-fonts/poppins';
@@ -123,6 +124,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [giftOpen, setGiftOpen] = useState(false);
+  const [gardenOpen, setGardenOpen] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [praise, setPraise] = useState(PRAISE[0]);
   const celebAnim = useRef(new Animated.Value(0)).current;
@@ -244,7 +246,7 @@ export default function App() {
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onLabel={setVisionLabel} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
-            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} />}
+            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
           </>
         )}
@@ -253,6 +255,8 @@ export default function App() {
           onSave={(title, category, due, imageUri, heat, reminder, link) => { addItem(title, category, due, imageUri, heat, reminder, link); setSaveOpen(false); }} />
 
         <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
+
+        <GardenModal visible={gardenOpen} onClose={() => setGardenOpen(false)} doneCount={doneCount} />
 
         {celebrating && (
           <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) }]}>
@@ -468,10 +472,11 @@ function NotifyTab({ items, onOpen }) {
 /* ---------- マイページ ---------- */
 const DAY_MS = 86400000;
 function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
-function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen, onOpenGift }) {
+function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
+  const plantStage = growthProgress(doneCount);
   const total = items.length;
   const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
@@ -510,6 +515,16 @@ function MyPageTab({ items, doneCount, name, onName, mode, onToggleMode, onOpen,
         </View>
         <Switch value={mode === 'dark'} onValueChange={onToggleMode} trackColor={{ true: t.accent }} />
       </View>
+
+      {/* 箱庭（達成で植物を育てる） */}
+      <Pressable style={s.giftCard} onPress={onOpenGarden}>
+        <View style={[s.giftIcon, { backgroundColor: '#2E7D52' }]}><Ionicons name="leaf" size={22} color="#fff" /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.giftCardTitle}>箱庭</Text>
+          <Text style={s.giftCardSub}>{`${PLANT.name}｜Lv.${plantStage.lv} ${plantStage.label}`}{plantStage.maxed ? '（完成！）' : `・あと${plantStage.remaining}回で成長`}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={t.sub} />
+      </Pressable>
 
       {/* ギフトページ（ほしいものリストの共有） */}
       <Pressable style={s.giftCard} onPress={onOpenGift}>
@@ -850,6 +865,63 @@ function GiftModal({ visible, onClose, items, name, onOpen }) {
   );
 }
 
+/* ---------- 箱庭（達成で植物を育てる・G1最小ループ） ---------- */
+// 仮アート：段階ごとにアイコン＋大きさ＋色を変える。将来 同梱PNG に差し替え予定。
+const PLANT_STAGE_ART = [
+  { icon: 'ellipse', size: 26, color: '#C9A27A', glow: 0.10 }, // Lv1 種
+  { icon: 'leaf-outline', size: 44, color: '#8AD6A8', glow: 0.16 }, // Lv2 双葉
+  { icon: 'leaf', size: 60, color: '#46B36B', glow: 0.22 }, // Lv3 幼木
+  { icon: 'flower-outline', size: 76, color: '#7FE0A6', glow: 0.30 }, // Lv4 成木
+  { icon: 'sparkles', size: 92, color: '#F2B544', glow: 0.42 }, // Lv5 幻想樹
+];
+function GardenModal({ visible, onClose, doneCount }) {
+  const t = useTheme(); const s = useStyles();
+  const p = growthProgress(doneCount);
+  const coins = coinsForCount(doneCount);
+  const art = PLANT_STAGE_ART[p.lv - 1];
+  const pop = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (visible) { pop.setValue(0); Animated.spring(pop, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start(); }
+  }, [visible, p.lv]);
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={s.safe}>
+        <View style={s.detailBar}>
+          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+          <View style={s.coinPill}><Ionicons name="ellipse" size={12} color={t.gold} /><Text style={s.coinText}>{coins}</Text></View>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <Text style={s.giftHero}>箱庭</Text>
+          <Text style={s.giftLead}>叶えるたびに、植物が育ちます。{'\n'}いまの相棒は「{PLANT.name}（{PLANT.reading}）」。</Text>
+
+          {/* 植物ステージ（仮アート） */}
+          <View style={s.plantStage}>
+            <Animated.View style={[s.plantGlow, { backgroundColor: art.color, opacity: art.glow, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }] }]} />
+            <Animated.View style={{ transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }}>
+              <Ionicons name={art.icon} size={art.size} color={art.color} />
+            </Animated.View>
+            <View style={s.plantPot} />
+            <Text style={s.plantLv}>Lv.{p.lv}　{p.label}</Text>
+          </View>
+
+          {/* 進捗 */}
+          {p.maxed ? (
+            <Text style={s.plantMsg}>幻想樹まで育ちました。{'\n'}コレクション（図鑑・お部屋）は近日追加します。</Text>
+          ) : (
+            <View style={s.plantProgWrap}>
+              <View style={s.plantProgTrack}><View style={[s.plantProgFill, { width: `${Math.round(p.ratio * 100)}%` }]} /></View>
+              <Text style={s.plantMsg}>あと <Text style={{ color: t.accent, fontWeight: '900' }}>{p.remaining}</Text> 回 叶えると「{p.nextLabel}」へ。</Text>
+            </View>
+          )}
+
+          <Text style={s.plantDesc}>{PLANT.desc}</Text>
+          <Text style={s.plantNote}>※ 今は仮の絵です。きれいなイラストに差し替え予定。</Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 /* ---------- 詳細 ---------- */
 function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) {
   const t = useTheme(); const s = useStyles();
@@ -1083,6 +1155,20 @@ function makeStyles(t) {
     giftBuy: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, alignSelf: 'flex-start', backgroundColor: t.bg, borderWidth: 1, borderColor: t.line, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
     giftBuyText: { color: t.accent, fontWeight: '700', fontSize: 12.5 },
     giftDisclaimer: { fontSize: 11, color: t.sub, marginTop: 20, lineHeight: 16 },
+
+    // 箱庭
+    coinPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+    coinText: { color: t.gold, fontWeight: '900', fontSize: 14 },
+    plantStage: { marginTop: 18, height: 240, borderRadius: 24, backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    plantGlow: { position: 'absolute', width: 200, height: 200, borderRadius: 100 },
+    plantPot: { width: 120, height: 26, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, borderTopLeftRadius: 6, borderTopRightRadius: 6, backgroundColor: '#7A5A3C', marginTop: 10 },
+    plantLv: { marginTop: 14, fontSize: 17, fontWeight: '900', color: t.text, letterSpacing: 0.5 },
+    plantProgWrap: { marginTop: 18 },
+    plantProgTrack: { height: 12, borderRadius: 999, backgroundColor: t.surface2, overflow: 'hidden' },
+    plantProgFill: { height: '100%', borderRadius: 999, backgroundColor: t.accent, minWidth: 8 },
+    plantMsg: { fontSize: 14, color: t.text, marginTop: 12, lineHeight: 21, textAlign: 'center' },
+    plantDesc: { fontSize: 13, color: t.sub, marginTop: 18, lineHeight: 20, textAlign: 'center' },
+    plantNote: { fontSize: 11, color: t.sub, marginTop: 16, textAlign: 'center' },
 
     statCard: { margin: 20, marginTop: 16, backgroundColor: t.surface, borderRadius: 22, paddingVertical: 24, paddingHorizontal: 20, alignItems: 'center' },
     statTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
