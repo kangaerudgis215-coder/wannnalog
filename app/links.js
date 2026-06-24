@@ -14,6 +14,12 @@ export function actionLinks(categoryKey, title) {
         { icon: 'map', label: '地図で店を探す', url: maps(t) },
         { icon: 'search', label: '食べログで探す', url: google(t + ' 食べログ') },
       ];
+    case 'cook':
+      return [
+        { icon: 'restaurant', label: 'クックパッドで探す', url: `https://cookpad.com/search/${enc(t)}` },
+        { icon: 'book', label: '楽天レシピで探す', url: `https://recipe.rakuten.co.jp/search/${enc(t)}/` },
+        { icon: 'search', label: 'レシピをネットで調べる', url: google(t + ' レシピ 作り方') },
+      ];
     case 'go':
       return [
         { icon: 'map', label: '地図で探す', url: maps(t) },
@@ -36,6 +42,16 @@ export function actionLinks(categoryKey, title) {
         { icon: 'search', label: 'ネットで調べる', url: google(t) },
       ];
   }
+}
+
+// 開くブラウザを選ぶ：'safari'（既定）はそのまま、'chrome' は Chrome のURLスキームに変換。
+// iOSの Google Chrome は https→googlechromes:// / http→googlechrome:// で開ける。
+// Chrome 未インストールのときは呼び出し側で元URLにフォールバックする。
+export function browserUrl(url, browser) {
+  if (browser !== 'chrome' || typeof url !== 'string') return url;
+  if (url.startsWith('https://')) return 'googlechromes://' + url.slice('https://'.length);
+  if (url.startsWith('http://')) return 'googlechrome://' + url.slice('http://'.length);
+  return url;
 }
 
 // 期限タグの表示名（純粋関数）

@@ -37,6 +37,7 @@ export const palettes = {
 // カテゴリ：Ionicons のアイコン名 + 色（絵文字は廃止）
 export const CATEGORIES = [
   { key: 'eat', label: '食べたい', icon: 'restaurant', color: '#FF6B4A' },
+  { key: 'cook', label: '作りたい', icon: 'flame', color: '#2BB3A3' }, // クッキング（料理を作りたい）
   { key: 'go', label: '行きたい', icon: 'location', color: '#3A8DDE' },
   { key: 'see', label: '見たい', icon: 'film', color: '#7C5CE7' },
   { key: 'want', label: '欲しい', icon: 'pricetag', color: '#C86DD7' },
@@ -48,10 +49,23 @@ export function getCategory(key) {
   return CATEGORIES.find((c) => c.key === key) || CATEGORIES[0];
 }
 
+// 「誰と」タグ：プライベートな相手をスタイリッシュなアイコンで（任意・1つ選ぶ）
+export const WITH_OPTIONS = [
+  { key: 'solo', label: 'ひとり', icon: 'person' },
+  { key: 'partner', label: '恋人と', icon: 'heart' },
+  { key: 'friend', label: '友達と', icon: 'people' },
+  { key: 'family', label: '家族と', icon: 'home' },
+];
+
+export function getWith(key) {
+  return WITH_OPTIONS.find((w) => w.key === key) || null;
+}
+
 // 通知の文面（カテゴリごとに“わくわく再点火”のトーン。絵文字なし）
 export function reminderBody(categoryKey) {
   switch (categoryKey) {
     case 'eat': return 'まだ食べてないね。今週末どう？';
+    case 'cook': return 'あの料理、作ってみない？レシピを見てみる？';
     case 'go': return 'まだ行けてないね。次の休み、行っちゃう？';
     case 'see': return 'まだ観てないね。今夜どう？';
     case 'want': return 'まだ手に入れてないね。ちょっと見てみる？';

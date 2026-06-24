@@ -13,8 +13,8 @@ import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 
-import { palettes, CATEGORIES, getCategory, reminderBody } from './theme';
-import { actionLinks, dueLabel } from './links';
+import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith } from './theme';
+import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { parseGps, coordsMapsUrl } from './geo';
@@ -44,6 +44,8 @@ function baseFamily(weight) {
 const STORAGE_KEY = 'wannalog_items_v1';
 const THEME_KEY = 'wannalog_theme';
 const PROFILE_KEY = 'wannalog_profile';
+const PROFILE_PHOTO_KEY = 'wannalog_profile_photo';
+const BROWSER_KEY = 'wannalog_browser'; // 'safari'（既定）/ 'chrome'
 const VISION_KEY = 'wannalog_vision_v1';
 const VISION_TITLE_KEY = 'wannalog_vision_title';
 const GARDEN_KEY = 'wannalog_garden_v1';
@@ -119,6 +121,8 @@ async function scheduleInSeconds(item, seconds) {
 export default function App() {
   const [mode, setMode] = useState('dark');
   const [profileName, setProfileName] = useState('あなた');
+  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [browser, setBrowser] = useState('safari');
   const [items, setItems] = useState([]);
   const [visionSlots, setVisionSlots] = useState(VISION_SEED);
   const [visionTitle, setVisionTitle] = useState('2026 VISION');
@@ -146,6 +150,8 @@ export default function App() {
       if (raw) setItems(JSON.parse(raw)); else { setItems(SEED); AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SEED)); }
       const m = await AsyncStorage.getItem(THEME_KEY); if (m) setMode(m);
       const p = await AsyncStorage.getItem(PROFILE_KEY); if (p) setProfileName(p);
+      const pp = await AsyncStorage.getItem(PROFILE_PHOTO_KEY); if (pp) setProfilePhoto(pp);
+      const br = await AsyncStorage.getItem(BROWSER_KEY); if (br) setBrowser(br);
       const vs = await AsyncStorage.getItem(VISION_KEY);
       if (vs) setVisionSlots(JSON.parse(vs)); else AsyncStorage.setItem(VISION_KEY, JSON.stringify(VISION_SEED));
       const vt = await AsyncStorage.getItem(VISION_TITLE_KEY); if (vt) setVisionTitle(vt);
@@ -169,6 +175,22 @@ export default function App() {
     Haptics.selectionAsync();
   }
   async function saveName(name) { setProfileName(name); await AsyncStorage.setItem(PROFILE_KEY, name); }
+  async function pickProfilePhoto() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.6 });
+    if (!res.canceled) { setProfilePhoto(res.assets[0].uri); await AsyncStorage.setItem(PROFILE_PHOTO_KEY, res.assets[0].uri); Haptics.selectionAsync(); }
+  }
+  async function setBrowserPref(b) { setBrowser(b); await AsyncStorage.setItem(BROWSER_KEY, b); Haptics.selectionAsync(); }
+  // リンクを開く：選んだブラウザ（Chrome/Safari）で開く。Chrome未導入なら元URLにフォールバック。
+  function openInBrowser(url) {
+    if (!url) return;
+    const target = browserUrl(url, browser);
+    Linking.openURL(target).catch(() => {
+      if (target !== url) Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした'));
+      else Alert.alert('リンクを開けませんでした');
+    });
+  }
 
   // ビジョンボード操作（「したい」とは別データ）
   async function persistVision(next) { setVisionSlots(next); await AsyncStorage.setItem(VISION_KEY, JSON.stringify(next)); }
@@ -196,9 +218,10 @@ export default function App() {
     Haptics.selectionAsync();
   }
 
-  async function addItem(title, category, due, imageUri, heat, reminder, link) {
+  async function addItem(data) {
+    const { title, category, due, imageUri, heat, reminder, link, withWho, coords } = data;
     const rem = reminder || { remind: '3days' };
-    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
+    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, withWho: withWho || null, lat: coords?.lat ?? null, lng: coords?.lng ?? null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
     item.notifId = await scheduleReminder(item);
     await persist([item, ...items]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -250,11 +273,12 @@ export default function App() {
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         {selected ? (
           <DetailScreen
-            key={selected.id} item={selected}
+            key={selected.id} item={selected} browser={browser}
             onBack={() => setSelectedId(null)}
             onDone={() => { markDone(selected.id); setSelectedId(null); }}
             onUpdate={(patch) => updateItem(selected.id, patch)}
             onReminder={(reminder) => applyReminder(selected.id, reminder)}
+            onOpenLink={openInBrowser}
             onDelete={() => { deleteItem(selected.id); setSelectedId(null); }}
           />
         ) : (
@@ -262,15 +286,15 @@ export default function App() {
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onLabel={setVisionLabel} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
-            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
+            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
           </>
         )}
 
         <SaveModal visible={saveOpen} onClose={() => setSaveOpen(false)}
-          onSave={(title, category, due, imageUri, heat, reminder, link) => { addItem(title, category, due, imageUri, heat, reminder, link); setSaveOpen(false); }} />
+          onSave={(data) => { addItem(data); setSaveOpen(false); }} />
 
-        <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
+        <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpenLink={openInBrowser} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
 
         <GardenModal visible={gardenOpen} onClose={() => setGardenOpen(false)} garden={garden} doneCount={doneCount} onWater={waterPlant} />
 
@@ -317,6 +341,7 @@ function PhotoTile({ item, onPress, height = 180 }) {
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
+  const w = getWith(item.withWho);
   return (
     <Pressable style={({ pressed }) => [s.tile, { height }, pressed && s.pressed]} onPress={onPress}>
       {item.imageUri
@@ -337,12 +362,19 @@ function PhotoTile({ item, onPress, height = 180 }) {
       <View style={s.tileBottom}>
         <Text style={s.tileTitle} numberOfLines={2}>{item.title}</Text>
         <View style={s.tileMetaRow}>
-          {!done && due ? (
-            <View style={s.tileDueRow}>
-              <Ionicons name="time-outline" size={12} color="#fff" />
-              <Text style={s.tileDue}>{due}まで</Text>
-            </View>
-          ) : <View />}
+          <View style={s.tileMetaLeft}>
+            {w ? (
+              <View style={s.tileWith}>
+                <Ionicons name={w.icon} size={11} color="#fff" />
+              </View>
+            ) : null}
+            {!done && due ? (
+              <View style={s.tileDueRow}>
+                <Ionicons name="time-outline" size={12} color="#fff" />
+                <Text style={s.tileDue}>{due}まで</Text>
+              </View>
+            ) : null}
+          </View>
           <View style={s.tileFlames}>
             {[1, 2, 3].map((n) => (
               <Ionicons key={n} name="flame" size={11} color={n <= (item.heat || 2) ? t.gold : 'rgba(255,255,255,0.32)'} />
@@ -368,7 +400,6 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
         <View style={s.brandRow}>
-          <Ionicons name="sparkles" size={20} color={t.accent} />
           <Text style={s.brand}>WannaLog</Text>
         </View>
         <Text style={s.greet}>叶えた {doneCount}・のこり {activeCount}</Text>
@@ -488,7 +519,7 @@ function NotifyTab({ items, onOpen }) {
 /* ---------- マイページ ---------- */
 const DAY_MS = 86400000;
 function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
-function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
+function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, browser, onBrowser, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
@@ -514,9 +545,14 @@ function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode,
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}><Text style={s.screenTitle}>マイページ</Text></View>
 
-      {/* プロフィール */}
+      {/* プロフィール（写真をタップで設定できる） */}
       <View style={s.profileRow}>
-        <View style={s.avatar}><Ionicons name="person" size={26} color={t.bg} /></View>
+        <Pressable style={s.avatar} onPress={onPickPhoto}>
+          {photoUri
+            ? <Image source={{ uri: photoUri }} style={s.avatarImg} />
+            : <Ionicons name="person" size={26} color={t.bg} />}
+          <View style={s.avatarEdit}><Ionicons name="camera" size={12} color="#fff" /></View>
+        </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={s.profileLabel}>名前</Text>
           <TextInput style={s.nameInput} value={name} onChangeText={onName} placeholder="あなたの名前" placeholderTextColor={t.sub} />
@@ -530,6 +566,21 @@ function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode,
           <Text style={s.settingText}>ダークモード</Text>
         </View>
         <Switch value={mode === 'dark'} onValueChange={onToggleMode} trackColor={{ true: t.accent }} />
+      </View>
+
+      {/* リンクを開くブラウザ（Chrome / Safari） */}
+      <View style={s.settingRow}>
+        <View style={s.settingLeft}>
+          <Ionicons name="globe-outline" size={20} color={t.accent} />
+          <Text style={s.settingText}>リンクを開く</Text>
+        </View>
+        <View style={s.segment}>
+          {[{ k: 'safari', l: 'Safari' }, { k: 'chrome', l: 'Chrome' }].map((b) => (
+            <Pressable key={b.k} onPress={() => onBrowser(b.k)} style={[s.segBtn, browser === b.k && s.segBtnOn]}>
+              <Text style={[s.segText, browser === b.k && s.segTextOn]}>{b.l}</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       {/* 箱庭（将来用にステイ：GARDEN_ENABLED で表示切替） */}
@@ -736,6 +787,8 @@ function SaveModal({ visible, onClose, onSave }) {
   const [category, setCategory] = useState('eat');
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
+  const [coords, setCoords] = useState(null); // 写真から読み取った撮影場所
+  const [withWho, setWithWho] = useState(null); // 誰と
   const [link, setLink] = useState('');
   const [heat, setHeat] = useState(2);
   const [reminder, setReminder] = useState({ remind: '3days' });
@@ -750,16 +803,28 @@ function SaveModal({ visible, onClose, onSave }) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
-    if (!res.canceled) setImage(res.assets[0].uri);
+    if (!res.canceled) { setImage(res.assets[0].uri); setCoords(null); }
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  // 写真から撮影場所(GPS)を読む：切り抜き無し＋EXIFありで取り込む
+  async function pickWithLocation() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, exif: true, quality: 0.6 });
+    if (res.canceled) return;
+    const asset = res.assets[0];
+    setImage(asset.uri);
+    const gps = parseGps(asset.exif);
+    if (gps) { setCoords(gps); Alert.alert('場所を読み取りました', '保存すると「撮影場所を地図で開く」から開けます。'); }
+    else { setCoords(null); Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
+  }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
     const finalImage = image || (sns ? sns.thumbnail : null);
     const linkInfo = sns
       ? { url: sns.url, platform: sns.platform }
       : (link.trim() ? { url: link.trim(), platform: null } : null);
-    onSave(title.trim(), category, due, finalImage, heat, reminder, linkInfo); resetForm();
+    onSave({ title: title.trim(), category, due, imageUri: finalImage, heat, reminder, link: linkInfo, withWho, coords }); resetForm();
   }
 
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
@@ -790,7 +855,22 @@ function SaveModal({ visible, onClose, onSave }) {
               {previewUri ? <Image source={{ uri: previewUri }} style={s.photoPreview} />
                 : <View style={s.photoPickInner}><Ionicons name="image-outline" size={22} color={t.sub} /><Text style={s.photoPickText}>写真を選ぶ（任意・切り取りできます）</Text></View>}
             </Pressable>
-            {image && <Pressable onPress={() => setImage(null)}><Text style={s.removeText}>写真を外す</Text></Pressable>}
+            <View style={s.photoSubRow}>
+              <Pressable style={s.photoSubBtn} onPress={pickWithLocation}>
+                <Ionicons name="location-outline" size={15} color={t.accent} />
+                <Text style={s.photoSubText}>写真から場所を読む</Text>
+              </Pressable>
+              {image && <Pressable style={s.photoSubBtn} onPress={() => { setImage(null); setCoords(null); }}>
+                <Ionicons name="close" size={15} color="#E5484D" />
+                <Text style={[s.photoSubText, { color: '#E5484D' }]}>写真を外す</Text>
+              </Pressable>}
+            </View>
+            {coords && (
+              <View style={s.snsDetected}>
+                <Ionicons name="location" size={15} color={t.accent} />
+                <Text style={s.snsDetectedText}>撮影場所を読み取りました（地図で開けます）</Text>
+              </View>
+            )}
 
             <Text style={s.label}>カテゴリ</Text>
             <View style={s.catWrap}>
@@ -800,6 +880,19 @@ function SaveModal({ visible, onClose, onSave }) {
                   <Text style={[s.catChipText, category === c.key && { color: '#fff' }]}>{c.label}</Text>
                 </Pressable>
               ))}
+            </View>
+
+            <Text style={s.label}>誰と（任意）</Text>
+            <View style={s.catWrap}>
+              {WITH_OPTIONS.map((wo) => {
+                const on = withWho === wo.key;
+                return (
+                  <Pressable key={wo.key} onPress={() => setWithWho(on ? null : wo.key)} style={optChip(on, t.accent)}>
+                    <Ionicons name={wo.icon} size={13} color={on ? '#fff' : t.sub} />
+                    <Text style={[s.catChipText, on && { color: '#fff' }]}>{wo.label}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
             <Text style={s.label}>熱量（本気度）</Text>
@@ -836,7 +929,7 @@ function SaveModal({ visible, onClose, onSave }) {
 /* ---------- ギフトページ（プレビュー＆共有） ---------- */
 // 「ギフトに公開」した“ほしい”を、友だちに見せる体で表示。共有は端末標準の共有シート。
 // ここはアプリ内なので商品リンクは“ただの検索リンク”（アフィリ化は将来のWebページ側でのみ）。
-function GiftModal({ visible, onClose, items, name, onOpen }) {
+function GiftModal({ visible, onClose, items, name, onOpenLink, onOpen }) {
   const t = useTheme(); const s = useStyles();
   const list = items.filter((it) => it.isPublic && !it.doneAt);
   async function share() {
@@ -868,7 +961,7 @@ function GiftModal({ visible, onClose, items, name, onOpen }) {
                 </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text style={s.giftRowTitle} numberOfLines={2}>{item.title}</Text>
-                  <Pressable style={s.giftBuy} onPress={() => link && Linking.openURL(link.url).catch(() => {})}>
+                  <Pressable style={s.giftBuy} onPress={() => link && onOpenLink(link.url)}>
                     <Ionicons name="bag-handle-outline" size={14} color={t.accent} />
                     <Text style={s.giftBuyText}>{link ? link.label : '見てみる'}</Text>
                   </Pressable>
@@ -991,12 +1084,13 @@ function GardenModal({ visible, onClose, garden, doneCount, onWater }) {
 }
 
 /* ---------- 詳細 ---------- */
-function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) {
+function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onOpenLink, onDelete }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
   const heat = item.heat || 2;
+  const w = getWith(item.withWho);
   const links = [
     ...(item.sourceUrl ? [{ icon: snsMeta(item.sourcePlatform).icon, label: `${snsMeta(item.sourcePlatform).label}で開く`, url: item.sourceUrl }] : []),
     ...(item.lat != null ? [{ icon: 'location', label: '撮影場所を地図で開く', url: coordsMapsUrl(item.lat, item.lng) }] : []),
@@ -1004,10 +1098,11 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
   ];
   const [title, setTitle] = useState(item.title);
   const [memo, setMemo] = useState(item.memo || '');
+  const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(false);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
-  function openLink(url) { Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした')); }
+  const openLink = onOpenLink;
   function confirmDelete() {
     Alert.alert('削除しますか？', 'この「したい」を削除します。元に戻せません。', [
       { text: 'キャンセル', style: 'cancel' }, { text: '削除', style: 'destructive', onPress: onDelete },
@@ -1074,6 +1169,19 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
               ))}
             </View>
 
+            <Text style={s.sectionLabel}>誰と（任意）</Text>
+            <View style={s.catWrap}>
+              {WITH_OPTIONS.map((wo) => {
+                const on = item.withWho === wo.key;
+                return (
+                  <Pressable key={wo.key} onPress={() => onUpdate({ withWho: on ? null : wo.key })} style={optChip(on, t.accent)}>
+                    <Ionicons name={wo.icon} size={13} color={on ? '#fff' : t.sub} />
+                    <Text style={[s.catChipText, on && { color: '#fff' }]}>{wo.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
             <Text style={s.sectionLabel}>熱量（本気度）</Text>
             <View style={s.catWrap}>
               {HEAT_OPTIONS.map((h) => (
@@ -1101,6 +1209,14 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
             <Text style={s.sectionLabel}>メモ</Text>
             <TextInput style={s.memoInput} value={memo} onChangeText={(v) => { setMemo(v); onUpdate({ memo: v }); }} placeholder="ひとことメモ（任意）" placeholderTextColor={t.sub} multiline />
 
+            {item.category === 'cook' && (
+              <>
+                <Text style={s.sectionLabel}>レシピ（コピペOK）</Text>
+                <TextInput style={s.recipeInput} value={recipe} onChangeText={(v) => { setRecipe(v); onUpdate({ recipe: v }); }}
+                  placeholder="レシピのURLや材料・手順を貼り付け（任意）" placeholderTextColor={t.sub} multiline />
+              </>
+            )}
+
             <View style={s.giftToggleRow}>
               <View style={s.settingLeft}>
                 <Ionicons name="gift-outline" size={18} color={t.accent} />
@@ -1115,11 +1231,18 @@ function DetailScreen({ item, onBack, onDone, onUpdate, onReminder, onDelete }) 
             <View style={s.summaryRow}>
               <View style={[s.pill, { backgroundColor: cat.color }]}><Ionicons name={cat.icon} size={13} color="#fff" /><Text style={s.pillTextOn}>{cat.label}</Text></View>
               <View style={s.pill}><Ionicons name="flame" size={13} color={t.accent} /><Text style={s.pillText}>{heatLabel(heat)}</Text></View>
+              {w ? <View style={s.pill}><Ionicons name={w.icon} size={13} color={t.accent} /><Text style={s.pillText}>{w.label}</Text></View> : null}
               {due ? <View style={s.pill}><Ionicons name="time-outline" size={13} color={t.sub} /><Text style={s.pillText}>{due}まで</Text></View> : null}
               <View style={s.pill}><Ionicons name="notifications-outline" size={13} color={t.sub} /><Text style={s.pillText}>{remindSummary(item)}</Text></View>
               {item.isPublic ? <View style={[s.pill, { backgroundColor: t.accent }]}><Ionicons name="gift" size={13} color="#fff" /><Text style={s.pillTextOn}>ギフト公開中</Text></View> : null}
             </View>
             {memo ? <Text style={s.memoText}>{memo}</Text> : null}
+            {item.category === 'cook' && item.recipe ? (
+              <View style={s.recipeBox}>
+                <Text style={s.recipeBoxTitle}>レシピ</Text>
+                <Text style={s.recipeBoxText} selectable>{item.recipe}</Text>
+              </View>
+            ) : null}
           </>
         )}
 
@@ -1179,14 +1302,16 @@ function makeStyles(t) {
     // 写真前面タイル
     tile: { borderRadius: 20, overflow: 'hidden', justifyContent: 'flex-end', backgroundColor: t.surface },
     tileImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-    tileShade: { ...StyleSheet.absoluteFillObject, top: '66%', backgroundColor: 'rgba(0,0,0,0.5)' },
+    tileShade: { ...StyleSheet.absoluteFillObject, top: '48%', backgroundColor: 'rgba(0,0,0,0.5)' },
     tileTag: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
     tileTagText: { color: '#fff', fontSize: 11, fontWeight: '800' },
     tileDone: { position: 'absolute', right: 10, top: 10 },
     tileSns: { position: 'absolute', right: 10, top: 10, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
     tileBottom: { padding: 12 },
-    tileTitle: { color: '#fff', fontSize: 14.5, fontWeight: '800', lineHeight: 19, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
+    tileTitle: { color: '#fff', fontSize: 13.5, fontWeight: '800', lineHeight: 17, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
     tileMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
+    tileMetaLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+    tileWith: { width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
     tileDueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     tileDue: { color: '#fff', fontSize: 11.5, fontWeight: '700' },
     tileFlames: { flexDirection: 'row', gap: 1 },
@@ -1199,7 +1324,14 @@ function makeStyles(t) {
 
     // マイページ
     profileRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 20, marginTop: 4, backgroundColor: t.surface, borderRadius: 18, padding: 16 },
-    avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
+    avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
+    avatarImg: { width: 52, height: 52, borderRadius: 26 },
+    avatarEdit: { position: 'absolute', right: -2, bottom: -2, width: 20, height: 20, borderRadius: 10, backgroundColor: t.sub, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: t.surface },
+    segment: { flexDirection: 'row', backgroundColor: t.surface2, borderRadius: 999, padding: 3, gap: 2 },
+    segBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999 },
+    segBtnOn: { backgroundColor: t.accent },
+    segText: { fontSize: 13, fontWeight: '700', color: t.sub },
+    segTextOn: { color: '#fff' },
     profileLabel: { fontSize: 11, color: t.sub, marginBottom: 2 },
     nameInput: { fontSize: 18, fontWeight: '800', color: t.text, padding: 0 },
     settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 12, backgroundColor: t.surface, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12 },
@@ -1299,6 +1431,9 @@ function makeStyles(t) {
     photoPickText: { color: t.sub, fontSize: 13, fontWeight: '600' },
     photoPreview: { width: '100%', height: '100%' },
     removeText: { textAlign: 'center', color: '#E5484D', fontSize: 12, fontWeight: '700', marginTop: 8 },
+    photoSubRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 10 },
+    photoSubBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    photoSubText: { color: t.accent, fontSize: 13, fontWeight: '700' },
     snsDetected: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
     snsDetectedText: { color: t.accent, fontSize: 12.5, fontWeight: '700' },
     label: { marginTop: 18, marginBottom: 10, fontSize: 13, fontWeight: '700', color: t.text },
@@ -1332,6 +1467,10 @@ function makeStyles(t) {
     detailCat: { fontSize: 14, color: t.sub },
     sectionLabel: { marginTop: 24, marginBottom: 10, fontSize: 13, fontWeight: '800', color: t.text },
     memoInput: { backgroundColor: t.surface, borderRadius: 14, padding: 14, fontSize: 15, color: t.text, minHeight: 80, textAlignVertical: 'top' },
+    recipeInput: { backgroundColor: t.surface, borderRadius: 14, padding: 14, fontSize: 14, color: t.text, minHeight: 120, textAlignVertical: 'top', borderWidth: 1, borderColor: t.line },
+    recipeBox: { marginTop: 14, backgroundColor: t.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: t.line },
+    recipeBoxTitle: { fontSize: 12, fontWeight: '800', color: t.accent, marginBottom: 6 },
+    recipeBoxText: { fontSize: 14, color: t.text, lineHeight: 21 },
     actionBtn: { marginBottom: 10, backgroundColor: t.surface, borderRadius: 14, paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     actionLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     actionText: { fontSize: 15, fontWeight: '700', color: t.text },
