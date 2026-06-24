@@ -20,6 +20,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
+import { searchItems } from './search';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
@@ -149,6 +150,7 @@ export default function App() {
   const [visionSlots, setVisionSlots] = useState(VISION_SEED);
   const [visionTitle, setVisionTitle] = useState('2026 VISION');
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const [tab, setTab] = useState('home');
   const [selectedId, setSelectedId] = useState(null);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -315,7 +317,7 @@ export default function App() {
           />
         ) : (
           <>
-            {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onSort={() => setSortOpen(true)} doneCount={doneCount} activeCount={activeCount} />}
+            {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} onOpen={openItem} onSort={() => setSortOpen(true)} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
@@ -422,7 +424,7 @@ function PhotoTile({ item, onPress, height = 180 }) {
 }
 
 /* ---------- ホーム ---------- */
-function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCount }) {
+function HomeTab({ items, filter, setFilter, search, setSearch, onOpen, onSort, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
@@ -432,7 +434,8 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
   else if (filter.startsWith('sns:')) { const p = filter.slice(4); visible = items.filter((it) => !it.doneAt && it.sourcePlatform === p).slice().sort(byHeatThenNew); }
   else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
   else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
-  const canSort = filter === 'all' && visible.length > 1;
+  visible = searchItems(visible, search, (key) => getCategory(key)?.label);
+  const canSort = filter === 'all' && visible.length > 1 && !search.trim();
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
@@ -446,6 +449,22 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
           )}
         </View>
         <Text style={s.greet}>叶えた {doneCount}・のこり {activeCount}</Text>
+        <View style={s.searchBar}>
+          <Ionicons name="search" size={16} color={t.sub} />
+          <TextInput
+            style={s.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="キーワードで検索"
+            placeholderTextColor={t.sub}
+            returnKeyType="search"
+          />
+          {!!search && (
+            <Pressable onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={16} color={t.sub} />
+            </Pressable>
+          )}
+        </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
@@ -459,7 +478,7 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
         <Chip icon="trophy" label={`叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
       </ScrollView>
       {visible.length === 0 ? (
-        <Text style={s.empty}>{filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : '最初の“したい”を、＋から置いてみよう。'}</Text>
+        <Text style={s.empty}>{search.trim() ? '見つかりませんでした。' : filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : '最初の“したい”を、＋から置いてみよう。'}</Text>
       ) : (
         <Masonry items={visible} renderTile={(it, i) => (
           <FadeInView key={it.id} index={i}>
@@ -1471,6 +1490,8 @@ function makeStyles(t) {
     brand: { fontSize: 23, fontWeight: '900', color: t.text, letterSpacing: 0.5, fontFamily: FONT.enBlack },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
+    searchBar: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginTop: 12 },
+    searchInput: { flex: 1, fontSize: 14, color: t.text, padding: 0 },
 
     chips: { gap: 8, paddingHorizontal: 20, paddingBottom: 16 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
