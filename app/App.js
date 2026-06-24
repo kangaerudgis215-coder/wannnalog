@@ -47,6 +47,8 @@ const PROFILE_KEY = 'wannalog_profile';
 const VISION_KEY = 'wannalog_vision_v1';
 const VISION_TITLE_KEY = 'wannalog_vision_title';
 const GARDEN_KEY = 'wannalog_garden_v1';
+// 箱庭は「将来の設計」としてステイ。今はSNS認知づくりに集中するため非表示（true で復活）。
+const GARDEN_ENABLED = false;
 
 // ビジョンボードは「したい」とは別データ。テンプレの枠に写真を嵌める。
 const VISION_SEED = [
@@ -530,7 +532,8 @@ function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode,
         <Switch value={mode === 'dark'} onValueChange={onToggleMode} trackColor={{ true: t.accent }} />
       </View>
 
-      {/* 箱庭（達成で植物を育てる） */}
+      {/* 箱庭（将来用にステイ：GARDEN_ENABLED で表示切替） */}
+      {GARDEN_ENABLED && (
       <Pressable style={s.giftCard} onPress={onOpenGarden}>
         <View style={[s.giftIcon, { backgroundColor: '#2E7D52' }]}><Ionicons name="leaf" size={22} color="#fff" /></View>
         <View style={{ flex: 1 }}>
@@ -539,6 +542,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, mode, onToggleMode,
         </View>
         <Ionicons name="chevron-forward" size={18} color={t.sub} />
       </Pressable>
+      )}
 
       {/* ギフトページ（ほしいものリストの共有） */}
       <Pressable style={s.giftCard} onPress={onOpenGift}>
