@@ -53,10 +53,25 @@ const GARDEN_KEY = 'wannalog_garden_v1';
 const GARDEN_ENABLED = false;
 
 // ビジョンボードは「したい」とは別データ。テンプレの枠に写真を嵌める。
+// 「3枚テンプレ」を初期表示にして、足りなければ「枠を追加」で増やせる。
 const VISION_SEED = [
   { id: 'v1', imageUri: null }, { id: 'v2', imageUri: null }, { id: 'v3', imageUri: null },
-  { id: 'v4', imageUri: null }, { id: 'v5', imageUri: null }, { id: 'v6', imageUri: null },
 ];
+
+// ビジョンカードの字体（3パターン）。登録時に1枚ずつ選べる。
+const VISION_FONTS = [
+  { key: 'mincho', label: '明朝', family: FONT.mincho, spacing: 2 },
+  { key: 'round', label: '丸ゴ', family: FONT.med, spacing: 0.5 },
+  { key: 'pop', label: 'ポップ', family: FONT.xbold, spacing: 1 },
+];
+function visionFont(key) { return VISION_FONTS.find((f) => f.key === key) || VISION_FONTS[0]; }
+
+// 進み具合タグ（実行中／計画中）。スタイリッシュに色＋アイコンで表示。
+const VISION_STATUS = [
+  { key: 'planning', label: '計画中', color: '#3A8DDE', icon: 'bulb' },
+  { key: 'doing', label: '実行中', color: '#43A047', icon: 'walk' },
+];
+function visionStatus(key) { return VISION_STATUS.find((x) => x.key === key) || null; }
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -211,6 +226,7 @@ export default function App() {
   async function removeVisionSlot(id) { await persistVision(visionSlots.filter((sl) => sl.id !== id)); }
   async function saveVisionTitle(v) { setVisionTitle(v); await AsyncStorage.setItem(VISION_TITLE_KEY, v); }
   async function setVisionLabel(id, text) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, label: text } : sl))); }
+  async function updateVisionSlot(id, patch) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, ...patch } : sl))); }
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
@@ -290,7 +306,7 @@ export default function App() {
         ) : (
           <>
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
-            {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onLabel={setVisionLabel} />}
+            {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
@@ -435,8 +451,10 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
 }
 
 /* ---------- ビジョンボード（別データ・枠に写真を嵌めるムードボード） ---------- */
-function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onLabel }) {
+function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onUpdateSlot }) {
   const t = useTheme(); const s = useStyles();
+  const [editId, setEditId] = useState(null);          // 拡大・編集を開いている枠
+  const editing = slots.find((sl) => sl.id === editId) || null;
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
@@ -445,49 +463,127 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
       </View>
       <Masonry items={slots} renderTile={(slot, i) => (
         <FadeInView key={slot.id} index={i}>
-          <VisionSlot slot={slot} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length]} onFill={() => onFill(slot.id)} onClear={() => onClear(slot.id)} onRemove={() => onRemove(slot.id)} onLabel={(text) => onLabel(slot.id, text)} />
+          <VisionSlot slot={slot} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length]} onPress={() => setEditId(slot.id)} />
         </FadeInView>
       )} />
       <Pressable style={s.visionAdd} onPress={onAdd}>
         <Ionicons name="add" size={18} color={t.accent} />
         <Text style={s.visionAddText}>枠を追加</Text>
       </Pressable>
+
+      <VisionEditModal
+        slot={editing}
+        onClose={() => setEditId(null)}
+        onFill={() => editing && onFill(editing.id)}
+        onClear={() => editing && onClear(editing.id)}
+        onRemove={() => { if (editing) { onRemove(editing.id); setEditId(null); } }}
+        onUpdate={(patch) => editing && onUpdateSlot(editing.id, patch)}
+      />
     </ScrollView>
   );
 }
-function VisionSlot({ slot, height, onFill, onClear, onRemove, onLabel }) {
+// ボード上のカード：写真＋一言コメント（選んだ字体）＋進み具合タグ。タップで拡大・編集。
+function VisionSlot({ slot, height, onPress }) {
   const t = useTheme(); const s = useStyles();
-  function editLabel() {
-    if (Alert.prompt) {
-      Alert.prompt('ひとことコメント', '画像の上にスタイリッシュに表示されます', (text) => onLabel(text), 'plain-text', slot.label || '');
-    } else {
-      Alert.alert('コメント', 'この端末では文字入力ダイアログが使えません。');
-    }
-  }
+  const f = visionFont(slot.font);
+  const st = visionStatus(slot.status);
   if (slot.imageUri) {
-    const menu = () => Alert.alert('この枠', undefined, [
-      { text: slot.label ? 'コメントを編集' : 'コメントを入れる', onPress: editLabel },
-      { text: '写真を変更', onPress: onFill },
-      { text: '写真を外す', onPress: onClear },
-      { text: '枠を削除', style: 'destructive', onPress: onRemove },
-      { text: 'キャンセル', style: 'cancel' },
-    ]);
     return (
-      <Pressable style={({ pressed }) => [s.tile, { height }, pressed && s.pressed]} onPress={menu}>
+      <Pressable style={({ pressed }) => [s.tile, { height }, pressed && s.pressed]} onPress={onPress}>
         <Image source={{ uri: slot.imageUri }} style={s.tileImg} />
+        {st ? (
+          <View style={[s.visionStatusPill, { backgroundColor: st.color + 'E6' }]}>
+            <Ionicons name={st.icon} size={10} color="#fff" />
+            <Text style={s.visionStatusText}>{st.label}</Text>
+          </View>
+        ) : null}
         {slot.label ? (
           <View style={s.visionLabelWrap}>
-            <Text style={s.visionSlotLabel} numberOfLines={3}>{slot.label}</Text>
+            <Text style={[s.visionSlotLabel, { fontFamily: f.family, letterSpacing: f.spacing }]} numberOfLines={3}>{slot.label}</Text>
           </View>
         ) : null}
       </Pressable>
     );
   }
   return (
-    <Pressable style={[s.visionEmpty, { height }]} onPress={onFill}>
+    <Pressable style={[s.visionEmpty, { height }]} onPress={onPress}>
       <Ionicons name="add-circle-outline" size={28} color={t.sub} />
       <Text style={s.visionEmptyText}>写真を入れる</Text>
     </Pressable>
+  );
+}
+// 拡大表示＋編集：写真・目標詳細・一言コメント・進み具合タグ・字体を1画面で。
+function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate }) {
+  const t = useTheme(); const s = useStyles();
+  const f = visionFont(slot?.font);
+  if (!slot) return null;
+  const confirmRemove = () => Alert.alert('この枠を削除しますか？', '写真とメモが消えます。', [
+    { text: 'キャンセル', style: 'cancel' },
+    { text: '削除', style: 'destructive', onPress: onRemove },
+  ]);
+  return (
+    <Modal visible={!!slot} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={s.safe}>
+        <View style={s.detailBar}>
+          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+          <Pressable onPress={confirmRemove} style={s.detailBarBtn}><Ionicons name="trash-outline" size={20} color="#E5484D" /></Pressable>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {/* 拡大写真（タップで設定／変更） */}
+          <Pressable onPress={onFill} style={s.visionBigPhotoWrap}>
+            {slot.imageUri
+              ? <Image source={{ uri: slot.imageUri }} style={s.visionBigPhoto} />
+              : <View style={[s.visionBigPhoto, s.visionBigEmpty]}><Ionicons name="image-outline" size={34} color={t.sub} /><Text style={s.visionEmptyText}>写真を入れる</Text></View>}
+            {slot.label ? (
+              <View style={s.visionLabelWrap}>
+                <Text style={[s.visionBigLabel, { fontFamily: f.family, letterSpacing: f.spacing }]} numberOfLines={3}>{slot.label}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+          {slot.imageUri && (
+            <View style={s.photoSubRow}>
+              <Pressable style={s.photoSubBtn} onPress={onFill}><Ionicons name="camera-outline" size={15} color={t.accent} /><Text style={s.photoSubText}>写真を変更</Text></Pressable>
+              <Pressable style={s.photoSubBtn} onPress={onClear}><Ionicons name="close" size={15} color="#E5484D" /><Text style={[s.photoSubText, { color: '#E5484D' }]}>写真を外す</Text></Pressable>
+            </View>
+          )}
+
+          <Text style={s.sectionLabel}>進み具合</Text>
+          <View style={s.catWrap}>
+            {VISION_STATUS.map((x) => {
+              const on = slot.status === x.key;
+              return (
+                <Pressable key={x.key} onPress={() => onUpdate({ status: on ? null : x.key })}
+                  style={[s.catChip, on && { backgroundColor: x.color, borderColor: x.color }]}>
+                  <Ionicons name={x.icon} size={13} color={on ? '#fff' : x.color} />
+                  <Text style={[s.catChipText, on && { color: '#fff' }]}>{x.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={s.sectionLabel}>字体</Text>
+          <View style={s.catWrap}>
+            {VISION_FONTS.map((fo) => {
+              const on = (slot.font || 'mincho') === fo.key;
+              return (
+                <Pressable key={fo.key} onPress={() => onUpdate({ font: fo.key })}
+                  style={[s.catChip, on && { backgroundColor: t.accent, borderColor: t.accent }]}>
+                  <Text style={[s.catChipText, { fontFamily: fo.family }, on && { color: '#fff' }]}>{fo.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={s.sectionLabel}>一言コメント（写真の上に表示）</Text>
+          <TextInput style={s.input} value={slot.label || ''} onChangeText={(v) => onUpdate({ label: v })}
+            placeholder="例：いつか家族でハワイ" placeholderTextColor={t.sub} maxLength={40} />
+
+          <Text style={s.sectionLabel}>目標の詳細（任意）</Text>
+          <TextInput style={s.memoInput} value={slot.detail || ''} onChangeText={(v) => onUpdate({ detail: v })}
+            placeholder="なぜ叶えたい？いつまでに？どうやって？" placeholderTextColor={t.sub} multiline />
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -1300,6 +1396,12 @@ function makeStyles(t) {
     visionAddText: { color: t.accent, fontSize: 14, fontWeight: '800' },
     visionLabelWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: 'rgba(0,0,0,0.22)' },
     visionSlotLabel: { color: '#fff', fontSize: 20, fontWeight: '400', letterSpacing: 2, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 8, fontFamily: FONT.mincho },
+    visionStatusPill: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
+    visionStatusText: { color: '#fff', fontSize: 10.5, fontWeight: '800' },
+    visionBigPhotoWrap: { borderRadius: 22, overflow: 'hidden' },
+    visionBigPhoto: { width: '100%', height: 300, borderRadius: 22 },
+    visionBigEmpty: { backgroundColor: t.surface, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 8 },
+    visionBigLabel: { color: '#fff', fontSize: 28, textAlign: 'center', letterSpacing: 2, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 10, fontFamily: FONT.mincho, paddingHorizontal: 16 },
 
     masonryRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 2 },
     masonryCol: { flex: 1, gap: 12 },
