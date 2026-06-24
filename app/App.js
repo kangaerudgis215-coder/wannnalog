@@ -1,9 +1,9 @@
 // WannaLog — ダーク/ライト対応・アイコン化・写真前面UI
 // タブ：ホーム / ビジョン / ＋ / 通知 / マイページ
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated, Image, KeyboardAvoidingView, Linking, Modal, Platform,
+  Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
   Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +18,7 @@ import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { parseGps, coordsMapsUrl } from './geo';
+import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -151,6 +152,7 @@ export default function App() {
   const [tab, setTab] = useState('home');
   const [selectedId, setSelectedId] = useState(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [giftOpen, setGiftOpen] = useState(false);
   const [gardenOpen, setGardenOpen] = useState(false);
   const [garden, setGarden] = useState({ points: 0, waterDate: '', waterCount: 0 });
@@ -266,6 +268,14 @@ export default function App() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); runCelebration();
   }
   async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
+  // 手動並べ替え：未達成カードを指定順に並べ、達成済みは末尾に保持して保存。
+  async function reorderItems(activeIds) {
+    const map = Object.fromEntries(items.map((it) => [it.id, it]));
+    const active = activeIds.map((id) => map[id]).filter(Boolean);
+    const done = items.filter((it) => it.doneAt);
+    await persist([...active, ...done]);
+    Haptics.selectionAsync();
+  }
   // 通知設定を丸ごと差し替え：古い予約を取り消し→新設定で予約し直す
   async function applyReminder(id, reminder) {
     const it = items.find((x) => x.id === id); if (!it) return;
@@ -305,7 +315,7 @@ export default function App() {
           />
         ) : (
           <>
-            {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} doneCount={doneCount} activeCount={activeCount} />}
+            {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onSort={() => setSortOpen(true)} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
@@ -315,6 +325,9 @@ export default function App() {
 
         <SaveModal visible={saveOpen} onClose={() => setSaveOpen(false)}
           onSave={(data) => { addItem(data); setSaveOpen(false); }} />
+
+        <SortModal visible={sortOpen} onClose={() => setSortOpen(false)}
+          items={items.filter((it) => !it.doneAt)} onReorder={reorderItems} />
 
         <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpenLink={openInBrowser} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
 
@@ -409,7 +422,7 @@ function PhotoTile({ item, onPress, height = 180 }) {
 }
 
 /* ---------- ホーム ---------- */
-function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
+function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
@@ -417,12 +430,20 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
   if (filter === 'done') visible = items.filter((it) => it.doneAt);
   else if (filter === 'serious') visible = items.filter((it) => !it.doneAt && (it.heat || 2) === 3).slice().sort(byHeatThenNew);
   else if (filter.startsWith('sns:')) { const p = filter.slice(4); visible = items.filter((it) => !it.doneAt && it.sourcePlatform === p).slice().sort(byHeatThenNew); }
-  else visible = items.filter((it) => !it.doneAt && (filter === 'all' || it.category === filter)).slice().sort(byHeatThenNew);
+  else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
+  else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
+  const canSort = filter === 'all' && visible.length > 1;
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
         <View style={s.brandRow}>
           <Text style={s.brand}>WannaLog</Text>
+          {canSort && (
+            <Pressable style={s.sortBtn} onPress={onSort}>
+              <Ionicons name="swap-vertical" size={15} color={t.accent} />
+              <Text style={s.sortBtnText}>並べ替え</Text>
+            </Pressable>
+          )}
         </View>
         <Text style={s.greet}>叶えた {doneCount}・のこり {activeCount}</Text>
       </View>
@@ -1028,6 +1049,70 @@ function SaveModal({ visible, onClose, onSave }) {
   );
 }
 
+/* ---------- 並べ替え（指でドラッグ・標準PanResponderのみ／新ライブラリ不要） ---------- */
+const SORT_ROW = 74; // 1行の高さ＋余白（ドラッグ量→移動マス数の換算に使う）
+function SortModal({ visible, onClose, items, onReorder }) {
+  const t = useTheme(); const s = useStyles();
+  const [order, setOrder] = useState([]);
+  const orderRef = useRef([]);
+  useEffect(() => { if (visible) { const ids = items.map((i) => i.id); setOrder(ids); orderRef.current = ids; } }, [visible]);
+  const byId = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items]);
+  const [dragId, setDragId] = useState(null);
+  const dragY = useRef(new Animated.Value(0)).current;
+
+  function setOrderBoth(next) { orderRef.current = next; setOrder(next); }
+  function responderFor(id) {
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
+      onPanResponderGrant: () => { setDragId(id); dragY.setValue(0); Haptics.selectionAsync(); },
+      onPanResponderMove: (_, g) => { dragY.setValue(g.dy); },
+      onPanResponderRelease: (_, g) => {
+        const cur = orderRef.current;
+        const from = cur.indexOf(id);
+        const to = from + Math.round(g.dy / SORT_ROW);
+        if (to !== from) setOrderBoth(moveItem(cur, from, to));
+        setDragId(null); dragY.setValue(0);
+      },
+      onPanResponderTerminate: () => { setDragId(null); dragY.setValue(0); },
+    });
+  }
+  function finish() { onReorder(orderRef.current); onClose(); }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={s.safe}>
+        <View style={s.detailBar}>
+          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+          <Pressable onPress={finish} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} scrollEnabled={!dragId} showsVerticalScrollIndicator={false}>
+          <Text style={s.giftHero}>並べ替え</Text>
+          <Text style={s.giftLead}>右の ≡ を指でドラッグして、好きな順に並べ替えできます。</Text>
+          <View style={{ marginTop: 16 }}>
+            {order.map((id) => {
+              const it = byId[id]; if (!it) return null;
+              const cat = getCategory(it.category);
+              const dragging = dragId === id;
+              return (
+                <Animated.View key={id}
+                  style={[s.sortRow, dragging && s.sortRowActive, dragging && { transform: [{ translateY: dragY }], zIndex: 10, elevation: 6 }]}>
+                  {it.imageUri
+                    ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
+                    : <View style={[s.sortThumb, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color="#fff" /></View>}
+                  <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
+                  <View style={s.sortHandle} {...responderFor(id).panHandlers}>
+                    <Ionicons name="reorder-three" size={26} color={t.sub} />
+                  </View>
+                </Animated.View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 /* ---------- ギフトページ（プレビュー＆共有） ---------- */
 // 「ギフトに公開」した“ほしい”を、友だちに見せる体で表示。共有は端末標準の共有シート。
 // ここはアプリ内なので商品リンクは“ただの検索リンク”（アフィリ化は将来のWebページ側でのみ）。
@@ -1375,7 +1460,14 @@ function makeStyles(t) {
   const styles = {
     safe: { flex: 1, backgroundColor: t.bg },
     topbar: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
-    brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.surface, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+    sortBtnText: { color: t.accent, fontSize: 13, fontWeight: '800' },
+    sortRow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: SORT_ROW - 10, marginBottom: 10, backgroundColor: t.surface, borderRadius: 14, paddingHorizontal: 12 },
+    sortRowActive: { backgroundColor: t.surface2, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
+    sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
+    sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },
+    sortHandle: { paddingHorizontal: 6, paddingVertical: 10 },
     brand: { fontSize: 23, fontWeight: '900', color: t.text, letterSpacing: 0.5, fontFamily: FONT.enBlack },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
