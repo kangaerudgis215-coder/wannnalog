@@ -7,7 +7,7 @@ import {
   Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
@@ -81,6 +81,12 @@ const DUE_OPTIONS = [
   { key: 'q3', label: 'Q3' },
   { key: 'q4', label: 'Q4' },
 ];
+
+// カテゴリ用アイコン：set==='mci' は MaterialCommunityIcons（鍋・コック帽など）、それ以外は Ionicons。
+function VIcon({ set, name, size, color, style }) {
+  const C = set === 'mci' ? MaterialCommunityIcons : Ionicons;
+  return <C name={name} size={size} color={color} style={style} />;
+}
 
 /* ---------- テーマ ---------- */
 const ThemeCtx = createContext(palettes.dark);
@@ -347,11 +353,11 @@ function PhotoTile({ item, onPress, height = 180 }) {
       {item.imageUri
         ? <Image source={{ uri: item.imageUri }} style={s.tileImg} />
         : <View style={[s.tileImg, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}>
-            <Ionicons name={cat.icon} size={46} color="rgba(255,255,255,0.9)" />
+            <VIcon set={cat.iconSet} name={cat.icon} size={46} color="rgba(255,255,255,0.9)" />
           </View>}
       <View style={s.tileShade} />
       <View style={[s.tileTag, { backgroundColor: cat.color + 'E6' }]}>
-        <Ionicons name={cat.icon} size={11} color="#fff" />
+        <VIcon set={cat.iconSet} name={cat.icon} size={11} color="#fff" />
         <Text style={s.tileTagText}>{cat.label}</Text>
       </View>
       {done
@@ -408,7 +414,7 @@ function HomeTab({ items, filter, setFilter, onOpen, doneCount, activeCount }) {
         <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
         <Chip icon="flame" label="本気" active={filter === 'serious'} onPress={() => setFilter('serious')} />
         {CATEGORIES.map((c) => (
-          <Chip key={c.key} icon={c.icon} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
+          <Chip key={c.key} icon={c.icon} iconSet={c.iconSet} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
         ))}
         {snsPresent.map((p) => (
           <Chip key={p} icon={snsMeta(p).icon} label={snsMeta(p).label} active={filter === 'sns:' + p} onPress={() => setFilter('sns:' + p)} />
@@ -502,7 +508,7 @@ function NotifyTab({ items, onOpen }) {
           const cat = getCategory(item.category);
           return (
             <Pressable key={item.id} style={({ pressed }) => [s.notifyRow, pressed && s.pressed]} onPress={() => onOpen(item)}>
-              <View style={[s.notifyIcon, { backgroundColor: cat.color }]}><Ionicons name={cat.icon} size={18} color="#fff" /></View>
+              <View style={[s.notifyIcon, { backgroundColor: cat.color }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color="#fff" /></View>
               <View style={{ flex: 1 }}>
                 <Text style={s.notifyTitle} numberOfLines={1}>{item.title}</Text>
                 <Text style={s.notifySub}>{remindSummary(item)}に思い出します</Text>
@@ -635,7 +641,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
           {byCat.map((c) => (
             <View key={c.key} style={s.catStatRow}>
               <View style={s.catStatHead}>
-                <Ionicons name={c.icon} size={14} color={c.color} />
+                <VIcon set={c.iconSet} name={c.icon} size={14} color={c.color} />
                 <Text style={s.catStatLabel}>{c.label}</Text>
                 <Text style={s.catStatNum}>{c.done}/{c.total}</Text>
               </View>
@@ -658,7 +664,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
               {item.imageUri
                 ? <Image source={{ uri: item.imageUri }} style={s.denseImg} />
                 : <View style={[s.denseImg, { backgroundColor: getCategory(item.category).color, alignItems: 'center', justifyContent: 'center' }]}>
-                    <Ionicons name={getCategory(item.category).icon} size={22} color="#fff" />
+                    <VIcon set={getCategory(item.category).iconSet} name={getCategory(item.category).icon} size={22} color="#fff" />
                   </View>}
             </Pressable>
           ))}
@@ -695,11 +701,11 @@ function TabBarInner({ tab, onTab, onAdd }) {
   );
 }
 
-function Chip({ icon, label, active, onPress }) {
+function Chip({ icon, iconSet, label, active, onPress }) {
   const t = useTheme(); const s = useStyles();
   return (
     <Pressable onPress={onPress} style={[s.chip, active && s.chipActive]}>
-      {icon ? <Ionicons name={icon} size={13} color={active ? (t.mode === 'dark' ? t.bg : '#fff') : t.text} /> : null}
+      {icon ? <VIcon set={iconSet} name={icon} size={13} color={active ? (t.mode === 'dark' ? t.bg : '#fff') : t.text} /> : null}
       <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -876,7 +882,7 @@ function SaveModal({ visible, onClose, onSave }) {
             <View style={s.catWrap}>
               {CATEGORIES.map((c) => (
                 <Pressable key={c.key} onPress={() => setCategory(c.key)} style={optChip(category === c.key, c.color)}>
-                  <Ionicons name={c.icon} size={13} color={category === c.key ? '#fff' : t.text} />
+                  <VIcon set={c.iconSet} name={c.icon} size={13} color={category === c.key ? '#fff' : t.text} />
                   <Text style={[s.catChipText, category === c.key && { color: '#fff' }]}>{c.label}</Text>
                 </Pressable>
               ))}
@@ -957,7 +963,7 @@ function GiftModal({ visible, onClose, items, name, onOpenLink, onOpen }) {
                 <Pressable onPress={() => onOpen(item)}>
                   {item.imageUri
                     ? <Image source={{ uri: item.imageUri }} style={s.giftThumb} />
-                    : <View style={[s.giftThumb, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name={cat.icon} size={24} color="#fff" /></View>}
+                    : <View style={[s.giftThumb, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={24} color="#fff" /></View>}
                 </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text style={s.giftRowTitle} numberOfLines={2}>{item.title}</Text>
@@ -1144,7 +1150,7 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         {item.imageUri
           ? <Image source={{ uri: item.imageUri }} style={s.detailPhoto} />
-          : <View style={[s.detailPhoto, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name={cat.icon} size={72} color="rgba(255,255,255,0.9)" /></View>}
+          : <View style={[s.detailPhoto, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={72} color="rgba(255,255,255,0.9)" /></View>}
         {editMode && (
           <View style={s.photoActions}>
             <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
@@ -1163,7 +1169,7 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
             <View style={s.catWrap}>
               {CATEGORIES.map((c) => (
                 <Pressable key={c.key} onPress={() => onUpdate({ category: c.key })} style={optChip(item.category === c.key, c.color)}>
-                  <Ionicons name={c.icon} size={13} color={item.category === c.key ? '#fff' : t.text} />
+                  <VIcon set={c.iconSet} name={c.icon} size={13} color={item.category === c.key ? '#fff' : t.text} />
                   <Text style={[s.catChipText, item.category === c.key && { color: '#fff' }]}>{c.label}</Text>
                 </Pressable>
               ))}
@@ -1229,7 +1235,7 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
         ) : (
           <>
             <View style={s.summaryRow}>
-              <View style={[s.pill, { backgroundColor: cat.color }]}><Ionicons name={cat.icon} size={13} color="#fff" /><Text style={s.pillTextOn}>{cat.label}</Text></View>
+              <View style={[s.pill, { backgroundColor: cat.color }]}><VIcon set={cat.iconSet} name={cat.icon} size={13} color="#fff" /><Text style={s.pillTextOn}>{cat.label}</Text></View>
               <View style={s.pill}><Ionicons name="flame" size={13} color={t.accent} /><Text style={s.pillText}>{heatLabel(heat)}</Text></View>
               {w ? <View style={s.pill}><Ionicons name={w.icon} size={13} color={t.accent} /><Text style={s.pillText}>{w.label}</Text></View> : null}
               {due ? <View style={s.pill}><Ionicons name="time-outline" size={13} color={t.sub} /><Text style={s.pillText}>{due}まで</Text></View> : null}

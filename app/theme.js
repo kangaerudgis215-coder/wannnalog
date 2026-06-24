@@ -37,7 +37,7 @@ export const palettes = {
 // カテゴリ：Ionicons のアイコン名 + 色（絵文字は廃止）
 export const CATEGORIES = [
   { key: 'eat', label: '食べたい', icon: 'restaurant', color: '#FF6B4A' },
-  { key: 'cook', label: '作りたい', icon: 'flame', color: '#2BB3A3' }, // クッキング（料理を作りたい）
+  { key: 'cook', label: '作りたい', icon: 'chef-hat', iconSet: 'mci', color: '#2BB3A3' }, // クッキング（コック帽アイコン）
   { key: 'go', label: '行きたい', icon: 'location', color: '#3A8DDE' },
   { key: 'see', label: '見たい', icon: 'film', color: '#7C5CE7' },
   { key: 'want', label: '欲しい', icon: 'pricetag', color: '#C86DD7' },
