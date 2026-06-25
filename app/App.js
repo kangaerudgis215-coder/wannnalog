@@ -229,6 +229,11 @@ export default function App() {
   async function saveVisionTitle(v) { setVisionTitle(v); await AsyncStorage.setItem(VISION_TITLE_KEY, v); }
   async function setVisionLabel(id, text) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, label: text } : sl))); }
   async function updateVisionSlot(id, patch) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, ...patch } : sl))); }
+  async function reorderVision(ids) {
+    const map = Object.fromEntries(visionSlots.map((sl) => [sl.id, sl]));
+    await persistVision(ids.map((id) => map[id]).filter(Boolean));
+    Haptics.selectionAsync();
+  }
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
@@ -316,7 +321,7 @@ export default function App() {
         ) : (
           <>
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onSort={() => setSortOpen(true)} doneCount={doneCount} activeCount={activeCount} />}
-            {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} />}
+            {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
@@ -472,14 +477,23 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
 }
 
 /* ---------- ビジョンボード（別データ・枠に写真を嵌めるムードボード） ---------- */
-function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onUpdateSlot }) {
+function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onUpdateSlot, onReorder }) {
   const t = useTheme(); const s = useStyles();
   const [editId, setEditId] = useState(null);          // 拡大・編集を開いている枠
+  const [sortOpen, setSortOpen] = useState(false);     // 並べ替え画面
   const editing = slots.find((sl) => sl.id === editId) || null;
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
-        <Text style={s.greet}>なりたい自分・叶えたい夢</Text>
+        <View style={s.brandRow}>
+          <Text style={s.greet}>なりたい自分・叶えたい夢</Text>
+          {slots.length > 1 && (
+            <Pressable style={s.sortBtn} onPress={() => setSortOpen(true)}>
+              <Ionicons name="swap-vertical" size={15} color={t.accent} />
+              <Text style={s.sortBtnText}>並べ替え</Text>
+            </Pressable>
+          )}
+        </View>
         <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="2026 VISION" placeholderTextColor={t.sub} maxLength={24} />
       </View>
       <Masonry items={slots} renderTile={(slot, i) => (
@@ -491,6 +505,8 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
         <Ionicons name="add" size={18} color={t.accent} />
         <Text style={s.visionAddText}>枠を追加</Text>
       </Pressable>
+
+      <VisionSortModal visible={sortOpen} onClose={() => setSortOpen(false)} slots={slots} onReorder={onReorder} />
 
       <VisionEditModal
         slot={editing}
@@ -1050,62 +1066,112 @@ function SaveModal({ visible, onClose, onSave }) {
 }
 
 /* ---------- 並べ替え（指でドラッグ・標準PanResponderのみ／新ライブラリ不要） ---------- */
-const SORT_ROW = 74; // 1行の高さ＋余白（ドラッグ量→移動マス数の換算に使う）
-function SortModal({ visible, onClose, items, onReorder }) {
-  const t = useTheme(); const s = useStyles();
-  const [order, setOrder] = useState([]);
-  const orderRef = useRef([]);
-  useEffect(() => { if (visible) { const ids = items.map((i) => i.id); setOrder(ids); orderRef.current = ids; } }, [visible]);
-  const byId = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items]);
+// 汎用の縦ドラッグ並べ替え。ハンドルを掴んだ瞬間に capture して、スクロールに奪われない。
+// ドラッグ中はリアルタイムで他の行が入れ替わる（その場で並びが動く）。
+function ReorderList({ ids, rowHeight = 64, gap = 10, renderRow, onChange }) {
+  const STEP = rowHeight + gap;
+  const [order, setOrder] = useState(ids);
+  const orderRef = useRef(ids);
+  useEffect(() => { setOrder(ids); orderRef.current = ids; }, [ids]);
   const [dragId, setDragId] = useState(null);
+  const startIndexRef = useRef(0);
   const dragY = useRef(new Animated.Value(0)).current;
 
-  function setOrderBoth(next) { orderRef.current = next; setOrder(next); }
-  function responderFor(id) {
+  function set(next) { orderRef.current = next; setOrder(next); }
+  function handleFor(id) {
     return PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
-      onPanResponderGrant: () => { setDragId(id); dragY.setValue(0); Haptics.selectionAsync(); },
-      onPanResponderMove: (_, g) => { dragY.setValue(g.dy); },
-      onPanResponderRelease: (_, g) => {
+      onStartShouldSetPanResponderCapture: () => true, // ハンドルに触れたら即ドラッグ開始
+      onPanResponderGrant: () => { startIndexRef.current = orderRef.current.indexOf(id); setDragId(id); dragY.setValue(0); Haptics.selectionAsync(); },
+      onPanResponderMove: (_, g) => {
         const cur = orderRef.current;
-        const from = cur.indexOf(id);
-        const to = from + Math.round(g.dy / SORT_ROW);
-        if (to !== from) setOrderBoth(moveItem(cur, from, to));
-        setDragId(null); dragY.setValue(0);
+        const curIdx = cur.indexOf(id);
+        const desired = Math.max(0, Math.min(cur.length - 1, startIndexRef.current + Math.round(g.dy / STEP)));
+        if (desired !== curIdx) set(moveItem(cur, curIdx, desired));
+        const newIdx = orderRef.current.indexOf(id);
+        dragY.setValue((startIndexRef.current - newIdx) * STEP + g.dy); // 指の真下に保つ
       },
-      onPanResponderTerminate: () => { setDragId(null); dragY.setValue(0); },
+      onPanResponderRelease: () => { onChange(orderRef.current); setDragId(null); dragY.setValue(0); },
+      onPanResponderTerminate: () => { onChange(orderRef.current); setDragId(null); dragY.setValue(0); },
     });
   }
-  function finish() { onReorder(orderRef.current); onClose(); }
+  return (
+    <View>
+      {order.map((id) => {
+        const dragging = dragId === id;
+        return (
+          <Animated.View key={id}
+            style={[{ height: rowHeight, marginBottom: gap }, dragging && { transform: [{ translateY: dragY }], zIndex: 10, elevation: 8 }]}>
+            {renderRow(id, dragging, handleFor(id).panHandlers)}
+          </Animated.View>
+        );
+      })}
+    </View>
+  );
+}
 
+function SortModal({ visible, onClose, items, onReorder }) {
+  const t = useTheme(); const s = useStyles();
+  const byId = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items]);
+  const ids = useMemo(() => items.map((i) => i.id), [items]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={s.safe}>
         <View style={s.detailBar}>
           <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
-          <Pressable onPress={finish} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
+          <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
         </View>
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} scrollEnabled={!dragId} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
           <Text style={s.giftHero}>並べ替え</Text>
-          <Text style={s.giftLead}>右の ≡ を指でドラッグして、好きな順に並べ替えできます。</Text>
+          <Text style={s.giftLead}>右の ≡ を指で上下にドラッグして、好きな順に並べ替えできます。</Text>
           <View style={{ marginTop: 16 }}>
-            {order.map((id) => {
+            <ReorderList ids={ids} onChange={onReorder} renderRow={(id, dragging, handle) => {
               const it = byId[id]; if (!it) return null;
               const cat = getCategory(it.category);
-              const dragging = dragId === id;
               return (
-                <Animated.View key={id}
-                  style={[s.sortRow, dragging && s.sortRowActive, dragging && { transform: [{ translateY: dragY }], zIndex: 10, elevation: 6 }]}>
+                <View style={[s.sortRow, dragging && s.sortRowActive]}>
                   {it.imageUri
                     ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
                     : <View style={[s.sortThumb, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color="#fff" /></View>}
                   <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
-                  <View style={s.sortHandle} {...responderFor(id).panHandlers}>
-                    <Ionicons name="reorder-three" size={26} color={t.sub} />
-                  </View>
-                </Animated.View>
+                  <View style={s.sortHandle} {...handle}><Ionicons name="reorder-three" size={26} color={t.sub} /></View>
+                </View>
               );
-            })}
+            }} />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// ビジョンボードの並べ替え（枠の順番をドラッグで入れ替え）
+function VisionSortModal({ visible, onClose, slots, onReorder }) {
+  const t = useTheme(); const s = useStyles();
+  const byId = useMemo(() => Object.fromEntries(slots.map((sl) => [sl.id, sl])), [slots]);
+  const ids = useMemo(() => slots.map((sl) => sl.id), [slots]);
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={s.safe}>
+        <View style={s.detailBar}>
+          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+          <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <Text style={s.giftHero}>並べ替え</Text>
+          <Text style={s.giftLead}>右の ≡ を指で上下にドラッグして、枠を好きな順に並べ替えできます。</Text>
+          <View style={{ marginTop: 16 }}>
+            <ReorderList ids={ids} onChange={onReorder} renderRow={(id, dragging, handle) => {
+              const sl = byId[id]; if (!sl) return null;
+              return (
+                <View style={[s.sortRow, dragging && s.sortRowActive]}>
+                  {sl.imageUri
+                    ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
+                    : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
+                  <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
+                  <View style={s.sortHandle} {...handle}><Ionicons name="reorder-three" size={26} color={t.sub} /></View>
+                </View>
+              );
+            }} />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -1463,7 +1529,7 @@ function makeStyles(t) {
     brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.surface, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
     sortBtnText: { color: t.accent, fontSize: 13, fontWeight: '800' },
-    sortRow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: SORT_ROW - 10, marginBottom: 10, backgroundColor: t.surface, borderRadius: 14, paddingHorizontal: 12 },
+    sortRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 14, paddingHorizontal: 12 },
     sortRowActive: { backgroundColor: t.surface2, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
     sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
     sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },
