@@ -20,6 +20,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
+import { isUrl, fetchOgp, cleanTitle } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
@@ -933,7 +934,27 @@ function SaveModal({ visible, onClose, onSave }) {
   const [reminder, setReminder] = useState({ remind: '3days' });
 
   const sns = parseSnsLink(link);            // SNSリンクを認識（X/Instagram/YouTube など）
-  const previewUri = image || (sns && sns.thumbnail); // 写真未選択でもYouTubeはサムネを表示
+  const [ogp, setOgp] = useState(null);       // SNS以外のURLから取得したOGP（タイトル/画像）
+  const [ogpLoading, setOgpLoading] = useState(false);
+  const isGenericUrl = !sns && isUrl(link);
+  const previewUri = image || (sns && sns.thumbnail) || (ogp && ogp.image); // 写真未選択でもリンク先の画像を表示
+
+  // リンクが食べログ等の一般URLのとき、リンク先のOGP（店名・画像）を取得して自動入力
+  useEffect(() => {
+    if (!isGenericUrl) { setOgp(null); setOgpLoading(false); return; }
+    let cancelled = false;
+    setOgpLoading(true);
+    const url = link.trim();
+    const timer = setTimeout(async () => {
+      const data = await fetchOgp(url);
+      if (cancelled) return;
+      setOgpLoading(false);
+      setOgp(data);
+      const goodTitle = cleanTitle(data.title, url, null);
+      if (goodTitle) setTitle((cur) => (cur.trim() ? cur : goodTitle));
+    }, 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [link, isGenericUrl]);
 
   // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
   function chooseHeat(h) { setHeat(h); setReminder({ remind: defaultRemindForHeat(h) }); }
@@ -956,10 +977,10 @@ function SaveModal({ visible, onClose, onSave }) {
     if (gps) { setCoords(gps); Alert.alert('場所を読み取りました', '保存すると「撮影場所を地図で開く」から開けます。'); }
     else { setCoords(null); Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setOgp(null); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    const finalImage = image || (sns ? sns.thumbnail : null);
+    const finalImage = image || (sns ? sns.thumbnail : null) || (ogp ? ogp.image : null);
     const linkInfo = sns
       ? { url: sns.url, platform: sns.platform }
       : (link.trim() ? { url: link.trim(), platform: null } : null);
@@ -987,6 +1008,14 @@ function SaveModal({ visible, onClose, onSave }) {
               <View style={s.snsDetected}>
                 <Ionicons name={snsMeta(sns.platform).icon} size={15} color={t.accent} />
                 <Text style={s.snsDetectedText}>{snsMeta(sns.platform).label} のリンクを認識{sns.thumbnail ? '（サムネを表示します）' : ''}</Text>
+              </View>
+            )}
+            {isGenericUrl && (ogpLoading || ogp) && (
+              <View style={s.snsDetected}>
+                <Ionicons name="link" size={15} color={t.accent} />
+                <Text style={s.snsDetectedText}>
+                  {ogpLoading ? 'リンク先の情報を取得中…' : (ogp && (ogp.title || ogp.image) ? 'リンク先の情報を取得しました' : 'リンク先の情報は見つかりませんでした')}
+                </Text>
               </View>
             )}
 
