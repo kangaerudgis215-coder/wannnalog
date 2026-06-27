@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
+  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
   Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +20,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
+import { isUrl, fetchOgp, cleanTitle } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
@@ -931,12 +932,35 @@ function SaveModal({ visible, onClose, onSave }) {
   const [link, setLink] = useState('');
   const [heat, setHeat] = useState(2);
   const [reminder, setReminder] = useState({ remind: '3days' });
+  const [ogp, setOgp] = useState(null); // SNS以外のURLから取得したページ情報（タイトル/写真）
+  const [ogpLoading, setOgpLoading] = useState(false);
 
   const sns = parseSnsLink(link);            // SNSリンクを認識（X/Instagram/YouTube など）
-  const previewUri = image || (sns && sns.thumbnail); // 写真未選択でもYouTubeはサムネを表示
+  const previewUri = image || (sns && sns.thumbnail) || (ogp && ogp.image); // 写真未選択でもYouTube/リンクのサムネを表示
 
   // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
   function chooseHeat(h) { setHeat(h); setReminder({ remind: defaultRemindForHeat(h) }); }
+
+  // SNS以外のURLを貼ったら、ページ情報（タイトル/写真）を自動取得する。
+  // タイトルが空欄の時だけ自動入力（手入力中のものは上書きしない）。
+  useEffect(() => {
+    setOgp(null);
+    setOgpLoading(false);
+    if (sns || !isUrl(link)) return;
+    const url = link.trim();
+    let cancelled = false;
+    setOgpLoading(true);
+    const timer = setTimeout(async () => {
+      const result = await fetchOgp(url);
+      if (cancelled) return;
+      setOgpLoading(false);
+      const cleaned = cleanTitle(result.title, url, '');
+      if (!cleaned && !result.image) return;
+      setOgp({ title: cleaned, image: result.image });
+      if (cleaned) setTitle((prev) => (prev.trim() ? prev : cleaned));
+    }, 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [link]);
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -956,10 +980,10 @@ function SaveModal({ visible, onClose, onSave }) {
     if (gps) { setCoords(gps); Alert.alert('場所を読み取りました', '保存すると「撮影場所を地図で開く」から開けます。'); }
     else { setCoords(null); Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); setOgp(null); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    const finalImage = image || (sns ? sns.thumbnail : null);
+    const finalImage = image || (sns ? sns.thumbnail : null) || (ogp ? ogp.image : null);
     const linkInfo = sns
       ? { url: sns.url, platform: sns.platform }
       : (link.trim() ? { url: link.trim(), platform: null } : null);
@@ -987,6 +1011,18 @@ function SaveModal({ visible, onClose, onSave }) {
               <View style={s.snsDetected}>
                 <Ionicons name={snsMeta(sns.platform).icon} size={15} color={t.accent} />
                 <Text style={s.snsDetectedText}>{snsMeta(sns.platform).label} のリンクを認識{sns.thumbnail ? '（サムネを表示します）' : ''}</Text>
+              </View>
+            )}
+            {!sns && ogpLoading && (
+              <View style={s.snsDetected}>
+                <ActivityIndicator size="small" color={t.accent} />
+                <Text style={s.snsDetectedText}>リンク先の情報を取得中…</Text>
+              </View>
+            )}
+            {!sns && !ogpLoading && ogp && (ogp.title || ogp.image) && (
+              <View style={s.snsDetected}>
+                <Ionicons name="link" size={15} color={t.accent} />
+                <Text style={s.snsDetectedText}>リンク先の情報を取得しました{ogp.title ? `（${ogp.title}）` : ''}</Text>
               </View>
             )}
 

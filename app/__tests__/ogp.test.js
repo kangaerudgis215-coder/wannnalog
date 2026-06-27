@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, fetchOgp } from '../ogp';
 
 describe('isUrl', () => {
   test('http/https をURLと判定', () => {
@@ -96,5 +96,26 @@ describe('cleanTitle', () => {
   test('汎用かつ手掛かり無しは fallback、それも無ければ null', () => {
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '手入力')).toBe('手入力');
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '')).toBeNull();
+  });
+});
+
+describe('fetchOgp', () => {
+  const realFetch = global.fetch;
+  afterEach(() => { global.fetch = realFetch; });
+
+  test('取得したHTMLからタイトル/画像(絶対URL化)を返す', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      text: async () => `<meta property="og:title" content="すてきなカフェ"><meta property="og:image" content="/img/x.jpg">`,
+    });
+    const o = await fetchOgp('https://example.com/page');
+    expect(o.title).toBe('すてきなカフェ');
+    expect(o.image).toBe('https://example.com/img/x.jpg');
+    expect(global.fetch).toHaveBeenCalledWith('https://example.com/page', expect.any(Object));
+  });
+
+  test('通信に失敗しても落ちずに null を返す', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('network down'));
+    const o = await fetchOgp('https://example.com/page');
+    expect(o).toEqual({ title: null, image: null, description: null });
   });
 });
