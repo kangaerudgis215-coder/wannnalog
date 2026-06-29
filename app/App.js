@@ -20,6 +20,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
+import { searchItems } from './search';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
@@ -429,6 +430,7 @@ function PhotoTile({ item, onPress, height = 180 }) {
 /* ---------- ホーム ---------- */
 function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
+  const [query, setQuery] = useState('');
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
   let visible;
@@ -437,7 +439,8 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
   else if (filter.startsWith('sns:')) { const p = filter.slice(4); visible = items.filter((it) => !it.doneAt && it.sourcePlatform === p).slice().sort(byHeatThenNew); }
   else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
   else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
-  const canSort = filter === 'all' && visible.length > 1;
+  if (query.trim()) visible = searchItems(visible, query);
+  const canSort = filter === 'all' && visible.length > 1 && !query.trim();
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
@@ -451,6 +454,22 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
           )}
         </View>
         <Text style={s.greet}>叶えた {doneCount}・のこり {activeCount}</Text>
+        <View style={s.searchBar}>
+          <Ionicons name="search" size={15} color={t.sub} />
+          <TextInput
+            style={s.searchInput}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="キーワードで検索"
+            placeholderTextColor={t.sub}
+            returnKeyType="search"
+          />
+          {query ? (
+            <Pressable onPress={() => setQuery('')}>
+              <Ionicons name="close-circle" size={16} color={t.sub} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
@@ -1537,6 +1556,8 @@ function makeStyles(t) {
     brand: { fontSize: 23, fontWeight: '900', color: t.text, letterSpacing: 0.5, fontFamily: FONT.enBlack },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
+    searchBar: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginTop: 10 },
+    searchInput: { flex: 1, fontSize: 14, color: t.text, padding: 0 },
 
     chips: { gap: 8, paddingHorizontal: 20, paddingBottom: 16 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
