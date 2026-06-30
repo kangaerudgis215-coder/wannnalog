@@ -20,6 +20,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
+import { buildBackupText } from './backup';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFonts } from 'expo-font';
@@ -667,6 +668,9 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
   const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
   const casualDone = done.filter((it) => (it.heat || 2) === 1).length;
+  async function onExportBackup() {
+    try { await Share.share({ message: buildBackupText(items) }); } catch (e) {}
+  }
   // カテゴリ別の達成（そのカテゴリの中で叶えた割合）
   const byCat = CATEGORIES.map((c) => {
     const catItems = items.filter((it) => it.category === c.key);
@@ -721,6 +725,15 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
           ))}
         </View>
       </View>
+
+      {/* データのバックアップ（書き出し）：端末内保存のみなので機種変更/削除に備える */}
+      <Pressable style={s.settingRow} onPress={onExportBackup}>
+        <View style={s.settingLeft}>
+          <Ionicons name="download-outline" size={20} color={t.accent} />
+          <Text style={s.settingText}>データを書き出す（バックアップ）</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={t.sub} />
+      </Pressable>
 
       {/* 箱庭（将来用にステイ：GARDEN_ENABLED で表示切替） */}
       {GARDEN_ENABLED && (
