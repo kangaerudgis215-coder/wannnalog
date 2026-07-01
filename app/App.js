@@ -22,16 +22,18 @@ import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useFonts } from 'expo-font';
-import { Poppins_400Regular, Poppins_600SemiBold, Poppins_800ExtraBold, Poppins_900Black } from '@expo-google-fonts/poppins';
-import { MPLUSRounded1c_400Regular, MPLUSRounded1c_500Medium, MPLUSRounded1c_700Bold, MPLUSRounded1c_800ExtraBold } from '@expo-google-fonts/m-plus-rounded-1c';
+import { ZenMaruGothic_400Regular, ZenMaruGothic_500Medium, ZenMaruGothic_700Bold, ZenMaruGothic_900Black } from '@expo-google-fonts/zen-maru-gothic';
+import { Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
 import { ShipporiMincho_400Regular } from '@expo-google-fonts/shippori-mincho';
 
-// フォント名（weight→ファミリーの対応。カスタムフォントは weight が自動で効かないため）
+// フォント名（weight→ファミリーの対応）。見出し/本文=Zen Maru Gothic（丸ゴ）、数字強調=Fredoka。
 const FONT = {
-  base: 'MPLUSRounded1c_400Regular', med: 'MPLUSRounded1c_500Medium',
-  bold: 'MPLUSRounded1c_700Bold', xbold: 'MPLUSRounded1c_800ExtraBold',
-  enSb: 'Poppins_600SemiBold', enXb: 'Poppins_800ExtraBold', enBlack: 'Poppins_900Black',
+  base: 'ZenMaruGothic_400Regular', med: 'ZenMaruGothic_500Medium',
+  bold: 'ZenMaruGothic_700Bold', xbold: 'ZenMaruGothic_900Black',
+  num: 'Fredoka_700Bold', numSb: 'Fredoka_600SemiBold', numMed: 'Fredoka_500Medium',
   mincho: 'ShipporiMincho_400Regular',
 };
 function baseFamily(weight) {
@@ -141,7 +143,7 @@ async function scheduleInSeconds(item, seconds) {
 }
 
 export default function App() {
-  const [mode, setMode] = useState('dark');
+  const [mode, setMode] = useState('light'); // キャンディボックス配色は明るいクリームが主役
   const [profileName, setProfileName] = useState('あなた');
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [browser, setBrowser] = useState('safari');
@@ -160,8 +162,8 @@ export default function App() {
   const [praise, setPraise] = useState(PRAISE[0]);
   const celebAnim = useRef(new Animated.Value(0)).current;
   const [fontsLoaded] = useFonts({
-    Poppins_400Regular, Poppins_600SemiBold, Poppins_800ExtraBold, Poppins_900Black,
-    MPLUSRounded1c_400Regular, MPLUSRounded1c_500Medium, MPLUSRounded1c_700Bold, MPLUSRounded1c_800ExtraBold,
+    ZenMaruGothic_400Regular, ZenMaruGothic_500Medium, ZenMaruGothic_700Bold, ZenMaruGothic_900Black,
+    Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold,
     ShipporiMincho_400Regular,
   });
 
@@ -375,54 +377,61 @@ function Masonry({ items, renderTile }) {
 /* ---------- 達成演出：英語のほめ言葉（紙吹雪は不自然だったので外した） ---------- */
 const PRAISE = ['Amazing!', 'You did it!', 'Dream unlocked!', 'Way to go!', 'Legend!', 'Nailed it!', 'One step closer!'];
 
-/* ---------- 写真前面タイル（ホーム/ビジョン共通） ---------- */
-function PhotoTile({ item, onPress, height = 180 }) {
+/* ---------- 触感フィードバック（押すとバネで縮む） ---------- */
+function PressBounce({ onPress, style, children, scaleTo = 0.97 }) {
+  const a = useRef(new Animated.Value(1)).current;
+  const to = (v) => Animated.spring(a, { toValue: v, useNativeDriver: true, stiffness: 300, damping: 20, mass: 0.6 }).start();
+  return (
+    <Pressable onPress={onPress} onPressIn={() => to(scaleTo)} onPressOut={() => to(1)}>
+      <Animated.View style={[style, { transform: [{ scale: a }] }]}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
+// 画像の縦横比は 1:1 / 4:5 / 3:4 の3種類を、IDから決定論的に割り当て（再描画で変わらない）
+const CARD_ASPECTS = [1, 4 / 5, 3 / 4];
+function hashCode(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return Math.abs(h); }
+function cardAspect(id) { return CARD_ASPECTS[hashCode(String(id)) % CARD_ASPECTS.length]; }
+
+/* ---------- Wishカード（キャンディボックス：画像＋白い情報パネルの2段） ---------- */
+function PhotoTile({ item, onPress }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
   const due = dueLabel(item.dueTag);
   const w = getWith(item.withWho);
+  const heat = item.heat || 2;
   return (
-    <Pressable style={({ pressed }) => [s.tile, { height }, pressed && s.pressed]} onPress={onPress}>
-      {item.imageUri
-        ? <Image source={{ uri: item.imageUri }} style={s.tileImg} />
-        : <View style={[s.tileImg, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}>
-            <VIcon set={cat.iconSet} name={cat.icon} size={46} color="rgba(255,255,255,0.9)" />
-          </View>}
-      <View style={s.tileShade} />
-      <View style={[s.tileTag, { backgroundColor: cat.color + 'E6' }]}>
-        <VIcon set={cat.iconSet} name={cat.icon} size={11} color="#fff" />
-        <Text style={s.tileTagText}>{cat.label}</Text>
+    <PressBounce onPress={onPress} style={[s.card, { shadowColor: cat.tint }]}>
+      <View style={{ width: '100%', aspectRatio: cardAspect(item.id) }}>
+        {item.imageUri
+          ? <Image source={{ uri: item.imageUri }} style={s.cardImg} />
+          : <LinearGradient colors={[cat.soft, t.surface]} style={[s.cardImg, s.cardCenter]}>
+              <VIcon set={cat.iconSet} name={cat.icon} size={46} color={cat.tint} />
+            </LinearGradient>}
+        {/* frosted カテゴリチップ */}
+        <BlurView intensity={26} tint={t.mode === 'dark' ? 'dark' : 'light'} style={s.cardChip}>
+          <VIcon set={cat.iconSet} name={cat.icon} size={12} color={cat.tint} />
+          <Text style={[s.cardChipText, { color: cat.tint }]}>{cat.label}</Text>
+        </BlurView>
+        {done
+          ? <View style={s.cardBadge}><Ionicons name="checkmark-circle" size={22} color={cat.tint} /></View>
+          : item.sourcePlatform
+            ? <View style={s.cardSns}><Ionicons name={snsMeta(item.sourcePlatform).icon} size={13} color="#fff" /></View>
+            : null}
+        {done && <View style={s.cardDoneOverlay} pointerEvents="none" />}
       </View>
-      {done
-        ? <View style={s.tileDone}><Ionicons name="checkmark-circle" size={22} color={t.gold} /></View>
-        : item.sourcePlatform
-          ? <View style={s.tileSns}><Ionicons name={snsMeta(item.sourcePlatform).icon} size={14} color="#fff" /></View>
-          : null}
-      <View style={s.tileBottom}>
-        <Text style={s.tileTitle} numberOfLines={2}>{item.title}</Text>
-        <View style={s.tileMetaRow}>
-          <View style={s.tileMetaLeft}>
-            {w ? (
-              <View style={s.tileWith}>
-                <Ionicons name={w.icon} size={11} color="#fff" />
-              </View>
-            ) : null}
-            {!done && due ? (
-              <View style={s.tileDueRow}>
-                <Ionicons name="time-outline" size={12} color="#fff" />
-                <Text style={s.tileDue}>{due}まで</Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={s.tileFlames}>
-            {[1, 2, 3].map((n) => (
-              <Ionicons key={n} name="flame" size={11} color={n <= (item.heat || 2) ? t.gold : 'rgba(255,255,255,0.32)'} />
-            ))}
-          </View>
+      <View style={s.cardPanel}>
+        <Text style={s.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <View style={s.cardMetaRow}>
+          {w ? <View style={s.cardMeta}><Ionicons name={w.icon} size={11} color={t.sub} /><Text style={s.cardMetaText}>{w.label}</Text></View> : null}
+          {!done && due ? <View style={s.cardMeta}><Ionicons name="time-outline" size={11} color={t.sub} /><Text style={s.cardMetaText}>{due}まで</Text></View> : null}
+        </View>
+        <View style={s.cardDots}>
+          {[1, 2, 3].map((n) => <View key={n} style={[s.cardDot, { backgroundColor: n <= heat ? cat.tint : t.line }]} />)}
         </View>
       </View>
-    </Pressable>
+    </PressBounce>
   );
 }
 
@@ -444,19 +453,20 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
         <View style={s.brandRow}>
           <Text style={s.brand}>WannaLog</Text>
           {canSort && (
-            <Pressable style={s.sortBtn} onPress={onSort}>
-              <Ionicons name="swap-vertical" size={15} color={t.accent} />
-              <Text style={s.sortBtnText}>並べ替え</Text>
+            <Pressable style={s.ghostBtn} onPress={onSort} accessibilityLabel="並べ替え">
+              <Ionicons name="swap-vertical" size={18} color={t.sub} />
             </Pressable>
           )}
         </View>
-        <Text style={s.greet}>叶えた {doneCount}・のこり {activeCount}</Text>
+        <View style={s.statCapsule}>
+          <Text style={s.statCapsuleText}>叶えた <Text style={s.statCapsuleNum}>{doneCount}</Text>　・　のこり <Text style={s.statCapsuleNum}>{activeCount}</Text></Text>
+        </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
         <Chip icon="flame" label="本気" active={filter === 'serious'} onPress={() => setFilter('serious')} />
         {CATEGORIES.map((c) => (
-          <Chip key={c.key} icon={c.icon} iconSet={c.iconSet} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
+          <Chip key={c.key} cat={c} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
         ))}
         {snsPresent.map((p) => (
           <Chip key={p} icon={snsMeta(p).icon} label={snsMeta(p).label} active={filter === 'sns:' + p} onPress={() => setFilter('sns:' + p)} />
@@ -464,15 +474,27 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
         <Chip icon="trophy" label={`叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
       </ScrollView>
       {visible.length === 0 ? (
-        <Text style={s.empty}>{filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : '最初の“したい”を、＋から置いてみよう。'}</Text>
+        <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
       ) : (
         <Masonry items={visible} renderTile={(it, i) => (
           <FadeInView key={it.id} index={i}>
-            <PhotoTile item={it} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length]} onPress={() => onOpen(it)} />
+            <PhotoTile item={it} onPress={() => onOpen(it)} />
           </FadeInView>
         )} />
       )}
     </ScrollView>
+  );
+}
+
+// 空状態：無機質なグレーでなく、パステルの円＋やさしい一言
+function EmptyState({ text }) {
+  const s = useStyles();
+  return (
+    <View style={s.emptyWrap}>
+      <View style={s.emptyBlob1} />
+      <View style={s.emptyBlob2} />
+      <Text style={s.empty}>{text}</Text>
+    </View>
   );
 }
 
@@ -817,6 +839,18 @@ function TabBar({ tab, onTab, onAdd }) {
 }
 function TabBarInner({ tab, onTab, onAdd }) {
   const t = useTheme(); const s = useStyles();
+  const scale = useRef(new Animated.Value(1)).current;   // 押下スクワッシュ
+  const pulse = useRef(new Animated.Value(1)).current;    // アイドルの呼吸
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.delay(6000),
+      Animated.timing(pulse, { toValue: 1.04, duration: 500, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1, duration: 500, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  const press = (v) => Animated.spring(scale, { toValue: v, useNativeDriver: true, stiffness: 320, damping: 16, mass: 0.6 }).start();
   const item = (key, icon, label) => (
     <Pressable style={s.tab} onPress={() => onTab(key)}>
       <Ionicons name={tab === key ? icon : icon + '-outline'} size={23} color={tab === key ? t.accent : t.sub} />
@@ -827,18 +861,44 @@ function TabBarInner({ tab, onTab, onAdd }) {
     <View style={s.tabbar}>
       {item('home', 'home', 'ホーム')}
       {item('vision', 'sparkles', 'ビジョン')}
-      <Pressable style={s.tabAdd} onPress={onAdd}><Ionicons name="add" size={30} color="#fff" /></Pressable>
+      <Pressable onPress={onAdd} onPressIn={() => press(0.92)} onPressOut={() => press(1)}>
+        <Animated.View style={[s.tabAdd, { transform: [{ scale: Animated.multiply(scale, pulse) }] }]}>
+          <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.tabAddGrad}>
+            <Ionicons name="add" size={30} color="#fff" />
+          </LinearGradient>
+        </Animated.View>
+      </Pressable>
       {item('notify', 'notifications', '通知')}
       {item('mypage', 'person', 'マイページ')}
     </View>
   );
 }
 
-function Chip({ icon, iconSet, label, active, onPress }) {
+function Chip({ icon, iconSet, cat, label, active, onPress }) {
   const t = useTheme(); const s = useStyles();
+  const a = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (active) Animated.sequence([
+      Animated.timing(a, { toValue: 1.08, duration: 110, useNativeDriver: true }),
+      Animated.spring(a, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
+  }, [active]);
+  const ic = icon || (cat && cat.icon);
+  const icSet = iconSet || (cat && cat.iconSet);
+  if (cat) {
+    return (
+      <Animated.View style={{ transform: [{ scale: a }] }}>
+        <Pressable onPress={onPress}
+          style={[s.chipCat, active ? { backgroundColor: cat.soft, borderColor: cat.soft } : { backgroundColor: t.surface, borderColor: cat.tint }]}>
+          <VIcon set={icSet} name={ic} size={13} color={cat.tint} />
+          <Text style={[s.chipCatText, { color: active ? cat.tint : t.sub }]}>{label}</Text>
+        </Pressable>
+      </Animated.View>
+    );
+  }
   return (
     <Pressable onPress={onPress} style={[s.chip, active && s.chipActive]}>
-      {icon ? <VIcon set={iconSet} name={icon} size={13} color={active ? (t.mode === 'dark' ? t.bg : '#fff') : t.text} /> : null}
+      {ic ? <VIcon set={icSet} name={ic} size={13} color={active ? (t.mode === 'dark' ? t.bg : '#fff') : t.text} /> : null}
       <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -1534,7 +1594,7 @@ function makeStyles(t) {
     sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
     sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },
     sortHandle: { paddingHorizontal: 6, paddingVertical: 10 },
-    brand: { fontSize: 23, fontWeight: '900', color: t.text, letterSpacing: 0.5, fontFamily: FONT.enBlack },
+    brand: { fontSize: 24, fontWeight: '700', color: t.text, letterSpacing: 0.3, fontFamily: FONT.bold },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
 
@@ -1561,9 +1621,41 @@ function makeStyles(t) {
     visionBigEmpty: { backgroundColor: t.surface, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 8 },
     visionBigLabel: { color: '#fff', fontSize: 28, textAlign: 'center', letterSpacing: 2, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 10, fontFamily: FONT.mincho, paddingHorizontal: 16 },
 
-    masonryRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingTop: 2 },
-    masonryCol: { flex: 1, gap: 12 },
+    masonryRow: { flexDirection: 'row', gap: 14, paddingHorizontal: 20, paddingTop: 2 },
+    masonryCol: { flex: 1, gap: 14 },
     pressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
+
+    // ヘッダーの統計カプセル
+    ghostBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: t.surface },
+    statCapsule: { alignSelf: 'flex-start', marginTop: 8, backgroundColor: t.capsule, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+    statCapsuleText: { fontSize: 12.5, color: t.sub, fontWeight: '600' },
+    statCapsuleNum: { color: t.accent, fontFamily: FONT.num, fontSize: 14 },
+
+    // カテゴリチップ（キャンディボックス）
+    chipCat: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
+    chipCatText: { fontSize: 13, fontWeight: '700' },
+
+    // Wishカード（画像＋白い情報パネルの2段・カテゴリ色グロー影）
+    card: { borderRadius: 24, backgroundColor: t.surface, overflow: 'hidden', shadowOpacity: 0.30, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+    cardImg: { width: '100%', height: '100%' },
+    cardCenter: { alignItems: 'center', justifyContent: 'center' },
+    cardChip: { position: 'absolute', left: 8, top: 8, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, overflow: 'hidden' },
+    cardChipText: { fontSize: 11, fontWeight: '800' },
+    cardBadge: { position: 'absolute', right: 8, top: 8, backgroundColor: t.surface, borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+    cardSns: { position: 'absolute', right: 8, top: 8, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+    cardDoneOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.08)' },
+    cardPanel: { padding: 12, gap: 6, backgroundColor: t.surface },
+    cardTitle: { fontSize: 14.5, lineHeight: 20, color: t.text, fontFamily: FONT.bold },
+    cardMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: t.surface2, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+    cardMetaText: { fontSize: 11, color: t.sub, fontWeight: '600' },
+    cardDots: { flexDirection: 'row', gap: 5, marginTop: 1 },
+    cardDot: { width: 7, height: 7, borderRadius: 4 },
+
+    // 空状態（パステルの丸＋やさしい一言）
+    emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingHorizontal: 40 },
+    emptyBlob1: { position: 'absolute', top: 44, width: 120, height: 120, borderRadius: 60, backgroundColor: t.accent, opacity: 0.10 },
+    emptyBlob2: { position: 'absolute', top: 92, left: '54%', width: 66, height: 66, borderRadius: 33, backgroundColor: t.gold, opacity: 0.12 },
 
     // 写真前面タイル
     tile: { borderRadius: 20, overflow: 'hidden', justifyContent: 'flex-end', backgroundColor: t.surface },
@@ -1656,8 +1748,8 @@ function makeStyles(t) {
     statTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
     statBlock: { alignItems: 'center', paddingHorizontal: 26 },
     statDivider: { width: 1, height: 46, backgroundColor: t.line },
-    statNum: { fontSize: 46, fontWeight: '900', color: t.accent, fontFamily: FONT.enBlack },
-    statPct: { fontSize: 24, fontWeight: '900', color: t.accent, fontFamily: FONT.enBlack },
+    statNum: { fontSize: 46, fontWeight: '900', color: t.accent, fontFamily: FONT.num },
+    statPct: { fontSize: 24, fontWeight: '900', color: t.accent, fontFamily: FONT.num },
     statLabel: { fontSize: 13, fontWeight: '800', color: t.text, marginTop: 0 },
     graphRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginTop: 20, height: 76 },
     graphCol: { alignItems: 'center', gap: 6 },
@@ -1684,7 +1776,8 @@ function makeStyles(t) {
     tabbar: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 84, backgroundColor: t.tabbar, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-around', borderTopWidth: 1, borderTopColor: t.line, paddingTop: 12 },
     tab: { alignItems: 'center', gap: 3, width: 64 },
     tabLabel: { fontSize: 10, color: t.sub, fontWeight: '600' },
-    tabAdd: { width: 56, height: 56, marginTop: -16, borderRadius: 28, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center', shadowColor: t.accent, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+    tabAdd: { width: 60, height: 60, marginTop: -18, borderRadius: 30, alignItems: 'center', justifyContent: 'center', shadowColor: t.accent, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+    tabAddGrad: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
 
     // 保存シート
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -1748,7 +1841,7 @@ function makeStyles(t) {
     testNotifyLink: { textAlign: 'center', color: t.sub, fontSize: 12, marginTop: 18, textDecorationLine: 'underline' },
 
     celebrate: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: t.mode === 'dark' ? 'rgba(15,17,21,0.7)' : 'rgba(250,247,242,0.7)' },
-    celebrateEn: { marginTop: 12, fontSize: 30, fontWeight: '900', color: t.gold, letterSpacing: 0.5, fontFamily: FONT.enBlack },
+    celebrateEn: { marginTop: 12, fontSize: 30, fontWeight: '900', color: t.gold, letterSpacing: 0.5, fontFamily: FONT.num },
     celebrateText: { marginTop: 4, fontSize: 22, fontWeight: '900', color: t.text },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
