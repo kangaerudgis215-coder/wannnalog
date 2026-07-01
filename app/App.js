@@ -49,6 +49,7 @@ const THEME_KEY = 'wannalog_theme';
 const PROFILE_KEY = 'wannalog_profile';
 const PROFILE_PHOTO_KEY = 'wannalog_profile_photo';
 const BROWSER_KEY = 'wannalog_browser'; // 'safari'（既定）/ 'chrome'
+const DENSITY_KEY = 'wannalog_density'; // 'compact'（既定）/ 'comfy'（ゆったり）
 const VISION_KEY = 'wannalog_vision_v1';
 const VISION_TITLE_KEY = 'wannalog_vision_title';
 const GARDEN_KEY = 'wannalog_garden_v1';
@@ -147,6 +148,7 @@ export default function App() {
   const [profileName, setProfileName] = useState('あなた');
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [browser, setBrowser] = useState('safari');
+  const [density, setDensity] = useState('compact');
   const [items, setItems] = useState([]);
   const [visionSlots, setVisionSlots] = useState(VISION_SEED);
   const [visionTitle, setVisionTitle] = useState('2026 VISION');
@@ -176,6 +178,7 @@ export default function App() {
       const p = await AsyncStorage.getItem(PROFILE_KEY); if (p) setProfileName(p);
       const pp = await AsyncStorage.getItem(PROFILE_PHOTO_KEY); if (pp) setProfilePhoto(pp);
       const br = await AsyncStorage.getItem(BROWSER_KEY); if (br) setBrowser(br);
+      const dn = await AsyncStorage.getItem(DENSITY_KEY); if (dn) setDensity(dn);
       const vs = await AsyncStorage.getItem(VISION_KEY);
       if (vs) setVisionSlots(JSON.parse(vs)); else AsyncStorage.setItem(VISION_KEY, JSON.stringify(VISION_SEED));
       const vt = await AsyncStorage.getItem(VISION_TITLE_KEY); if (vt) setVisionTitle(vt);
@@ -206,6 +209,7 @@ export default function App() {
     if (!res.canceled) { setProfilePhoto(res.assets[0].uri); await AsyncStorage.setItem(PROFILE_PHOTO_KEY, res.assets[0].uri); Haptics.selectionAsync(); }
   }
   async function setBrowserPref(b) { setBrowser(b); await AsyncStorage.setItem(BROWSER_KEY, b); Haptics.selectionAsync(); }
+  async function setDensityPref(d) { setDensity(d); await AsyncStorage.setItem(DENSITY_KEY, d); Haptics.selectionAsync(); }
   // リンクを開く：選んだブラウザ（Chrome/Safari）で開く。Chrome未導入なら元URLにフォールバック。
   function openInBrowser(url) {
     if (!url) return;
@@ -322,10 +326,10 @@ export default function App() {
           />
         ) : (
           <>
-            {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onSort={() => setSortOpen(true)} doneCount={doneCount} activeCount={activeCount} />}
+            {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onSort={() => setSortOpen(true)} density={density} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
-            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
+            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} density={density} onDensity={setDensityPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} mypageBounce={mypageBounce} />
           </>
         )}
@@ -515,7 +519,8 @@ function hashCode(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h 
 function cardAspect(id) { return CARD_ASPECTS[hashCode(String(id)) % CARD_ASPECTS.length]; }
 
 /* ---------- Wishカード（キャンディボックス：画像＋白い情報パネルの2段） ---------- */
-function PhotoTile({ item, onPress }) {
+// feature=true は2列幅の大カード（本気を目立たせる／ゆったり表示にも使う）
+function PhotoTile({ item, onPress, feature = false }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
@@ -524,7 +529,7 @@ function PhotoTile({ item, onPress }) {
   const heat = item.heat || 2;
   return (
     <PressBounce onPress={onPress} style={[s.card, { shadowColor: cat.tint }]}>
-      <View style={{ width: '100%', aspectRatio: cardAspect(item.id) }}>
+      <View style={{ width: '100%', aspectRatio: feature ? 3 / 2 : cardAspect(item.id) }}>
         {item.imageUri
           ? <Image source={{ uri: item.imageUri }} style={s.cardImg} />
           : <LinearGradient colors={[cat.soft, t.surface]} style={[s.cardImg, s.cardCenter]}>
@@ -543,7 +548,7 @@ function PhotoTile({ item, onPress }) {
         {done && <View style={s.cardDoneOverlay} pointerEvents="none" />}
       </View>
       <View style={s.cardPanel}>
-        <Text style={s.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={feature ? s.cardTitleBig : s.cardTitle} numberOfLines={2}>{item.title}</Text>
         <View style={s.cardMetaRow}>
           {w ? <View style={s.cardMeta}><Ionicons name={w.icon} size={11} color={t.sub} /><Text style={s.cardMetaText}>{w.label}</Text></View> : null}
           {!done && due ? <View style={s.cardMeta}><Ionicons name="time-outline" size={11} color={t.sub} /><Text style={s.cardMetaText}>{due}まで</Text></View> : null}
@@ -557,7 +562,18 @@ function PhotoTile({ item, onPress }) {
 }
 
 /* ---------- ホーム ---------- */
-function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCount }) {
+// 熱量「本気」を6枚ごとに1回だけ2列幅のfeatureカードに昇格し、間は2列マソンリー。
+function homeBlocks(visible) {
+  const blocks = []; let buffer = []; let since = 0;
+  const flush = () => { if (buffer.length) { blocks.push({ type: 'masonry', items: buffer }); buffer = []; } };
+  visible.forEach((it) => {
+    if ((it.heat || 2) === 3 && since >= 6) { flush(); blocks.push({ type: 'feature', item: it }); since = 0; }
+    else { buffer.push(it); since++; }
+  });
+  flush();
+  return blocks;
+}
+function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
@@ -568,6 +584,9 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
   else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
   else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
   const canSort = filter === 'all' && visible.length > 1;
+  // 「そろそろ思い出す」：締切が近い（今日/今週）未達成を先出し（0件なら非表示）
+  const upcoming = filter === 'all' ? items.filter((it) => !it.doneAt && (it.dueTag === 'today' || it.dueTag === 'thisWeek')).slice(0, 4) : [];
+  const comfy = density === 'comfy' && filter === 'all';
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
       <View style={s.topbar}>
@@ -594,16 +613,60 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, doneCount, activeCo
         ))}
         <Chip icon="trophy" label={`叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
       </ScrollView>
+
+      {upcoming.length > 0 && <RemindCarousel items={upcoming} onOpen={onOpen} />}
+
       {visible.length === 0 ? (
         <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
+      ) : comfy ? (
+        <View style={{ paddingHorizontal: 20, gap: 16, paddingTop: 2 }}>
+          {visible.map((it, i) => (
+            <FadeInView key={it.id} index={i}><PhotoTile item={it} feature onPress={() => onOpen(it)} /></FadeInView>
+          ))}
+        </View>
+      ) : filter === 'all' ? (
+        homeBlocks(visible).map((b, bi) => b.type === 'feature'
+          ? <FadeInView key={b.item.id} index={bi}><View style={{ paddingHorizontal: 20, paddingTop: 2 }}><PhotoTile item={b.item} feature onPress={() => onOpen(b.item)} /></View></FadeInView>
+          : <Masonry key={'m' + bi} items={b.items} renderTile={(it, i) => (
+              <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} /></FadeInView>
+            )} />
+        )
       ) : (
         <Masonry items={visible} renderTile={(it, i) => (
-          <FadeInView key={it.id} index={i}>
-            <PhotoTile item={it} onPress={() => onOpen(it)} />
-          </FadeInView>
+          <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} /></FadeInView>
         )} />
       )}
     </ScrollView>
+  );
+}
+
+// 「そろそろ思い出す」横スクロールカルーセル（写真＋タイトル＋残り日数）
+function RemindCarousel({ items, onOpen }) {
+  const t = useTheme(); const s = useStyles();
+  const { width } = useWindowDimensions();
+  const w = Math.round(width * 0.7);
+  return (
+    <View>
+      <Text style={s.carouselTitle}>そろそろ思い出す</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
+        {items.map((it) => {
+          const cat = getCategory(it.category);
+          return (
+            <PressBounce key={it.id} onPress={() => onOpen(it)} style={[s.remindCard, { width: w, shadowColor: cat.tint }]}>
+              <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
+                {it.imageUri
+                  ? <Image source={{ uri: it.imageUri }} style={s.cardImg} />
+                  : <LinearGradient colors={[cat.soft, t.surface]} style={[s.cardImg, s.cardCenter]}><VIcon set={cat.iconSet} name={cat.icon} size={40} color={cat.tint} /></LinearGradient>}
+              </View>
+              <View style={s.remindPanel}>
+                <Text style={s.cardTitle} numberOfLines={1}>{it.title}</Text>
+                <View style={s.cardMeta}><Ionicons name="time-outline" size={11} color={t.sub} /><Text style={s.cardMetaText}>{dueLabel(it.dueTag)}まで</Text></View>
+              </View>
+            </PressBounce>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -824,7 +887,7 @@ function CatStatBar({ c }) {
     </View>
   );
 }
-function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, browser, onBrowser, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
+function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, browser, onBrowser, density, onDensity, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
@@ -883,6 +946,21 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
           {[{ k: 'safari', l: 'Safari' }, { k: 'chrome', l: 'Chrome' }].map((b) => (
             <Pressable key={b.k} onPress={() => onBrowser(b.k)} style={[s.segBtn, browser === b.k && s.segBtnOn]}>
               <Text style={[s.segText, browser === b.k && s.segTextOn]}>{b.l}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {/* 表示密度（コンパクト / ゆったり） */}
+      <View style={s.settingRow}>
+        <View style={s.settingLeft}>
+          <Ionicons name="grid-outline" size={20} color={t.accent} />
+          <Text style={s.settingText}>表示</Text>
+        </View>
+        <View style={s.segment}>
+          {[{ k: 'compact', l: 'コンパクト' }, { k: 'comfy', l: 'ゆったり' }].map((d) => (
+            <Pressable key={d.k} onPress={() => onDensity(d.k)} style={[s.segBtn, density === d.k && s.segBtnOn]}>
+              <Text style={[s.segText, density === d.k && s.segTextOn]}>{d.l}</Text>
             </Pressable>
           ))}
         </View>
@@ -1179,6 +1257,13 @@ function SaveModal({ visible, onClose, onSave }) {
             <Pressable onPress={onClose}><Ionicons name="close" size={22} color={t.sub} /></Pressable>
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {/* 入力に合わせて“実際に並ぶカード”がその場で育つプレビュー */}
+            <View style={s.previewWrap}>
+              <View style={{ width: 170 }}>
+                <PhotoTile item={{ id: 'preview', title: title.trim() || '（タイトル）', category, imageUri: previewUri, heat, withWho, dueTag: due, doneAt: null }} onPress={() => {}} />
+              </View>
+            </View>
+
             <TextInput style={s.input} placeholder="例：鎌倉の海が見えるカフェ" placeholderTextColor={t.sub}
               value={title} onChangeText={setTitle} autoFocus />
 
@@ -1214,17 +1299,17 @@ function SaveModal({ visible, onClose, onSave }) {
             )}
 
             <Text style={s.label}>カテゴリ</Text>
-            <View style={s.catWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.rowScroll}>
               {CATEGORIES.map((c) => (
                 <Pressable key={c.key} onPress={() => setCategory(c.key)} style={optChip(category === c.key, c.color)}>
                   <VIcon set={c.iconSet} name={c.icon} size={13} color={category === c.key ? '#fff' : t.text} />
                   <Text style={[s.catChipText, category === c.key && { color: '#fff' }]}>{c.label}</Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
             <Text style={s.label}>誰と（任意）</Text>
-            <View style={s.catWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.rowScroll}>
               {WITH_OPTIONS.map((wo) => {
                 const on = withWho === wo.key;
                 return (
@@ -1234,26 +1319,26 @@ function SaveModal({ visible, onClose, onSave }) {
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
 
             <Text style={s.label}>熱量（本気度）</Text>
-            <View style={s.catWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.rowScroll}>
               {HEAT_OPTIONS.map((h) => (
                 <Pressable key={h.key} onPress={() => chooseHeat(h.key)} style={optChip(heat === h.key, t.accent)}>
                   <Ionicons name="flame" size={13} color={heat === h.key ? '#fff' : (h.key === 3 ? t.accent : t.sub)} />
                   <Text style={[s.catChipText, heat === h.key && { color: '#fff' }]}>{h.label}</Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
             <Text style={s.label}>いつまでに</Text>
-            <View style={s.catWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.rowScroll}>
               {DUE_OPTIONS.map((d) => (
                 <Pressable key={d.key} onPress={() => setDue(d.key)} style={optChip(due === d.key, t.accent)}>
                   <Text style={[s.catChipText, due === d.key && { color: '#fff' }]}>{d.label}</Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
             <Text style={s.label}>思い出す（通知）</Text>
             <ReminderEditor value={reminder} onChange={setReminder} />
@@ -1791,8 +1876,13 @@ function makeStyles(t) {
     cardMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: t.surface2, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
     cardMetaText: { fontSize: 11, color: t.sub, fontWeight: '600' },
+    cardTitleBig: { fontSize: 20, lineHeight: 26, color: t.text, fontFamily: FONT.bold },
     cardDots: { flexDirection: 'row', gap: 5, marginTop: 1 },
     cardDot: { width: 7, height: 7, borderRadius: 4 },
+    // 「そろそろ思い出す」カルーセル
+    carouselTitle: { fontSize: 14, color: t.text, paddingHorizontal: 20, marginTop: 2, marginBottom: 10, fontFamily: FONT.bold },
+    remindCard: { borderRadius: 20, backgroundColor: t.surface, overflow: 'hidden', shadowOpacity: 0.22, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
+    remindPanel: { padding: 12, gap: 6 },
 
     // 空状態（パステルの丸＋やさしい一言）
     emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingHorizontal: 40 },
@@ -1941,6 +2031,8 @@ function makeStyles(t) {
     snsDetectedText: { color: t.accent, fontSize: 12.5, fontWeight: '700' },
     label: { marginTop: 18, marginBottom: 10, fontSize: 13, fontWeight: '700', color: t.text },
     catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    rowScroll: { flexDirection: 'row', gap: 8, paddingRight: 12 },
+    previewWrap: { alignItems: 'center', marginBottom: 6 },
     catChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
     catChipText: { fontSize: 13, fontWeight: '600', color: t.text },
     reminderPickRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
