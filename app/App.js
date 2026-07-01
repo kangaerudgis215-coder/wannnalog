@@ -19,7 +19,7 @@ import { GestureHandlerRootView, PanGestureHandler, State, ScrollView as GHScrol
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, dueLabel, browserUrl } from './links';
-import { reminderPlan, remindSummary } from './notify';
+import { reminderPlan, remindSummary, nextRemindAt } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
@@ -382,7 +382,7 @@ export default function App() {
           <>
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onSort={() => setSortOpen(true)} density={density} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
-            {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
+            {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} onSnooze={(id) => applyReminder(id, { remind: 'at', remindAt: Date.now() + DAY_MS })} onStop={(id) => applyReminder(id, { remind: 'none' })} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} mypageBounce={mypageBounce} />
           </>
@@ -936,33 +936,72 @@ function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate })
   );
 }
 
-/* ---------- 通知 ---------- */
-function NotifyTab({ items, onOpen }) {
+/* ---------- 通知（時系列セクション＋左スワイプでスヌーズ/削除） ---------- */
+function notifyBucket(at, now) {
+  if (at == null) return 'later';
+  const startTomorrow = startOfDay(now) + DAY_MS;
+  if (at < startTomorrow) return 'today';
+  if (at < startOfDay(now) + 7 * DAY_MS) return 'week';
+  return 'later';
+}
+const NOTIFY_SECTIONS = [{ key: 'today', label: '今日' }, { key: 'week', label: '今週' }, { key: 'later', label: 'それ以降' }];
+function NotifyRow({ item, onOpen, onSnooze, onStop }) {
   const t = useTheme(); const s = useStyles();
-  const reminders = items.filter((it) => !it.doneAt && it.remind && it.remind !== 'none');
+  const cat = getCategory(item.category);
+  const rightActions = () => (
+    <View style={s.swipeActions}>
+      <Pressable style={[s.swipeAction, { backgroundColor: '#F2A93B' }]} onPress={onSnooze}>
+        <Ionicons name="alarm-outline" size={18} color="#fff" /><Text style={s.swipeText}>スヌーズ</Text>
+      </Pressable>
+      <Pressable style={[s.swipeAction, { backgroundColor: '#C96A66' }]} onPress={onStop}>
+        <Ionicons name="notifications-off-outline" size={18} color="#fff" /><Text style={s.swipeText}>削除</Text>
+      </Pressable>
+    </View>
+  );
+  return (
+    <Swipeable renderRightActions={rightActions} overshootRight={false}>
+      <Pressable style={({ pressed }) => [s.notifyRow, pressed && s.pressed]} onPress={onOpen}>
+        <View style={[s.notifyIcon, { backgroundColor: cat.color }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color="#fff" /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.notifyTitle} numberOfLines={1}>{item.title}</Text>
+          <Text style={s.notifySub}>{remindSummary(item)}に思い出します</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={t.sub} />
+      </Pressable>
+    </Swipeable>
+  );
+}
+function NotifyTab({ items, onOpen, onSnooze, onStop }) {
+  const t = useTheme(); const s = useStyles();
+  const now = Date.now();
+  const reminders = items
+    .filter((it) => !it.doneAt && it.remind && it.remind !== 'none')
+    .map((it) => ({ it, at: nextRemindAt(it, now) }))
+    .sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
+  const groups = { today: [], week: [], later: [] };
+  reminders.forEach((r) => groups[notifyBucket(r.at, now)].push(r.it));
   return (
     <View style={{ flex: 1 }}>
       <View style={s.topbar}>
         <Text style={s.screenTitle}>通知</Text>
         <Text style={s.greet}>これから、そっと思い出すこと</Text>
       </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 110, gap: 10 }} showsVerticalScrollIndicator={false}>
-        {reminders.length === 0 ? (
-          <Text style={s.empty}>思い出す予定はありません。{'\n'}保存時に「思い出す」を選ぶと、ここに並びます。</Text>
-        ) : reminders.map((item) => {
-          const cat = getCategory(item.category);
-          return (
-            <Pressable key={item.id} style={({ pressed }) => [s.notifyRow, pressed && s.pressed]} onPress={() => onOpen(item)}>
-              <View style={[s.notifyIcon, { backgroundColor: cat.color }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color="#fff" /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.notifyTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={s.notifySub}>{remindSummary(item)}に思い出します</Text>
+      {reminders.length === 0 ? (
+        <EmptyState text={'まだ思い出す予定はありません。\n保存時に「思い出す」を選ぶと、ここに並びます。'} />
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
+          {NOTIFY_SECTIONS.map((sec) => groups[sec.key].length > 0 && (
+            <View key={sec.key}>
+              <Text style={s.notifySection}>{sec.label}</Text>
+              <View style={{ gap: 10, marginBottom: 8 }}>
+                {groups[sec.key].map((item) => (
+                  <NotifyRow key={item.id} item={item} onOpen={() => onOpen(item)} onSnooze={() => onSnooze(item.id)} onStop={() => onStop(item.id)} />
+                ))}
               </View>
-              <Ionicons name="chevron-forward" size={18} color={t.sub} />
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+            </View>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -2064,7 +2103,11 @@ function makeStyles(t) {
 
     // 通知
     notifyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 16, padding: 14 },
-    notifyIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    notifyIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+    notifySection: { fontSize: 12, color: t.sub, fontWeight: '700', marginTop: 16, marginBottom: 8, marginLeft: 4 },
+    swipeActions: { flexDirection: 'row', alignItems: 'center', paddingLeft: 8, gap: 8 },
+    swipeAction: { width: 74, alignSelf: 'stretch', borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 3 },
+    swipeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
     notifyTitle: { fontSize: 15, fontWeight: '700', color: t.text },
     notifySub: { fontSize: 12, color: t.sub, marginTop: 3 },
 

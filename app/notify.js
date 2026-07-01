@@ -53,6 +53,30 @@ export function reminderPlan(item, now = Date.now()) {
   return secs ? { kind: 'interval', seconds: secs } : null;
 }
 
+// 次に思い出す予定の時刻(ms)を推定（純粋関数・通知画面の時系列グループ分けに使う）。
+// interval(明日/3日後/1週間後)は createdAt を基準に概算する。
+export function nextRemindAt(item, now = Date.now()) {
+  const r = (item && item.remind) || 'none';
+  if (r === 'none') return null;
+  if (r === 'at') return item.remindAt || null;
+  if (r === 'daily') {
+    const d = new Date(now); d.setHours(item.remindHour ?? 9, item.remindMinute ?? 0, 0, 0);
+    if (d.getTime() <= now) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  if (r === 'weekly') {
+    const d = new Date(now); d.setHours(item.remindHour ?? 9, item.remindMinute ?? 0, 0, 0);
+    const targetDow = ((item.remindWeekday ?? 1) - 1 + 7) % 7; // 1=日 → 0=Sun
+    let add = (targetDow - d.getDay() + 7) % 7;
+    if (add === 0 && d.getTime() <= now) add = 7;
+    d.setDate(d.getDate() + add);
+    return d.getTime();
+  }
+  const secs = reminderSeconds(r);
+  if (secs == null) return null;
+  return (item.createdAt || now) + secs * 1000;
+}
+
 // 表示用の要約（純粋関数）
 export function remindSummary(item) {
   const r = (item && item.remind) || 'none';
