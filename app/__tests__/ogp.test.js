@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, planOgpAutoFill } from '../ogp';
 
 describe('isUrl', () => {
   test('http/https をURLと判定', () => {
@@ -96,5 +96,36 @@ describe('cleanTitle', () => {
   test('汎用かつ手掛かり無しは fallback、それも無ければ null', () => {
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '手入力')).toBe('手入力');
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '')).toBeNull();
+  });
+});
+
+describe('planOgpAutoFill', () => {
+  test('タイトル未入力・写真未選択なら両方反映', () => {
+    const plan = planOgpAutoFill({
+      ogpTitle: 'すてきなカフェ', ogpImage: 'https://img/x.jpg',
+      url: 'https://example.com/a', currentTitle: '', hasImage: false,
+    });
+    expect(plan).toEqual({ title: 'すてきなカフェ', image: 'https://img/x.jpg' });
+  });
+  test('タイトル入力済みなら title は上書きしない', () => {
+    const plan = planOgpAutoFill({
+      ogpTitle: 'すてきなカフェ', ogpImage: 'https://img/x.jpg',
+      url: 'https://example.com/a', currentTitle: '手入力のタイトル', hasImage: false,
+    });
+    expect(plan.title).toBeNull();
+    expect(plan.image).toBe('https://img/x.jpg');
+  });
+  test('写真選択済みなら image は上書きしない', () => {
+    const plan = planOgpAutoFill({
+      ogpTitle: 'すてきなカフェ', ogpImage: 'https://img/x.jpg',
+      url: 'https://example.com/a', currentTitle: '', hasImage: true,
+    });
+    expect(plan.image).toBeNull();
+  });
+  test('OGPが空でも落ちない', () => {
+    const plan = planOgpAutoFill({
+      ogpTitle: null, ogpImage: null, url: 'https://example.com/a', currentTitle: '', hasImage: false,
+    });
+    expect(plan).toEqual({ title: null, image: null });
   });
 });

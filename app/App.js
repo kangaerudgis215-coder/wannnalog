@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
+  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
   Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -23,6 +23,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
+import { isUrl, fetchOgp, planOgpAutoFill } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1311,9 +1312,29 @@ function SaveModal({ visible, onClose, onSave }) {
   const [link, setLink] = useState('');
   const [heat, setHeat] = useState(2);
   const [reminder, setReminder] = useState({ remind: '3days' });
+  const [ogpImage, setOgpImage] = useState(null); // 一般URLから自動取得した画像
+  const [ogpLoading, setOgpLoading] = useState(false);
 
   const sns = parseSnsLink(link);            // SNSリンクを認識（X/Instagram/YouTube など）
-  const previewUri = image || (sns && sns.thumbnail); // 写真未選択でもYouTubeはサムネを表示
+  const previewUri = image || (sns && sns.thumbnail) || ogpImage; // 写真未選択でもリンク先の画像を表示
+
+  // SNS以外の一般URLを貼ったら、OGP（リンク先のタイトル・画像）を自動取得してフォームに反映
+  useEffect(() => {
+    if (sns || !isUrl(link)) { setOgpImage(null); setOgpLoading(false); return; }
+    const url = link.trim();
+    let cancelled = false;
+    setOgpLoading(true);
+    const timer = setTimeout(async () => {
+      const result = await fetchOgp(url);
+      if (cancelled) return;
+      setOgpLoading(false);
+      const plan = planOgpAutoFill({ ogpTitle: result.title, ogpImage: result.image, url, currentTitle: title, hasImage: !!image });
+      if (plan.title) setTitle(plan.title);
+      if (plan.image) setOgpImage(plan.image);
+    }, 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [link, !!sns]);
 
   // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
   function chooseHeat(h) { setHeat(h); setReminder({ remind: defaultRemindForHeat(h) }); }
@@ -1336,10 +1357,10 @@ function SaveModal({ visible, onClose, onSave }) {
     if (gps) { setCoords(gps); Alert.alert('場所を読み取りました', '保存すると「撮影場所を地図で開く」から開けます。'); }
     else { setCoords(null); Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); setOgpImage(null); setOgpLoading(false); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    const finalImage = image || (sns ? sns.thumbnail : null);
+    const finalImage = image || (sns ? sns.thumbnail : null) || ogpImage;
     const linkInfo = sns
       ? { url: sns.url, platform: sns.platform }
       : (link.trim() ? { url: link.trim(), platform: null } : null);
@@ -1376,6 +1397,18 @@ function SaveModal({ visible, onClose, onSave }) {
                 <Text style={s.snsDetectedText}>{snsMeta(sns.platform).label} のリンクを認識{sns.thumbnail ? '（サムネを表示します）' : ''}</Text>
               </View>
             )}
+            {!sns && isUrl(link) && ogpLoading && (
+              <View style={s.snsDetected}>
+                <ActivityIndicator size="small" color={t.accent} />
+                <Text style={s.snsDetectedText}>リンク先の情報を取得中…</Text>
+              </View>
+            )}
+            {!sns && !ogpLoading && ogpImage && (
+              <View style={s.snsDetected}>
+                <Ionicons name="link" size={15} color={t.accent} />
+                <Text style={s.snsDetectedText}>リンク先の写真とタイトルを自動取得しました</Text>
+              </View>
+            )}
 
             <Pressable style={s.photoPick} onPress={pickImage}>
               {previewUri ? <Image source={{ uri: previewUri }} style={s.photoPreview} />
@@ -1386,7 +1419,7 @@ function SaveModal({ visible, onClose, onSave }) {
                 <Ionicons name="location-outline" size={15} color={t.accent} />
                 <Text style={s.photoSubText}>写真から場所を読む</Text>
               </Pressable>
-              {image && <Pressable style={s.photoSubBtn} onPress={() => { setImage(null); setCoords(null); }}>
+              {(image || ogpImage) && <Pressable style={s.photoSubBtn} onPress={() => { setImage(null); setCoords(null); setOgpImage(null); }}>
                 <Ionicons name="close" size={15} color="#E5484D" />
                 <Text style={[s.photoSubText, { color: '#E5484D' }]}>写真を外す</Text>
               </Pressable>}

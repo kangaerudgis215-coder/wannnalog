@@ -94,3 +94,11 @@ export function cleanTitle(rawTitle, url, fallback) {
   }
   return t;
 }
+
+// OGP取得結果から、保存フォームに自動反映してよい値だけを決める（純粋関数）
+// ユーザーがすでに入力/選択済みの項目は上書きしない。
+export function planOgpAutoFill({ ogpTitle, ogpImage, url, currentTitle, hasImage }) {
+  const title = !(currentTitle || '').trim() ? cleanTitle(ogpTitle, url, '') : null;
+  const image = hasImage ? null : (ogpImage || null);
+  return { title, image };
+}
