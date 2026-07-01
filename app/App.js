@@ -1661,34 +1661,51 @@ function GiftModal({ visible, onClose, items, name, onOpenLink, onOpen }) {
       <SafeAreaView style={s.safe}>
         <View style={s.detailBar}>
           <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
-          <Pressable onPress={share} style={s.giftShareBtn}><Ionicons name="share-social-outline" size={16} color="#fff" /><Text style={s.giftShareText}>共有する</Text></Pressable>
+          <PressBounce onPress={share} style={{ borderRadius: 999, overflow: 'hidden' }}>
+            <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.giftShareBtn}>
+              <Ionicons name="share-social-outline" size={16} color="#fff" /><Text style={s.giftShareText}>共有する</Text>
+            </LinearGradient>
+          </PressBounce>
         </View>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          <Text style={s.giftHero}>{name}さんへの{'\n'}贈りもの候補</Text>
-          <Text style={s.giftLead}>友だちがこのページから贈れます。{'\n'}（これは将来のWeb公開ページの“見本”です）</Text>
+          {/* タイトル背景のごく薄いリボン装飾 */}
+          <View style={s.giftHeroWrap}>
+            <Ionicons name="ribbon" size={96} color={t.accent} style={s.giftDecor1} />
+            <Ionicons name="gift" size={72} color={t.gold} style={s.giftDecor2} />
+            <Text style={s.giftHero}>{name}さんへの{'\n'}贈りもの候補</Text>
+            <Text style={s.giftLead}>友だちがこのページから贈れます。{'\n'}（これは将来のWeb公開ページの“見本”です）</Text>
+          </View>
           {list.length === 0 ? (
             <Text style={s.empty}>まだ公開中の「ほしい」はありません。{'\n'}詳細画面で「ギフトページに公開」をオンにすると、ここに並びます。</Text>
           ) : list.map((item) => {
             const cat = getCategory(item.category);
             const link = actionLinks(item.category, item.title)[0];
             return (
-              <View key={item.id} style={s.giftRow}>
+              <View key={item.id} style={s.giftBox}>
+                <View style={[s.giftRibbon, { backgroundColor: cat.tint }]} />
                 <Pressable onPress={() => onOpen(item)}>
                   {item.imageUri
                     ? <Image source={{ uri: item.imageUri }} style={s.giftThumb} />
-                    : <View style={[s.giftThumb, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={24} color="#fff" /></View>}
+                    : <LinearGradient colors={[catSoft(cat, t.mode), t.surface]} style={[s.giftThumb, { alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={24} color={cat.tint} /></LinearGradient>}
                 </Pressable>
                 <View style={{ flex: 1 }}>
+                  <View style={[s.giftCatBadge, { backgroundColor: catSoft(cat, t.mode) }]}>
+                    <VIcon set={cat.iconSet} name={cat.icon} size={11} color={cat.tint} />
+                    <Text style={[s.giftCatBadgeText, { color: cat.tint }]}>{cat.label}</Text>
+                  </View>
                   <Text style={s.giftRowTitle} numberOfLines={2}>{item.title}</Text>
-                  <Pressable style={s.giftBuy} onPress={() => link && onOpenLink(link.url)}>
-                    <Ionicons name="bag-handle-outline" size={14} color={t.accent} />
-                    <Text style={s.giftBuyText}>{link ? link.label : '見てみる'}</Text>
+                  <Pressable style={{ alignSelf: 'flex-start', borderRadius: 999, overflow: 'hidden', marginTop: 8 }} onPress={() => link && onOpenLink(link.url)}>
+                    <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.giftBuyGrad}>
+                      <Ionicons name="bag-handle-outline" size={14} color="#fff" />
+                      <Text style={s.giftBuyGradText}>{link ? link.label : '見てみる'}</Text>
+                    </LinearGradient>
                   </Pressable>
                 </View>
               </View>
             );
           })}
           {list.length > 0 && <Text style={s.giftDisclaimer}>※ 公開ページのリンクには広告（アフィリエイト）を含む予定です。</Text>}
+          <Text style={s.giftBrand}>WannaLog で作られました</Text>
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -2139,14 +2156,21 @@ function makeStyles(t) {
     giftToggleHint: { fontSize: 12, color: t.sub, marginTop: 8, lineHeight: 18 },
     giftShareBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.accent, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999 },
     giftShareText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-    giftHero: { fontSize: 28, fontWeight: '900', color: t.text, lineHeight: 36, marginTop: 8 },
+    giftHeroWrap: { marginTop: 8, overflow: 'hidden' },
+    giftDecor1: { position: 'absolute', right: -12, top: -16, opacity: 0.08, transform: [{ rotate: '12deg' }] },
+    giftDecor2: { position: 'absolute', right: 70, top: 30, opacity: 0.08, transform: [{ rotate: '-10deg' }] },
+    giftHero: { fontSize: 28, color: t.text, lineHeight: 36, fontFamily: FONT.bold },
     giftLead: { fontSize: 13, color: t.sub, marginTop: 10, lineHeight: 20 },
-    giftRow: { flexDirection: 'row', gap: 14, alignItems: 'center', backgroundColor: t.surface, borderRadius: 16, padding: 12, marginTop: 14 },
-    giftThumb: { width: 72, height: 72, borderRadius: 12, overflow: 'hidden' },
+    giftBox: { flexDirection: 'row', gap: 14, alignItems: 'center', backgroundColor: t.surface, borderRadius: 20, padding: 12, paddingLeft: 16, marginTop: 14, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+    giftRibbon: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
+    giftThumb: { width: 72, height: 72, borderRadius: 12, overflow: 'hidden', backgroundColor: '#fff' },
+    giftCatBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginBottom: 5 },
+    giftCatBadgeText: { fontSize: 11, fontWeight: '800' },
     giftRowTitle: { fontSize: 15, fontWeight: '800', color: t.text, lineHeight: 20 },
-    giftBuy: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, alignSelf: 'flex-start', backgroundColor: t.bg, borderWidth: 1, borderColor: t.line, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-    giftBuyText: { color: t.accent, fontWeight: '700', fontSize: 12.5 },
+    giftBuyGrad: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8 },
+    giftBuyGradText: { color: '#fff', fontWeight: '800', fontSize: 12.5 },
     giftDisclaimer: { fontSize: 11, color: t.sub, marginTop: 20, lineHeight: 16 },
+    giftBrand: { fontSize: 12, color: t.sub, textAlign: 'center', marginTop: 18, fontFamily: FONT.bold, letterSpacing: 0.5 },
 
     // 箱庭
     gardenTopRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
