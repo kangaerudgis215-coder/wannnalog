@@ -4,7 +4,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
-  Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View, Alert,
+  Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -158,9 +158,8 @@ export default function App() {
   const [giftOpen, setGiftOpen] = useState(false);
   const [gardenOpen, setGardenOpen] = useState(false);
   const [garden, setGarden] = useState({ points: 0, waterDate: '', waterCount: 0 });
-  const [celebrating, setCelebrating] = useState(false);
-  const [praise, setPraise] = useState(PRAISE[0]);
-  const celebAnim = useRef(new Animated.Value(0)).current;
+  const [celeb, setCeleb] = useState(null); // 達成演出：{ item, serious, streak }
+  const mypageBounce = useRef(new Animated.Value(1)).current; // 達成の締めでマイページアイコンが弾む
   const [fontsLoaded] = useFonts({
     ZenMaruGothic_400Regular, ZenMaruGothic_500Medium, ZenMaruGothic_700Bold, ZenMaruGothic_900Black,
     Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold,
@@ -259,20 +258,21 @@ export default function App() {
     Alert.alert('保存しました', item.remind === 'none' ? 'ボードに追加しました。' : `${remindSummary(item)} に思い出させます。`);
   }
 
-  function runCelebration() {
-    setPraise(PRAISE[Math.floor(Math.random() * PRAISE.length)]);
-    setCelebrating(true); celebAnim.setValue(0);
+  function triggerMypageBounce() {
+    mypageBounce.setValue(1);
     Animated.sequence([
-      Animated.spring(celebAnim, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }),
-      Animated.delay(1200),
-      Animated.timing(celebAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
-    ]).start(() => setCelebrating(false));
+      Animated.spring(mypageBounce, { toValue: 1.35, friction: 4, useNativeDriver: true }),
+      Animated.spring(mypageBounce, { toValue: 1, friction: 4, useNativeDriver: true }),
+    ]).start();
   }
 
   async function markDone(id) {
-    await persist(items.map((it) => (it.id === id ? { ...it, doneAt: Date.now() } : it)));
+    const it0 = items.find((x) => x.id === id);
+    const next = items.map((it) => (it.id === id ? { ...it, doneAt: Date.now() } : it));
+    await persist(next);
     await persistGarden({ ...garden, points: (garden.points || 0) + ACHIEVE_GAIN }); // 達成ボーナスで植物が大きく育つ
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); runCelebration();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (it0) setCeleb({ item: { ...it0, doneAt: Date.now() }, serious: (it0.heat || 2) === 3, streak: currentStreak(next) });
   }
   async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
   // 手動並べ替え：未達成カードを指定順に並べ、達成済みは末尾に保持して保存。
@@ -326,7 +326,7 @@ export default function App() {
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
-            <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} />
+            <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} mypageBounce={mypageBounce} />
           </>
         )}
 
@@ -340,15 +340,7 @@ export default function App() {
 
         <GardenModal visible={gardenOpen} onClose={() => setGardenOpen(false)} garden={garden} doneCount={doneCount} onWater={waterPlant} />
 
-        {celebrating && (
-          <Animated.View pointerEvents="none" style={[s.celebrate, { opacity: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) }]}>
-            <Animated.View style={{ alignItems: 'center', transform: [{ scale: celebAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }] }}>
-              <Ionicons name="trophy" size={66} color={t.gold} />
-              <Text style={s.celebrateEn}>{praise}</Text>
-              <Text style={s.celebrateText}>叶えた！</Text>
-            </Animated.View>
-          </Animated.View>
-        )}
+        {celeb && <Celebration celeb={celeb} onTabBounce={triggerMypageBounce} onDone={() => setCeleb(null)} />}
       </SafeAreaView>
     </ThemeCtx.Provider>
   );
@@ -374,8 +366,137 @@ function Masonry({ items, renderTile }) {
   );
 }
 
-/* ---------- 達成演出：英語のほめ言葉（紙吹雪は不自然だったので外した） ---------- */
-const PRAISE = ['Amazing!', 'You did it!', 'Dream unlocked!', 'Way to go!', 'Legend!', 'Nailed it!', 'One step closer!'];
+/* ---------- 達成演出（ポラロイド現像＋紙吹雪。本気のときだけ特別演出） ---------- */
+// 連続達成日数（今日から遡って、達成のある日が続く数）。本気達成のメッセージに使う。
+function currentStreak(items) {
+  const days = new Set(items.filter((i) => i.doneAt).map((i) => startOfDay(i.doneAt)));
+  let streak = 0; let d = startOfDay(Date.now());
+  while (days.has(d)) { streak++; d -= DAY_MS; }
+  return streak;
+}
+
+// カテゴリ色＋白の2トーンの紙吹雪（軽量・useNativeDriver）
+function Confetti({ colors, count, originY }) {
+  const parts = useRef([...Array(count)].map(() => ({
+    x: (Math.random() * 2 - 1) * 150,
+    y: 220 + Math.random() * 160,
+    delay: Math.random() * 120,
+    dur: 900 + Math.random() * 700,
+    size: 6 + Math.random() * 6,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    rot: (Math.random() * 2 - 1) * 360,
+    a: new Animated.Value(0),
+  }))).current;
+  useEffect(() => {
+    Animated.parallel(parts.map((p) => Animated.timing(p.a, { toValue: 1, duration: p.dur, delay: p.delay, useNativeDriver: true }))).start();
+  }, []);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {parts.map((p, i) => (
+        <Animated.View key={i} style={{
+          position: 'absolute', left: '50%', top: originY,
+          width: p.size, height: p.size, borderRadius: 2, backgroundColor: p.color,
+          opacity: p.a.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] }),
+          transform: [
+            { translateX: p.a.interpolate({ inputRange: [0, 1], outputRange: [0, p.x] }) },
+            { translateY: p.a.interpolate({ inputRange: [0, 1], outputRange: [0, p.y] }) },
+            { rotate: p.a.interpolate({ inputRange: [0, 1], outputRange: ['0deg', p.rot + 'deg'] }) },
+          ],
+        }} />
+      ))}
+    </View>
+  );
+}
+
+function Celebration({ celeb, onTabBounce, onDone }) {
+  const t = useTheme(); const s = useStyles();
+  const { width, height } = useWindowDimensions();
+  const { item, serious, streak } = celeb;
+  const cat = getCategory(item.category);
+  const check = useRef(new Animated.Value(0)).current;   // チェックの自筆（ポップ）
+  const develop = useRef(new Animated.Value(0)).current;  // 現像（白ヴェールが晴れる）
+  const slide = useRef(new Animated.Value(0)).current;    // カードが少し下へ
+  const flash = useRef(new Animated.Value(0)).current;    // 本気フラッシュ
+  const sheet = useRef(new Animated.Value(0)).current;    // 本気メッセージのせり上がり
+  const fly = useRef(new Animated.Value(0)).current;      // マイページへ飛ぶ
+  const [confetti, setConfetti] = useState(false);
+  const done = useRef(false);
+
+  function flyAway() {
+    Animated.timing(fly, { toValue: 1, duration: 420, useNativeDriver: true }).start(() => { onTabBounce && onTabBounce(); finish(); });
+  }
+  function finish() { if (!done.current) { done.current = true; onDone(); } }
+
+  useEffect(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.sequence([
+      Animated.spring(check, { toValue: 1, friction: 5, tension: 130, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.timing(develop, { toValue: 1, duration: 620, useNativeDriver: true }),
+        Animated.spring(slide, { toValue: 1, friction: 7, useNativeDriver: true }),
+      ]),
+    ]).start(() => {
+      setConfetti(true);
+      if (serious) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Animated.sequence([
+          Animated.timing(flash, { toValue: 1, duration: 120, useNativeDriver: true }),
+          Animated.timing(flash, { toValue: 0, duration: 220, useNativeDriver: true }),
+          Animated.spring(sheet, { toValue: 1, friction: 8, useNativeDriver: true }),
+          Animated.delay(1300),
+          Animated.timing(sheet, { toValue: 0, duration: 250, useNativeDriver: true }),
+        ]).start(() => flyAway());
+      } else {
+        setTimeout(flyAway, 480);
+      }
+    });
+    return () => {};
+  }, []);
+
+  // マイページタブ（右下）へ縮んで飛ぶ
+  const flyX = fly.interpolate({ inputRange: [0, 1], outputRange: [0, width * 0.30] });
+  const flyY = fly.interpolate({ inputRange: [0, 1], outputRange: [0, height * 0.42] });
+  const flyScale = fly.interpolate({ inputRange: [0, 1], outputRange: [1, 0.14] });
+  const cardShift = slide.interpolate({ inputRange: [0, 1], outputRange: [-8, 14] });
+
+  return (
+    <Pressable style={s.celebrate} onPress={finish}>
+      {/* 本気フラッシュ */}
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: t.accent, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.15] }) }]} />
+
+      {/* ポラロイド化するカード */}
+      <Animated.View style={{ transform: [{ translateY: cardShift }, { translateX: flyX }, { translateY: flyY }, { scale: flyScale }] }}>
+        <View style={[s.celebCard, { shadowColor: cat.tint }]}>
+          <View style={s.celebPhotoWrap}>
+            {item.imageUri
+              ? <Image source={{ uri: item.imageUri }} style={s.celebPhoto} />
+              : <LinearGradient colors={[cat.soft, '#FFFFFF']} style={[s.celebPhoto, { alignItems: 'center', justifyContent: 'center' }]}>
+                  <VIcon set={cat.iconSet} name={cat.icon} size={54} color={cat.tint} />
+                </LinearGradient>}
+            {/* 現像の白ヴェール（晴れていく） */}
+            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: develop.interpolate({ inputRange: [0, 1], outputRange: [0.92, 0] }) }]} />
+            {/* 自筆チェック */}
+            <Animated.View style={[s.celebCheck, { opacity: check, transform: [{ scale: check.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] }]}>
+              <Ionicons name="checkmark-circle" size={54} color={cat.tint} />
+            </Animated.View>
+          </View>
+          <Text style={s.celebCaption} numberOfLines={1}>{item.title}</Text>
+        </View>
+      </Animated.View>
+
+      {confetti && <Confetti colors={[cat.tint, '#FFFFFF']} count={serious ? 74 : 26} originY={height * 0.42} />}
+
+      {/* 本気のときだけ：下からせり上がるメッセージ＋ストリーク */}
+      {serious && (
+        <Animated.View pointerEvents="none" style={[s.celebSheet, { transform: [{ translateY: sheet.interpolate({ inputRange: [0, 1], outputRange: [280, 0] }) }] }]}>
+          <Ionicons name="sparkles" size={22} color={t.gold} />
+          <Text style={s.celebSheetTitle}>やったね、叶えました</Text>
+          {streak > 1 ? <Text style={s.celebSheetSub}>{streak}日連続で叶えています</Text> : <Text style={s.celebSheetSub}>その一歩が、夢に近づく。</Text>}
+        </Animated.View>
+      )}
+    </Pressable>
+  );
+}
 
 /* ---------- 触感フィードバック（押すとバネで縮む） ---------- */
 function PressBounce({ onPress, style, children, scaleTo = 0.97 }) {
@@ -680,6 +801,29 @@ function NotifyTab({ items, onOpen }) {
 /* ---------- マイページ ---------- */
 const DAY_MS = 86400000;
 function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+// カテゴリ別の達成バー：表示時に白いハイライトが一度すっと流れる（達成演出と世界観をつなぐ）
+function CatStatBar({ c }) {
+  const s = useStyles();
+  const sweep = useRef(new Animated.Value(0)).current;
+  useEffect(() => { Animated.timing(sweep, { toValue: 1, duration: 950, delay: 250, useNativeDriver: true }).start(); }, []);
+  return (
+    <View style={s.catStatRow}>
+      <View style={s.catStatHead}>
+        <VIcon set={c.iconSet} name={c.icon} size={14} color={c.tint} />
+        <Text style={s.catStatLabel}>{c.label}</Text>
+        <Text style={s.catStatNum}>{c.done}/{c.total}</Text>
+      </View>
+      <View style={s.catStatTrack}>
+        <View style={[s.catStatFill, { width: `${Math.round(c.rate * 100)}%`, backgroundColor: c.tint }]}>
+          <Animated.View style={[s.catStatShine, {
+            opacity: sweep.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.75, 0] }),
+            transform: [{ translateX: sweep.interpolate({ inputRange: [0, 1], outputRange: [-50, 240] }) }, { skewX: '-20deg' }],
+          }]} />
+        </View>
+      </View>
+    </View>
+  );
+}
 function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, browser, onBrowser, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
@@ -793,18 +937,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
       {byCat.length > 0 && (
         <View style={s.catStatCard}>
           <Text style={s.catStatTitle}>カテゴリ別の達成</Text>
-          {byCat.map((c) => (
-            <View key={c.key} style={s.catStatRow}>
-              <View style={s.catStatHead}>
-                <VIcon set={c.iconSet} name={c.icon} size={14} color={c.color} />
-                <Text style={s.catStatLabel}>{c.label}</Text>
-                <Text style={s.catStatNum}>{c.done}/{c.total}</Text>
-              </View>
-              <View style={s.catStatTrack}>
-                <View style={[s.catStatFill, { width: `${Math.round(c.rate * 100)}%`, backgroundColor: c.color }]} />
-              </View>
-            </View>
-          ))}
+          {byCat.map((c) => <CatStatBar key={c.key} c={c} />)}
         </View>
       )}
 
@@ -814,15 +947,18 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
         <Text style={s.empty}>達成したものが、ここに飾られます。</Text>
       ) : (
         <View style={s.denseWrap}>
-          {done.map((item) => (
-            <Pressable key={item.id} style={s.denseTile} onPress={() => onOpen(item)}>
-              {item.imageUri
-                ? <Image source={{ uri: item.imageUri }} style={s.denseImg} />
-                : <View style={[s.denseImg, { backgroundColor: getCategory(item.category).color, alignItems: 'center', justifyContent: 'center' }]}>
-                    <VIcon set={getCategory(item.category).iconSet} name={getCategory(item.category).icon} size={22} color="#fff" />
-                  </View>}
-            </Pressable>
-          ))}
+          {done.map((item) => {
+            const dc = getCategory(item.category);
+            return (
+              <Pressable key={item.id} style={s.denseTile} onPress={() => onOpen(item)}>
+                {item.imageUri
+                  ? <Image source={{ uri: item.imageUri }} style={s.denseImg} />
+                  : <LinearGradient colors={[dc.soft, t.surface]} style={[s.denseImg, { alignItems: 'center', justifyContent: 'center' }]}>
+                      <VIcon set={dc.iconSet} name={dc.icon} size={24} color={dc.tint} />
+                    </LinearGradient>}
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </ScrollView>
@@ -830,14 +966,25 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
 }
 
 /* ---------- タブバー ---------- */
-function TabBar({ tab, onTab, onAdd }) {
+function TabBar({ tab, onTab, onAdd, mypageBounce }) {
+  return <TabBarInner tab={tab} onTab={onTab} onAdd={onAdd} mypageBounce={mypageBounce} />;
+}
+// 選択中はパステルのピルを敷き、切替時にアイコンがバネで弾む
+function TabItem({ active, icon, label, soft, onPress, extraScale }) {
+  const t = useTheme(); const s = useStyles();
+  const a = useRef(new Animated.Value(1)).current;
+  useEffect(() => { if (active) { a.setValue(0.78); Animated.spring(a, { toValue: 1, friction: 4, useNativeDriver: true }).start(); } }, [active]);
+  const scale = extraScale ? Animated.multiply(a, extraScale) : a;
   return (
-    <>
-      <TabBarInner tab={tab} onTab={onTab} onAdd={onAdd} />
-    </>
+    <Pressable style={s.tab} onPress={onPress}>
+      <Animated.View style={[s.tabIconWrap, active && { backgroundColor: soft }, { transform: [{ scale }] }]}>
+        <Ionicons name={active ? icon : icon + '-outline'} size={22} color={active ? t.accent : t.sub} />
+      </Animated.View>
+      <Text style={[s.tabLabel, active && { color: t.accent, fontWeight: '800' }]}>{label}</Text>
+    </Pressable>
   );
 }
-function TabBarInner({ tab, onTab, onAdd }) {
+function TabBarInner({ tab, onTab, onAdd, mypageBounce }) {
   const t = useTheme(); const s = useStyles();
   const scale = useRef(new Animated.Value(1)).current;   // 押下スクワッシュ
   const pulse = useRef(new Animated.Value(1)).current;    // アイドルの呼吸
@@ -851,16 +998,11 @@ function TabBarInner({ tab, onTab, onAdd }) {
     return () => loop.stop();
   }, []);
   const press = (v) => Animated.spring(scale, { toValue: v, useNativeDriver: true, stiffness: 320, damping: 16, mass: 0.6 }).start();
-  const item = (key, icon, label) => (
-    <Pressable style={s.tab} onPress={() => onTab(key)}>
-      <Ionicons name={tab === key ? icon : icon + '-outline'} size={23} color={tab === key ? t.accent : t.sub} />
-      <Text style={[s.tabLabel, tab === key && { color: t.accent, fontWeight: '800' }]}>{label}</Text>
-    </Pressable>
-  );
+  const soft = (k) => getCategory(k).soft;
   return (
     <View style={s.tabbar}>
-      {item('home', 'home', 'ホーム')}
-      {item('vision', 'sparkles', 'ビジョン')}
+      <TabItem active={tab === 'home'} icon="home" label="ホーム" soft={soft('eat')} onPress={() => onTab('home')} />
+      <TabItem active={tab === 'vision'} icon="sparkles" label="ビジョン" soft={soft('see')} onPress={() => onTab('vision')} />
       <Pressable onPress={onAdd} onPressIn={() => press(0.92)} onPressOut={() => press(1)}>
         <Animated.View style={[s.tabAdd, { transform: [{ scale: Animated.multiply(scale, pulse) }] }]}>
           <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.tabAddGrad}>
@@ -868,8 +1010,8 @@ function TabBarInner({ tab, onTab, onAdd }) {
           </LinearGradient>
         </Animated.View>
       </Pressable>
-      {item('notify', 'notifications', '通知')}
-      {item('mypage', 'person', 'マイページ')}
+      <TabItem active={tab === 'notify'} icon="notifications" label="通知" soft={soft('go')} onPress={() => onTab('notify')} />
+      <TabItem active={tab === 'mypage'} icon="person" label="マイページ" soft={soft('want')} onPress={() => onTab('mypage')} extraScale={mypageBounce} />
     </View>
   );
 }
@@ -1766,7 +1908,8 @@ function makeStyles(t) {
     catStatLabel: { fontSize: 13, fontWeight: '700', color: t.text, flex: 1 },
     catStatNum: { fontSize: 12, fontWeight: '800', color: t.sub },
     catStatTrack: { height: 10, borderRadius: 999, backgroundColor: t.surface2, overflow: 'hidden' },
-    catStatFill: { height: '100%', borderRadius: 999, minWidth: 6 },
+    catStatFill: { height: '100%', borderRadius: 999, minWidth: 6, overflow: 'hidden' },
+    catStatShine: { position: 'absolute', top: 0, bottom: 0, width: 26, backgroundColor: 'rgba(255,255,255,0.85)' },
 
     denseWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 20 },
     denseTile: { width: '23.5%', aspectRatio: 1, borderRadius: 10, overflow: 'hidden' },
@@ -1774,7 +1917,8 @@ function makeStyles(t) {
 
     // タブバー
     tabbar: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 84, backgroundColor: t.tabbar, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-around', borderTopWidth: 1, borderTopColor: t.line, paddingTop: 12 },
-    tab: { alignItems: 'center', gap: 3, width: 64 },
+    tab: { alignItems: 'center', gap: 2, width: 64 },
+    tabIconWrap: { width: 46, height: 30, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
     tabLabel: { fontSize: 10, color: t.sub, fontWeight: '600' },
     tabAdd: { width: 60, height: 60, marginTop: -18, borderRadius: 30, alignItems: 'center', justifyContent: 'center', shadowColor: t.accent, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
     tabAddGrad: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
@@ -1840,9 +1984,16 @@ function makeStyles(t) {
     undoneText: { color: t.sub, fontSize: 15, fontWeight: '700' },
     testNotifyLink: { textAlign: 'center', color: t.sub, fontSize: 12, marginTop: 18, textDecorationLine: 'underline' },
 
-    celebrate: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: t.mode === 'dark' ? 'rgba(15,17,21,0.7)' : 'rgba(250,247,242,0.7)' },
-    celebrateEn: { marginTop: 12, fontSize: 30, fontWeight: '900', color: t.gold, letterSpacing: 0.5, fontFamily: FONT.num },
-    celebrateText: { marginTop: 4, fontSize: 22, fontWeight: '900', color: t.text },
+    celebrate: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: t.mode === 'dark' ? 'rgba(15,17,21,0.78)' : 'rgba(250,247,242,0.82)' },
+    // ポラロイド化するカード
+    celebCard: { width: 220, borderRadius: 20, backgroundColor: '#FFFFFF', padding: 10, paddingBottom: 16, shadowOpacity: 0.3, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 10 },
+    celebPhotoWrap: { width: '100%', aspectRatio: 1, borderRadius: 12, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+    celebPhoto: { width: '100%', height: '100%' },
+    celebCheck: { position: 'absolute', backgroundColor: '#fff', borderRadius: 27 },
+    celebCaption: { marginTop: 10, fontSize: 15, color: '#2B2622', textAlign: 'center', fontFamily: FONT.bold },
+    celebSheet: { position: 'absolute', left: 20, right: 20, bottom: 30, backgroundColor: t.surface, borderRadius: 20, paddingVertical: 20, paddingHorizontal: 16, alignItems: 'center', gap: 6, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+    celebSheetTitle: { fontSize: 18, color: t.text, fontFamily: FONT.bold },
+    celebSheetSub: { fontSize: 14, color: t.accent, fontFamily: FONT.num },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
   for (const k in styles) {
