@@ -12,6 +12,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith } from './theme';
 import { actionLinks, dueLabel, browserUrl } from './links';
@@ -210,6 +213,53 @@ export default function App() {
   }
   async function setBrowserPref(b) { setBrowser(b); await AsyncStorage.setItem(BROWSER_KEY, b); Haptics.selectionAsync(); }
   async function setDensityPref(d) { setDensity(d); await AsyncStorage.setItem(DENSITY_KEY, d); Haptics.selectionAsync(); }
+
+  // バックアップ書き出し：全データをJSONファイルにして共有（保存/AirDrop/iCloud）。
+  async function exportData() {
+    try {
+      const payload = {
+        app: 'WannaLog', version: 1, exportedAt: new Date().toISOString(),
+        items, vision: { slots: visionSlots, title: visionTitle },
+        profile: { name: profileName }, garden,
+        prefs: { theme: mode, browser, density },
+      };
+      const json = JSON.stringify(payload, null, 2);
+      const uri = FileSystem.documentDirectory + `wannalog-backup-${Date.now()}.json`;
+      await FileSystem.writeAsStringAsync(uri, json);
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/json', dialogTitle: 'WannaLog バックアップを保存' });
+      else await Share.share({ message: json });
+    } catch (e) { Alert.alert('書き出しに失敗しました', String(e?.message || e)); }
+  }
+  // バックアップ読み込み：ファイルを選ぶ→確認→上書き復元（通知は貼り直す）。
+  async function importData() {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: ['application/json', 'public.json', '*/*'], copyToCacheDirectory: true });
+      if (res.canceled) return;
+      const uri = res.assets?.[0]?.uri; if (!uri) return;
+      const data = JSON.parse(await FileSystem.readAsStringAsync(uri));
+      if (!data || !Array.isArray(data.items)) { Alert.alert('読み込めませんでした', 'WannaLog のバックアップファイルではないようです。'); return; }
+      Alert.alert('読み込みますか？', '今のデータは上書きされます。よろしいですか？', [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '上書きして復元', style: 'destructive', onPress: async () => {
+          // 通知はバックアップ元の予約が無効なので、未達成アイテムは貼り直す
+          const withNotif = [];
+          for (const it of data.items) {
+            let notifId = null;
+            if (!it.doneAt && it.remind && it.remind !== 'none') { try { notifId = await scheduleReminder(it); } catch (e) {} }
+            withNotif.push({ ...it, notifId });
+          }
+          await persist(withNotif);
+          if (data.vision) { await persistVision(data.vision.slots || VISION_SEED); await saveVisionTitle(data.vision.title || '2026 VISION'); }
+          if (data.profile?.name) await saveName(data.profile.name);
+          if (data.garden) await persistGarden(data.garden);
+          if (data.prefs?.theme) { setMode(data.prefs.theme); await AsyncStorage.setItem(THEME_KEY, data.prefs.theme); }
+          if (data.prefs?.browser) await setBrowserPref(data.prefs.browser);
+          if (data.prefs?.density) await setDensityPref(data.prefs.density);
+          Alert.alert('復元しました', 'バックアップからデータを読み込みました。');
+        } },
+      ]);
+    } catch (e) { Alert.alert('読み込みに失敗しました', String(e?.message || e)); }
+  }
   // リンクを開く：選んだブラウザ（Chrome/Safari）で開く。Chrome未導入なら元URLにフォールバック。
   function openInBrowser(url) {
     if (!url) return;
@@ -329,7 +379,7 @@ export default function App() {
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onSort={() => setSortOpen(true)} density={density} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} />}
-            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} density={density} onDensity={setDensityPref} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
+            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} mypageBounce={mypageBounce} />
           </>
         )}
@@ -924,7 +974,7 @@ function CatStatBar({ c }) {
     </View>
   );
 }
-function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, browser, onBrowser, density, onDensity, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
+function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, browser, onBrowser, density, onDensity, onExport, onImport, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
@@ -1002,6 +1052,19 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
           ))}
         </View>
       </View>
+
+      {/* バックアップ（書き出し／読み込み） */}
+      <View style={s.settingRow}>
+        <View style={s.settingLeft}>
+          <Ionicons name="save-outline" size={20} color={t.accent} />
+          <Text style={s.settingText}>バックアップ</Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable style={s.backupBtn} onPress={onExport}><Ionicons name="share-outline" size={14} color={t.accent} /><Text style={s.backupBtnText}>書き出す</Text></Pressable>
+          <Pressable style={s.backupBtn} onPress={onImport}><Ionicons name="download-outline" size={14} color={t.accent} /><Text style={s.backupBtnText}>読み込む</Text></Pressable>
+        </View>
+      </View>
+      <Text style={s.backupHint}>「したい」やビジョンを書き出して保存できます。機種変更や本物アプリへの引っ越しに（※写真そのものは含まれません）。</Text>
 
       {/* 箱庭（将来用にステイ：GARDEN_ENABLED で表示切替） */}
       {GARDEN_ENABLED && (
@@ -1975,6 +2038,9 @@ function makeStyles(t) {
     segBtnOn: { backgroundColor: t.accent },
     segText: { fontSize: 13, fontWeight: '700', color: t.sub },
     segTextOn: { color: '#fff' },
+    backupBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.surface2, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
+    backupBtnText: { color: t.accent, fontSize: 13, fontWeight: '800' },
+    backupHint: { fontSize: 11.5, color: t.sub, marginHorizontal: 20, marginTop: 8, lineHeight: 17 },
     profileLabel: { fontSize: 11, color: t.sub, marginBottom: 2 },
     nameInput: { fontSize: 18, fontWeight: '800', color: t.text, padding: 0 },
     settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 12, backgroundColor: t.surface, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12 },
