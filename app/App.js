@@ -32,13 +32,15 @@ import { useFonts } from 'expo-font';
 import { ZenMaruGothic_400Regular, ZenMaruGothic_500Medium, ZenMaruGothic_700Bold, ZenMaruGothic_900Black } from '@expo-google-fonts/zen-maru-gothic';
 import { Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
 import { ShipporiMincho_400Regular } from '@expo-google-fonts/shippori-mincho';
+import { ZenOldMincho_700Bold } from '@expo-google-fonts/zen-old-mincho';
+import { MochiyPopOne_400Regular } from '@expo-google-fonts/mochiy-pop-one';
 
 // フォント名（weight→ファミリーの対応）。見出し/本文=Zen Maru Gothic（丸ゴ）、数字強調=Fredoka。
 const FONT = {
   base: 'ZenMaruGothic_400Regular', med: 'ZenMaruGothic_500Medium',
   bold: 'ZenMaruGothic_700Bold', xbold: 'ZenMaruGothic_900Black',
   num: 'Fredoka_700Bold', numSb: 'Fredoka_600SemiBold', numMed: 'Fredoka_500Medium',
-  mincho: 'ShipporiMincho_400Regular',
+  mincho: 'ShipporiMincho_400Regular', oldMincho: 'ZenOldMincho_700Bold', pop: 'MochiyPopOne_400Regular',
 };
 function baseFamily(weight) {
   const w = parseInt(weight, 10) || 400;
@@ -68,9 +70,9 @@ const VISION_SEED = [
 
 // ビジョンカードの字体（3パターン）。登録時に1枚ずつ選べる。
 const VISION_FONTS = [
-  { key: 'mincho', label: '明朝', family: FONT.mincho, spacing: 2 },
-  { key: 'round', label: '丸ゴ', family: FONT.med, spacing: 0.5 },
-  { key: 'pop', label: 'ポップ', family: FONT.xbold, spacing: 1 },
+  { key: 'mincho', label: '明朝', family: FONT.oldMincho, spacing: 2 },   // Zen Old Mincho
+  { key: 'round', label: '丸ゴ', family: FONT.bold, spacing: 0.5 },        // Zen Maru Gothic
+  { key: 'pop', label: 'ポップ', family: FONT.pop, spacing: 1 },          // Mochiy Pop One
 ];
 function visionFont(key) { return VISION_FONTS.find((f) => f.key === key) || VISION_FONTS[0]; }
 
@@ -169,7 +171,7 @@ export default function App() {
   const [fontsLoaded] = useFonts({
     ZenMaruGothic_400Regular, ZenMaruGothic_500Medium, ZenMaruGothic_700Bold, ZenMaruGothic_900Black,
     Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold,
-    ShipporiMincho_400Regular,
+    ShipporiMincho_400Regular, ZenOldMincho_700Bold, MochiyPopOne_400Regular,
   });
 
   useEffect(() => {
@@ -845,6 +847,17 @@ function VisionCard({ slot, onPress }) {
     </PressBounce>
   );
 }
+// フォーカスすると spark カラーの細枠が浮かぶ入力欄（角丸16・ダーク対応）
+function FocusInput({ multiline, style, ...props }) {
+  const t = useTheme(); const s = useStyles();
+  const [focused, setFocused] = useState(false);
+  return (
+    <TextInput {...props} multiline={multiline}
+      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+      placeholderTextColor={t.sub}
+      style={[multiline ? s.memoInput : s.input, s.focusField, focused && { borderColor: t.accent }, style]} />
+  );
+}
 // 拡大表示＋編集：写真・目標詳細・一言コメント・進み具合タグ・字体を1画面で。
 function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate }) {
   const t = useTheme(); const s = useStyles();
@@ -866,7 +879,10 @@ function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate })
           <Pressable onPress={onFill} style={s.visionBigPhotoWrap}>
             {slot.imageUri
               ? <Image source={{ uri: slot.imageUri }} style={s.visionBigPhoto} />
-              : <View style={[s.visionBigPhoto, s.visionBigEmpty]}><Ionicons name="image-outline" size={34} color={t.sub} /><Text style={s.visionEmptyText}>写真を入れる</Text></View>}
+              : <LinearGradient colors={[catSoft(null, t.mode), t.surface]} style={[s.visionBigPhoto, s.visionBigEmpty]}>
+                  <Ionicons name="sparkles-outline" size={38} color={t.sub} />
+                  <Text style={s.visionEmptyText}>写真を入れる</Text>
+                </LinearGradient>}
             {slot.label ? (
               <View style={s.visionLabelWrap}>
                 <Text style={[s.visionBigLabel, { fontFamily: f.family, letterSpacing: f.spacing }]} numberOfLines={3}>{slot.label}</Text>
@@ -886,9 +902,9 @@ function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate })
               const on = slot.status === x.key;
               return (
                 <Pressable key={x.key} onPress={() => onUpdate({ status: on ? null : x.key })}
-                  style={[s.catChip, on && { backgroundColor: x.color, borderColor: x.color }]}>
+                  style={[s.catChip, { borderColor: x.color, backgroundColor: on ? x.color : 'transparent' }]}>
                   <Ionicons name={x.icon} size={13} color={on ? '#fff' : x.color} />
-                  <Text style={[s.catChipText, on && { color: '#fff' }]}>{x.label}</Text>
+                  <Text style={[s.catChipText, { color: on ? '#fff' : x.color }]}>{x.label}</Text>
                 </Pressable>
               );
             })}
@@ -908,12 +924,12 @@ function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate })
           </View>
 
           <Text style={s.sectionLabel}>一言コメント（写真の上に表示）</Text>
-          <TextInput style={s.input} value={slot.label || ''} onChangeText={(v) => onUpdate({ label: v })}
-            placeholder="例：いつか家族でハワイ" placeholderTextColor={t.sub} maxLength={40} />
+          <FocusInput value={slot.label || ''} onChangeText={(v) => onUpdate({ label: v })}
+            placeholder="例：いつか家族でハワイ" maxLength={40} />
 
           <Text style={s.sectionLabel}>目標の詳細（任意）</Text>
-          <TextInput style={s.memoInput} value={slot.detail || ''} onChangeText={(v) => onUpdate({ detail: v })}
-            placeholder="なぜ叶えたい？いつまでに？どうやって？" placeholderTextColor={t.sub} multiline />
+          <FocusInput value={slot.detail || ''} onChangeText={(v) => onUpdate({ detail: v })}
+            placeholder="なぜ叶えたい？いつまでに？どうやって？" multiline />
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -2176,6 +2192,7 @@ function makeStyles(t) {
     catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     rowScroll: { flexDirection: 'row', gap: 8, paddingRight: 12 },
     previewWrap: { alignItems: 'center', marginBottom: 6 },
+    focusField: { borderWidth: 1, borderColor: t.line, borderRadius: 16 },
     catChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
     catChipText: { fontSize: 13, fontWeight: '600', color: t.text },
     reminderPickRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
