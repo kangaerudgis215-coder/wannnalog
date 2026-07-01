@@ -15,8 +15,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
+import { GestureHandlerRootView, PanGestureHandler, State, ScrollView as GHScrollView, Swipeable } from 'react-native-gesture-handler';
 
-import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith } from './theme';
+import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
@@ -361,6 +362,7 @@ export default function App() {
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: t.bg }} />;
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <ThemeCtx.Provider value={t}>
       <SafeAreaView style={s.safe}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
@@ -397,6 +399,7 @@ export default function App() {
         {celeb && <Celebration celeb={celeb} onTabBounce={triggerMypageBounce} onDone={() => setCeleb(null)} />}
       </SafeAreaView>
     </ThemeCtx.Provider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -582,7 +585,7 @@ function PhotoTile({ item, onPress, feature = false }) {
       <View style={{ width: '100%', aspectRatio: feature ? 3 / 2 : cardAspect(item.id) }}>
         {item.imageUri
           ? <Image source={{ uri: item.imageUri }} style={s.cardImg} />
-          : <LinearGradient colors={[cat.soft, t.surface]} style={[s.cardImg, s.cardCenter]}>
+          : <LinearGradient colors={[catSoft(cat, t.mode), t.surface]} style={[s.cardImg, s.cardCenter]}>
               <VIcon set={cat.iconSet} name={cat.icon} size={46} color={cat.tint} />
             </LinearGradient>}
         {/* frosted カテゴリチップ */}
@@ -706,7 +709,7 @@ function RemindCarousel({ items, onOpen }) {
               <View style={{ width: '100%', aspectRatio: 16 / 9 }}>
                 {it.imageUri
                   ? <Image source={{ uri: it.imageUri }} style={s.cardImg} />
-                  : <LinearGradient colors={[cat.soft, t.surface]} style={[s.cardImg, s.cardCenter]}><VIcon set={cat.iconSet} name={cat.icon} size={40} color={cat.tint} /></LinearGradient>}
+                  : <LinearGradient colors={[catSoft(cat, t.mode), t.surface]} style={[s.cardImg, s.cardCenter]}><VIcon set={cat.iconSet} name={cat.icon} size={40} color={cat.tint} /></LinearGradient>}
               </View>
               <View style={s.remindPanel}>
                 <Text style={s.cardTitle} numberOfLines={1}>{it.title}</Text>
@@ -1131,7 +1134,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
               <Pressable key={item.id} style={s.denseTile} onPress={() => onOpen(item)}>
                 {item.imageUri
                   ? <Image source={{ uri: item.imageUri }} style={s.denseImg} />
-                  : <LinearGradient colors={[dc.soft, t.surface]} style={[s.denseImg, { alignItems: 'center', justifyContent: 'center' }]}>
+                  : <LinearGradient colors={[catSoft(dc, t.mode), t.surface]} style={[s.denseImg, { alignItems: 'center', justifyContent: 'center' }]}>
                       <VIcon set={dc.iconSet} name={dc.icon} size={24} color={dc.tint} />
                     </LinearGradient>}
               </Pressable>
@@ -1176,7 +1179,7 @@ function TabBarInner({ tab, onTab, onAdd, mypageBounce }) {
     return () => loop.stop();
   }, []);
   const press = (v) => Animated.spring(scale, { toValue: v, useNativeDriver: true, stiffness: 320, damping: 16, mass: 0.6 }).start();
-  const soft = (k) => getCategory(k).soft;
+  const soft = (k) => catSoft(getCategory(k), t.mode);
   return (
     <View style={s.tabbar}>
       <TabItem active={tab === 'home'} icon="home" label="ホーム" soft={soft('eat')} onPress={() => onTab('home')} />
@@ -1209,7 +1212,7 @@ function Chip({ icon, iconSet, cat, label, active, onPress }) {
     return (
       <Animated.View style={{ transform: [{ scale: a }] }}>
         <Pressable onPress={onPress}
-          style={[s.chipCat, active ? { backgroundColor: cat.soft, borderColor: cat.soft } : { backgroundColor: t.surface, borderColor: cat.tint }]}>
+          style={[s.chipCat, active ? { backgroundColor: catSoft(cat, t.mode), borderColor: catSoft(cat, t.mode) } : { backgroundColor: t.surface, borderColor: cat.tint }]}>
           <VIcon set={icSet} name={ic} size={13} color={cat.tint} />
           <Text style={[s.chipCatText, { color: active ? cat.tint : t.sub }]}>{label}</Text>
         </Pressable>
@@ -1452,9 +1455,9 @@ function SaveModal({ visible, onClose, onSave }) {
   );
 }
 
-/* ---------- 並べ替え（指でドラッグ・標準PanResponderのみ／新ライブラリ不要） ---------- */
-// 汎用の縦ドラッグ並べ替え。ハンドルを掴んだ瞬間に capture して、スクロールに奪われない。
-// ドラッグ中はリアルタイムで他の行が入れ替わる（その場で並びが動く）。
+/* ---------- 並べ替え（react-native-gesture-handler：スクロールと正しく協調する） ---------- */
+// ハンドルの PanGestureHandler が縦ドラッグを掴み、GH の ScrollView がスクロールを譲る。
+// これで「指で動かしても反応しない（スクロールに奪われる）」不具合が直る。
 function ReorderList({ ids, rowHeight = 64, gap = 10, renderRow, onChange }) {
   const STEP = rowHeight + gap;
   const [order, setOrder] = useState(ids);
@@ -1463,32 +1466,49 @@ function ReorderList({ ids, rowHeight = 64, gap = 10, renderRow, onChange }) {
   const [dragId, setDragId] = useState(null);
   const startIndexRef = useRef(0);
   const dragY = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(1)).current;
 
   function set(next) { orderRef.current = next; setOrder(next); }
-  function handleFor(id) {
-    return PanResponder.create({
-      onStartShouldSetPanResponderCapture: () => true, // ハンドルに触れたら即ドラッグ開始
-      onPanResponderGrant: () => { startIndexRef.current = orderRef.current.indexOf(id); setDragId(id); dragY.setValue(0); Haptics.selectionAsync(); },
-      onPanResponderMove: (_, g) => {
-        const cur = orderRef.current;
-        const curIdx = cur.indexOf(id);
-        const desired = Math.max(0, Math.min(cur.length - 1, startIndexRef.current + Math.round(g.dy / STEP)));
-        if (desired !== curIdx) set(moveItem(cur, curIdx, desired));
-        const newIdx = orderRef.current.indexOf(id);
-        dragY.setValue((startIndexRef.current - newIdx) * STEP + g.dy); // 指の真下に保つ
-      },
-      onPanResponderRelease: () => { onChange(orderRef.current); setDragId(null); dragY.setValue(0); },
-      onPanResponderTerminate: () => { onChange(orderRef.current); setDragId(null); dragY.setValue(0); },
-    });
+  function onGesture(id) {
+    return (e) => {
+      const dy = e.nativeEvent.translationY;
+      const cur = orderRef.current;
+      const curIdx = cur.indexOf(id);
+      const desired = Math.max(0, Math.min(cur.length - 1, startIndexRef.current + Math.round(dy / STEP)));
+      if (desired !== curIdx) set(moveItem(cur, curIdx, desired));
+      const newIdx = orderRef.current.indexOf(id);
+      dragY.setValue((startIndexRef.current - newIdx) * STEP + dy); // 指の真下に保つ
+    };
   }
+  function onState(id) {
+    return (e) => {
+      const st = e.nativeEvent.state;
+      if (st === State.ACTIVE) {
+        startIndexRef.current = orderRef.current.indexOf(id);
+        setDragId(id); dragY.setValue(0);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        Animated.spring(scale, { toValue: 1.03, useNativeDriver: true }).start();
+      } else if (st === State.END || st === State.CANCELLED || st === State.FAILED) {
+        onChange(orderRef.current);
+        setDragId(null); dragY.setValue(0);
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
+      }
+    };
+  }
+  // ハンドル：44×44 のタップ領域を PanGestureHandler で包む
+  const wrapHandle = (id) => (children) => (
+    <PanGestureHandler onGestureEvent={onGesture(id)} onHandlerStateChange={onState(id)} activeOffsetY={[-6, 6]}>
+      <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>{children}</View>
+    </PanGestureHandler>
+  );
   return (
     <View>
       {order.map((id) => {
         const dragging = dragId === id;
         return (
           <Animated.View key={id}
-            style={[{ height: rowHeight, marginBottom: gap }, dragging && { transform: [{ translateY: dragY }], zIndex: 10, elevation: 8 }]}>
-            {renderRow(id, dragging, handleFor(id).panHandlers)}
+            style={[{ height: rowHeight, marginBottom: gap }, dragging && { transform: [{ translateY: dragY }, { scale }], zIndex: 10, elevation: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } }]}>
+            {renderRow(id, dragging, wrapHandle(id))}
           </Animated.View>
         );
       })}
@@ -1502,31 +1522,33 @@ function SortModal({ visible, onClose, items, onReorder }) {
   const ids = useMemo(() => items.map((i) => i.id), [items]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={s.safe}>
-        <View style={s.detailBar}>
-          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
-          <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
-        </View>
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          <Text style={s.giftHero}>並べ替え</Text>
-          <Text style={s.giftLead}>右の ≡ を指で上下にドラッグして、好きな順に並べ替えできます。</Text>
-          <View style={{ marginTop: 16 }}>
-            <ReorderList ids={ids} onChange={onReorder} renderRow={(id, dragging, handle) => {
-              const it = byId[id]; if (!it) return null;
-              const cat = getCategory(it.category);
-              return (
-                <View style={[s.sortRow, dragging && s.sortRowActive]}>
-                  {it.imageUri
-                    ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
-                    : <View style={[s.sortThumb, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color="#fff" /></View>}
-                  <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
-                  <View style={s.sortHandle} {...handle}><Ionicons name="reorder-three" size={26} color={t.sub} /></View>
-                </View>
-              );
-            }} />
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView style={s.safe}>
+          <View style={s.detailBar}>
+            <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+            <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
           </View>
-        </ScrollView>
-      </SafeAreaView>
+          <GHScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <Text style={s.giftHero}>並べ替え</Text>
+            <Text style={s.giftLead}>右の ≡ を指で上下にドラッグして、好きな順に並べ替えできます。</Text>
+            <View style={{ marginTop: 16 }}>
+              <ReorderList ids={ids} onChange={onReorder} renderRow={(id, dragging, handle) => {
+                const it = byId[id]; if (!it) return null;
+                const cat = getCategory(it.category);
+                return (
+                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: cat.tint }, dragging && s.sortRowActive]}>
+                    {it.imageUri
+                      ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
+                      : <View style={[s.sortThumb, { backgroundColor: catSoft(cat, t.mode), alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color={cat.tint} /></View>}
+                    <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
+                    {handle(<Ionicons name="reorder-three" size={26} color={t.sub} />)}
+                  </View>
+                );
+              }} />
+            </View>
+          </GHScrollView>
+        </SafeAreaView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -1538,30 +1560,32 @@ function VisionSortModal({ visible, onClose, slots, onReorder }) {
   const ids = useMemo(() => slots.map((sl) => sl.id), [slots]);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={s.safe}>
-        <View style={s.detailBar}>
-          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
-          <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
-        </View>
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-          <Text style={s.giftHero}>並べ替え</Text>
-          <Text style={s.giftLead}>右の ≡ を指で上下にドラッグして、枠を好きな順に並べ替えできます。</Text>
-          <View style={{ marginTop: 16 }}>
-            <ReorderList ids={ids} onChange={onReorder} renderRow={(id, dragging, handle) => {
-              const sl = byId[id]; if (!sl) return null;
-              return (
-                <View style={[s.sortRow, dragging && s.sortRowActive]}>
-                  {sl.imageUri
-                    ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
-                    : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
-                  <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
-                  <View style={s.sortHandle} {...handle}><Ionicons name="reorder-three" size={26} color={t.sub} /></View>
-                </View>
-              );
-            }} />
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView style={s.safe}>
+          <View style={s.detailBar}>
+            <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+            <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
           </View>
-        </ScrollView>
-      </SafeAreaView>
+          <GHScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <Text style={s.giftHero}>並べ替え</Text>
+            <Text style={s.giftLead}>右の ≡ を指で上下にドラッグして、枠を好きな順に並べ替えできます。</Text>
+            <View style={{ marginTop: 16 }}>
+              <ReorderList ids={ids} onChange={onReorder} renderRow={(id, dragging, handle) => {
+                const sl = byId[id]; if (!sl) return null;
+                return (
+                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }, dragging && s.sortRowActive]}>
+                    {sl.imageUri
+                      ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
+                      : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
+                    <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
+                    {handle(<Ionicons name="reorder-three" size={26} color={t.sub} />)}
+                  </View>
+                );
+              }} />
+            </View>
+          </GHScrollView>
+        </SafeAreaView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -1916,7 +1940,7 @@ function makeStyles(t) {
     brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.surface, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
     sortBtnText: { color: t.accent, fontSize: 13, fontWeight: '800' },
-    sortRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 14, paddingHorizontal: 12 },
+    sortRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 16, paddingHorizontal: 12 },
     sortRowActive: { backgroundColor: t.surface2, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
     sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
     sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },

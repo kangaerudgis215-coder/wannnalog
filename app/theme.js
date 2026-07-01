@@ -4,17 +4,17 @@
 export const palettes = {
   dark: {
     mode: 'dark',
-    bg: '#1C1917',          // 画面の地（温かみのある黒茶）
-    surface: '#26221E',     // カード・面
-    surface2: '#322C27',    // 一段明るい面（チップ等）
-    text: '#F4EFE9',        // メイン文字
-    sub: '#A79E94',         // サブ文字
+    bg: '#1F1B17',          // 純黒でなく温かみを残した暖色系ダーク
+    surface: '#2A2420',     // カード・面
+    surface2: '#35302B',    // 一段明るい面（チップ等）
+    text: '#F5EFE6',        // メイン文字
+    sub: '#B0A79C',         // サブ文字
     line: 'rgba(255,255,255,0.08)',
     accent: '#FF7A59',      // ブランドアクセント（グラデ始点）
     accent2: '#FFB259',     // ブランドアクセント（グラデ終点）
     gold: '#F2B544',        // 達成
     capsule: 'rgba(255,122,89,0.16)', // ヘッダーの統計カプセル背景
-    tabbar: 'rgba(28,25,23,0.94)',
+    tabbar: 'rgba(31,27,23,0.94)',
     overlay: 'rgba(0,0,0,0.35)',
     shadeTop: 'rgba(0,0,0,0)',
     shadeBottom: 'rgba(0,0,0,0.72)',
@@ -41,17 +41,23 @@ export const palettes = {
 // カテゴリ：アイコン + 3色（soft=パステル背景 / tint=濃色アイコン・文字 / glow=極薄グロー影）
 // 「原色はアイコン一点だけ、背景はパステル、影は極薄」で上品に見せる（キャンディボックス）。
 export const CATEGORIES = [
-  { key: 'eat', label: '食べたい', icon: 'restaurant', color: '#FF6F5E', soft: '#FFE4DE', tint: '#FF6F5E', glow: 'rgba(255,111,94,0.35)' },
-  { key: 'cook', label: '作りたい', icon: 'chef-hat', iconSet: 'mci', color: '#F2A93B', soft: '#FFECD1', tint: '#F2A93B', glow: 'rgba(242,169,59,0.35)' },
-  { key: 'go', label: '行きたい', icon: 'location', color: '#4FA3D1', soft: '#DCEEFB', tint: '#4FA3D1', glow: 'rgba(79,163,209,0.35)' },
-  { key: 'see', label: '見たい', icon: 'film', color: '#8B7CF6', soft: '#E7E2FF', tint: '#8B7CF6', glow: 'rgba(139,124,246,0.35)' },
-  { key: 'want', label: '欲しい', icon: 'pricetag', color: '#D66BC7', soft: '#F8DFF5', tint: '#D66BC7', glow: 'rgba(214,107,199,0.35)' },
-  { key: 'do', label: 'やりたい', icon: 'barbell', color: '#4FAF77', soft: '#DDF3E4', tint: '#4FAF77', glow: 'rgba(79,175,119,0.35)' },
-  { key: 'know', label: '知りたい', icon: 'book', color: '#D99A1F', soft: '#FDECC8', tint: '#D99A1F', glow: 'rgba(217,154,31,0.35)' },
+  { key: 'eat', label: '食べたい', icon: 'restaurant', color: '#FF6F5E', soft: '#FFE4DE', darkSoft: 'rgba(255,111,94,0.16)', tint: '#FF6F5E', glow: 'rgba(255,111,94,0.35)' },
+  { key: 'cook', label: '作りたい', icon: 'chef-hat', iconSet: 'mci', color: '#F2A93B', soft: '#FFECD1', darkSoft: 'rgba(242,169,59,0.16)', tint: '#F2A93B', glow: 'rgba(242,169,59,0.35)' },
+  { key: 'go', label: '行きたい', icon: 'location', color: '#4FA3D1', soft: '#DCEEFB', darkSoft: 'rgba(79,163,209,0.16)', tint: '#4FA3D1', glow: 'rgba(79,163,209,0.35)' },
+  { key: 'see', label: '見たい', icon: 'film', color: '#8B7CF6', soft: '#E7E2FF', darkSoft: 'rgba(139,124,246,0.16)', tint: '#8B7CF6', glow: 'rgba(139,124,246,0.35)' },
+  { key: 'want', label: '欲しい', icon: 'pricetag', color: '#D66BC7', soft: '#F8DFF5', darkSoft: 'rgba(214,107,199,0.16)', tint: '#D66BC7', glow: 'rgba(214,107,199,0.35)' },
+  { key: 'do', label: 'やりたい', icon: 'barbell', color: '#4FAF77', soft: '#DDF3E4', darkSoft: 'rgba(79,175,119,0.16)', tint: '#4FAF77', glow: 'rgba(79,175,119,0.35)' },
+  { key: 'know', label: '知りたい', icon: 'book', color: '#D99A1F', soft: '#FDECC8', darkSoft: 'rgba(217,154,31,0.16)', tint: '#D99A1F', glow: 'rgba(217,154,31,0.35)' },
 ];
 
 export function getCategory(key) {
   return CATEGORIES.find((c) => c.key === key) || CATEGORIES[0];
+}
+
+// カテゴリのチップ/プレースホルダー背景：ライトはパステル、ダークはカテゴリ色の薄いオーバーレイ。
+export function catSoft(cat, mode) {
+  if (!cat) return mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#EFEAE1';
+  return mode === 'dark' ? cat.darkSoft : cat.soft;
 }
 
 // 「誰と」タグ：プライベートな相手をスタイリッシュなアイコンで（任意・1つ選ぶ）
