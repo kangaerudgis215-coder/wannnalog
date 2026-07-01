@@ -682,77 +682,114 @@ function EmptyState({ text }) {
   );
 }
 
-/* ---------- ビジョンボード（別データ・枠に写真を嵌めるムードボード） ---------- */
+/* ---------- ビジョンボード（ピン留めされた夢：淡い空の背景＋ワシテープ＋微回転） ---------- */
+const VISION_SHELVES = [
+  { key: 'doing', emoji: '🔥', label: '実行中の夢', match: (sl) => sl.status === 'doing' },
+  { key: 'planning', emoji: '💡', label: '計画中の夢', match: (sl) => sl.status === 'planning' },
+  { key: 'other', emoji: '✨', label: 'そのほかの夢', match: (sl) => !sl.status },
+];
 function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onUpdateSlot, onReorder }) {
   const t = useTheme(); const s = useStyles();
   const [editId, setEditId] = useState(null);          // 拡大・編集を開いている枠
   const [sortOpen, setSortOpen] = useState(false);     // 並べ替え画面
   const editing = slots.find((sl) => sl.id === editId) || null;
+  const withImg = slots.filter((sl) => sl.imageUri);
+  const hero = withImg.find((sl) => sl.status === 'doing') || withImg[0] || null; // 実行中を優先して自動選出
+  const rest = slots.filter((sl) => !hero || sl.id !== hero.id);
+  const shelves = VISION_SHELVES.map((sec) => ({ ...sec, items: rest.filter(sec.match) })).filter((sec) => sec.items.length > 0);
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
-      <View style={s.topbar}>
-        <View style={s.brandRow}>
-          <Text style={s.greet}>なりたい自分・叶えたい夢</Text>
-          {slots.length > 1 && (
-            <Pressable style={s.sortBtn} onPress={() => setSortOpen(true)}>
-              <Ionicons name="swap-vertical" size={15} color={t.accent} />
-              <Text style={s.sortBtnText}>並べ替え</Text>
-            </Pressable>
-          )}
+    <View style={{ flex: 1 }}>
+      <LinearGradient colors={t.mode === 'dark' ? ['#1C1917', '#241F2C'] : ['#FFFBF3', '#F3EEFF']} style={StyleSheet.absoluteFill} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
+        <View style={s.topbar}>
+          <View style={s.brandRow}>
+            <Text style={s.greet}>なりたい自分・叶えたい夢</Text>
+            {slots.length > 1 && (
+              <Pressable style={s.ghostBtn} onPress={() => setSortOpen(true)} accessibilityLabel="並べ替え">
+                <Ionicons name="swap-vertical" size={18} color={t.sub} />
+              </Pressable>
+            )}
+          </View>
+          <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="2026 VISION" placeholderTextColor={t.sub} maxLength={24} />
         </View>
-        <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="2026 VISION" placeholderTextColor={t.sub} maxLength={24} />
-      </View>
-      <Masonry items={slots} renderTile={(slot, i) => (
-        <FadeInView key={slot.id} index={i}>
-          <VisionSlot slot={slot} height={TILE_HEIGHTS[i % TILE_HEIGHTS.length]} onPress={() => setEditId(slot.id)} />
-        </FadeInView>
-      )} />
-      <Pressable style={s.visionAdd} onPress={onAdd}>
-        <Ionicons name="add" size={18} color={t.accent} />
-        <Text style={s.visionAddText}>枠を追加</Text>
-      </Pressable>
 
-      <VisionSortModal visible={sortOpen} onClose={() => setSortOpen(false)} slots={slots} onReorder={onReorder} />
+        {hero && <VisionHero slot={hero} onPress={() => setEditId(hero.id)} />}
 
-      <VisionEditModal
-        slot={editing}
-        onClose={() => setEditId(null)}
-        onFill={() => editing && onFill(editing.id)}
-        onClear={() => editing && onClear(editing.id)}
-        onRemove={() => { if (editing) { onRemove(editing.id); setEditId(null); } }}
-        onUpdate={(patch) => editing && onUpdateSlot(editing.id, patch)}
-      />
-    </ScrollView>
+        {shelves.map((sec) => (
+          <View key={sec.key} style={{ marginTop: 18 }}>
+            <View style={s.shelfHead}>
+              <Text style={s.shelfTitle}>{sec.emoji} {sec.label}</Text>
+              <Text style={s.shelfCount}>{sec.items.length}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 10, gap: 14 }}>
+              {sec.items.map((sl) => <VisionCard key={sl.id} slot={sl} onPress={() => setEditId(sl.id)} />)}
+            </ScrollView>
+          </View>
+        ))}
+
+        {slots.length === 0 && <EmptyState text={'まだ夢がありません。\n憧れの写真を、ピン留めしてみよう。'} />}
+
+        <Pressable style={s.visionAdd} onPress={onAdd}>
+          <Ionicons name="add" size={18} color={t.accent} />
+          <Text style={s.visionAddText}>枠を追加</Text>
+        </Pressable>
+
+        <VisionSortModal visible={sortOpen} onClose={() => setSortOpen(false)} slots={slots} onReorder={onReorder} />
+
+        <VisionEditModal
+          slot={editing}
+          onClose={() => setEditId(null)}
+          onFill={() => editing && onFill(editing.id)}
+          onClear={() => editing && onClear(editing.id)}
+          onRemove={() => { if (editing) { onRemove(editing.id); setEditId(null); } }}
+          onUpdate={(patch) => editing && onUpdateSlot(editing.id, patch)}
+        />
+      </ScrollView>
+    </View>
   );
 }
-// ボード上のカード：写真＋一言コメント（選んだ字体）＋進み具合タグ。タップで拡大・編集。
-function VisionSlot({ slot, height, onPress }) {
+// ヒーロー：最上部に1枚だけ大きく（4:3・微回転・ワシテープ・下30%にだけ影）
+function VisionHero({ slot, onPress }) {
   const t = useTheme(); const s = useStyles();
-  const f = visionFont(slot.font);
-  const st = visionStatus(slot.status);
-  if (slot.imageUri) {
-    return (
-      <Pressable style={({ pressed }) => [s.tile, { height }, pressed && s.pressed]} onPress={onPress}>
-        <Image source={{ uri: slot.imageUri }} style={s.tileImg} />
-        {st ? (
-          <View style={[s.visionStatusPill, { backgroundColor: st.color + 'E6' }]}>
-            <Ionicons name={st.icon} size={10} color="#fff" />
-            <Text style={s.visionStatusText}>{st.label}</Text>
-          </View>
-        ) : null}
-        {slot.label ? (
-          <View style={s.visionLabelWrap}>
-            <Text style={[s.visionSlotLabel, { fontFamily: f.family, letterSpacing: f.spacing }]} numberOfLines={3}>{slot.label}</Text>
-          </View>
-        ) : null}
-      </Pressable>
-    );
-  }
+  const f = visionFont(slot.font); const st = visionStatus(slot.status);
   return (
-    <Pressable style={[s.visionEmpty, { height }]} onPress={onPress}>
-      <Ionicons name="add-circle-outline" size={28} color={t.sub} />
-      <Text style={s.visionEmptyText}>写真を入れる</Text>
-    </Pressable>
+    <PressBounce onPress={onPress} style={s.heroWrap}>
+      <View style={s.heroCard}>
+        <View style={{ width: '100%', aspectRatio: 4 / 3 }}>
+          <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={s.heroShade} />
+          <View style={s.washi} />
+          <View style={s.heroTextWrap}>
+            {st ? <View style={s.heroStatus}><View style={[s.statusDot, { backgroundColor: st.color }]} /><Text style={s.heroStatusText}>{st.label}</Text></View> : null}
+            {slot.label ? <Text style={[s.heroTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label}</Text> : null}
+          </View>
+        </View>
+      </View>
+    </PressBounce>
+  );
+}
+// 棚のカード：写真＋白キャプション（コメント＋ステータスのドット）。IDで微回転を固定。
+function VisionCard({ slot, onPress }) {
+  const t = useTheme(); const s = useStyles();
+  const { width } = useWindowDimensions();
+  const w = Math.round(width * 0.6);
+  const f = visionFont(slot.font); const st = visionStatus(slot.status);
+  const rot = (hashCode(slot.id) % 7) - 3; // -3〜3度
+  return (
+    <PressBounce onPress={onPress} style={{ width: w, transform: [{ rotate: rot + 'deg' }] }}>
+      <View style={s.visionCard}>
+        <View style={{ width: '100%', aspectRatio: 4 / 5 }}>
+          {slot.imageUri
+            ? <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
+            : <View style={[s.cardImg, s.cardCenter, { backgroundColor: t.surface2 }]}><Ionicons name="image-outline" size={30} color={t.sub} /></View>}
+          <View style={s.washi} />
+        </View>
+        <View style={s.cardPanel}>
+          <Text style={[s.cardTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label || '（コメントなし）'}</Text>
+          {st ? <View style={s.visionStatusRow}><View style={[s.statusDot, { backgroundColor: st.color }]} /><Text style={s.visionStatusLabel}>{st.label}</Text></View> : null}
+        </View>
+      </View>
+    </PressBounce>
   );
 }
 // 拡大表示＋編集：写真・目標詳細・一言コメント・進み具合タグ・字体を1画面で。
@@ -1843,6 +1880,22 @@ function makeStyles(t) {
     visionSlotLabel: { color: '#fff', fontSize: 20, fontWeight: '400', letterSpacing: 2, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 8, fontFamily: FONT.mincho },
     visionStatusPill: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
     visionStatusText: { color: '#fff', fontSize: 10.5, fontWeight: '800' },
+    // ビジョンボード（ピン留めされた夢）
+    heroWrap: { paddingHorizontal: 24, marginTop: 6 },
+    heroCard: { borderRadius: 22, overflow: 'hidden', transform: [{ rotate: '-1deg' }], backgroundColor: t.surface, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
+    heroShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '40%' },
+    heroTextWrap: { position: 'absolute', left: 16, right: 16, bottom: 14, gap: 6 },
+    heroStatus: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    heroStatusText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+    heroTitle: { color: '#fff', fontSize: 24, lineHeight: 30, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 8 },
+    washi: { position: 'absolute', top: -6, left: 22, width: 60, height: 20, backgroundColor: 'rgba(255,178,89,0.55)', transform: [{ rotate: '-8deg' }], borderRadius: 2 },
+    visionCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: t.surface, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
+    visionStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
+    visionStatusLabel: { fontSize: 12, color: t.sub, fontWeight: '700' },
+    statusDot: { width: 8, height: 8, borderRadius: 4 },
+    shelfHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20 },
+    shelfTitle: { fontSize: 15, color: t.text, fontFamily: FONT.bold },
+    shelfCount: { fontSize: 13, color: t.sub, fontWeight: '800', fontFamily: FONT.num },
     visionBigPhotoWrap: { borderRadius: 22, overflow: 'hidden' },
     visionBigPhoto: { width: '100%', height: 300, borderRadius: 22 },
     visionBigEmpty: { backgroundColor: t.surface, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 8 },
