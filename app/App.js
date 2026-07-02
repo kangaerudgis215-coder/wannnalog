@@ -18,6 +18,7 @@ import * as Sharing from 'expo-sharing';
 import { GestureHandlerRootView, PanGestureHandler, State, ScrollView as GHScrollView, Swipeable } from 'react-native-gesture-handler';
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
+import { guessCategory } from './classify';
 import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary, nextRemindAt } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
@@ -1363,6 +1364,7 @@ function SaveModal({ visible, onClose, onSave }) {
   const t = useTheme(); const s = useStyles();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('eat');
+  const [categoryTouched, setCategoryTouched] = useState(false); // ユーザーが手動でカテゴリを選んだか
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
   const [coords, setCoords] = useState(null); // 写真から読み取った撮影場所
@@ -1377,6 +1379,16 @@ function SaveModal({ visible, onClose, onSave }) {
 
   // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
   function chooseHeat(h) { setHeat(h); setReminder({ remind: defaultRemindForHeat(h) }); }
+
+  // タイトルを打つと、まだカテゴリを手動選択していなければ内容からそれっぽいカテゴリを提案
+  function changeTitle(v) {
+    setTitle(v);
+    if (!categoryTouched) {
+      const guessed = guessCategory(v);
+      if (guessed) setCategory(guessed);
+    }
+  }
+  function chooseCategory(k) { setCategory(k); setCategoryTouched(true); }
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1406,10 +1418,10 @@ function SaveModal({ visible, onClose, onSave }) {
     let got = false;
     if (ogp.image && !image) { setImage(ogp.image); setCoords(null); got = true; }
     const better = cleanTitle(ogp.title, url, '');
-    if (better && !title.trim()) { setTitle(better); got = true; }
+    if (better && !title.trim()) { changeTitle(better); got = true; }
     if (!got) Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を選ぶ」から手動で追加できます。');
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory('eat'); setCategoryTouched(false); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
     const finalImage = image || (sns ? sns.thumbnail : null);
@@ -1438,7 +1450,7 @@ function SaveModal({ visible, onClose, onSave }) {
             </View>
 
             <TextInput style={s.input} placeholder="例：鎌倉の海が見えるカフェ" placeholderTextColor={t.sub}
-              value={title} onChangeText={setTitle} autoFocus />
+              value={title} onChangeText={changeTitle} autoFocus />
 
             <TextInput style={[s.input, { marginTop: 12 }]} placeholder="リンクを貼る（X・Instagram・YouTube など／任意）"
               placeholderTextColor={t.sub} value={link} onChangeText={setLink}
@@ -1480,7 +1492,7 @@ function SaveModal({ visible, onClose, onSave }) {
             <Text style={s.label}>カテゴリ</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.rowScroll}>
               {CATEGORIES.map((c) => (
-                <Pressable key={c.key} onPress={() => setCategory(c.key)} style={optChip(category === c.key, c.color)}>
+                <Pressable key={c.key} onPress={() => chooseCategory(c.key)} style={optChip(category === c.key, c.color)}>
                   <VIcon set={c.iconSet} name={c.icon} size={13} color={category === c.key ? '#fff' : t.text} />
                   <Text style={[s.catChipText, category === c.key && { color: '#fff' }]}>{c.label}</Text>
                 </Pressable>
