@@ -52,9 +52,16 @@ export function resolveImage(image, baseUrl) {
 }
 
 // 実際にリンク先を取得して OGP を返す（失敗しても落ちない）
+// ブラウザに近いヘッダーにすると、OGPを返すサイトが増える（成功率が少し上がる）。
 export async function fetchOgp(url) {
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ja,en;q=0.8',
+      },
+    });
     const html = await res.text();
     const ogp = parseOgp(html);
     return { ...ogp, image: resolveImage(ogp.image, url) };
