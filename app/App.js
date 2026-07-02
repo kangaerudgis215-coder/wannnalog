@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
+  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
   Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -24,6 +24,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
+import { fetchOgp, cleanTitle, isUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1369,6 +1370,7 @@ function SaveModal({ visible, onClose, onSave }) {
   const [link, setLink] = useState('');
   const [heat, setHeat] = useState(2);
   const [reminder, setReminder] = useState({ remind: '3days' });
+  const [ogpLoading, setOgpLoading] = useState(false); // リンク読み込み中
 
   const sns = parseSnsLink(link);            // SNSリンクを認識（X/Instagram/YouTube など）
   const previewUri = image || (sns && sns.thumbnail); // 写真未選択でもYouTubeはサムネを表示
@@ -1393,6 +1395,19 @@ function SaveModal({ visible, onClose, onSave }) {
     const gps = parseGps(asset.exif);
     if (gps) { setCoords(gps); Alert.alert('場所を読み取りました', '保存すると「撮影場所を地図で開く」から開けます。'); }
     else { setCoords(null); Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
+  }
+  // リンク先のOGP（タイトル・画像）を読み取り、空欄なら自動で埋める
+  async function loadFromLink() {
+    const url = link.trim();
+    if (!isUrl(url)) { Alert.alert('リンクを入力してください', 'http(s):// で始まるURLを貼ってください。'); return; }
+    setOgpLoading(true);
+    const ogp = await fetchOgp(url);
+    setOgpLoading(false);
+    let got = false;
+    if (ogp.image && !image) { setImage(ogp.image); setCoords(null); got = true; }
+    const better = cleanTitle(ogp.title, url, '');
+    if (better && !title.trim()) { setTitle(better); got = true; }
+    if (!got) Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を選ぶ」から手動で追加できます。');
   }
   function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
@@ -1433,6 +1448,12 @@ function SaveModal({ visible, onClose, onSave }) {
                 <Ionicons name={snsMeta(sns.platform).icon} size={15} color={t.accent} />
                 <Text style={s.snsDetectedText}>{snsMeta(sns.platform).label} のリンクを認識{sns.thumbnail ? '（サムネを表示します）' : ''}</Text>
               </View>
+            )}
+            {isUrl(link.trim()) && (
+              <Pressable style={[s.linkLoadBtn, ogpLoading && { opacity: 0.6 }]} onPress={loadFromLink} disabled={ogpLoading}>
+                {ogpLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="download-outline" size={16} color="#fff" />}
+                <Text style={s.linkLoadText}>{ogpLoading ? '読み込み中…' : 'リンクから画像・タイトルを読み込む'}</Text>
+              </Pressable>
             )}
 
             <Pressable style={s.photoPick} onPress={pickImage}>
@@ -1510,63 +1531,36 @@ function SaveModal({ visible, onClose, onSave }) {
   );
 }
 
-/* ---------- 並べ替え（react-native-gesture-handler：スクロールと正しく協調する） ---------- */
-// ハンドルの PanGestureHandler が縦ドラッグを掴み、GH の ScrollView がスクロールを譲る。
-// これで「指で動かしても反応しない（スクロールに奪われる）」不具合が直る。
-function ReorderList({ ids, rowHeight = 64, gap = 10, renderRow, onChange }) {
-  const STEP = rowHeight + gap;
-  const [order, setOrder] = useState(ids);
-  const orderRef = useRef(ids);
-  useEffect(() => { setOrder(ids); orderRef.current = ids; }, [ids]);
-  const [dragId, setDragId] = useState(null);
-  const startIndexRef = useRef(0);
-  const dragY = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(1)).current;
-
-  function set(next) { orderRef.current = next; setOrder(next); }
-  function onGesture(id) {
-    return (e) => {
-      const dy = e.nativeEvent.translationY;
-      const cur = orderRef.current;
-      const curIdx = cur.indexOf(id);
-      const desired = Math.max(0, Math.min(cur.length - 1, startIndexRef.current + Math.round(dy / STEP)));
-      if (desired !== curIdx) set(moveItem(cur, curIdx, desired));
-      const newIdx = orderRef.current.indexOf(id);
-      dragY.setValue((startIndexRef.current - newIdx) * STEP + dy); // 指の真下に保つ
-    };
-  }
-  function onState(id) {
-    return (e) => {
-      const st = e.nativeEvent.state;
-      if (st === State.ACTIVE) {
-        startIndexRef.current = orderRef.current.indexOf(id);
-        setDragId(id); dragY.setValue(0);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        Animated.spring(scale, { toValue: 1.03, useNativeDriver: true }).start();
-      } else if (st === State.END || st === State.CANCELLED || st === State.FAILED) {
-        onChange(orderRef.current);
-        setDragId(null); dragY.setValue(0);
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start();
-      }
-    };
-  }
-  // ハンドル：44×44 のタップ領域を PanGestureHandler で包む
-  const wrapHandle = (id) => (children) => (
-    <PanGestureHandler onGestureEvent={onGesture(id)} onHandlerStateChange={onState(id)} activeOffsetY={[-6, 6]}>
-      <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>{children}</View>
-    </PanGestureHandler>
+/* ---------- 並べ替え（▲▼で移動：ジェスチャー競合が無く確実に動く） ---------- */
+function MoveControls({ ctrl }) {
+  const t = useTheme(); const s = useStyles();
+  return (
+    <View style={s.sortMoveCol}>
+      <Pressable onPress={ctrl.up} disabled={ctrl.isFirst} hitSlop={6} style={s.sortMoveBtn}>
+        <Ionicons name="chevron-up" size={22} color={ctrl.isFirst ? t.line : t.accent} />
+      </Pressable>
+      <Pressable onPress={ctrl.down} disabled={ctrl.isLast} hitSlop={6} style={s.sortMoveBtn}>
+        <Ionicons name="chevron-down" size={22} color={ctrl.isLast ? t.line : t.accent} />
+      </Pressable>
+    </View>
   );
+}
+// ids は親が持つ現在の並び。移動のたびに onChange(新しい並び) を呼ぶ（制御コンポーネント）。
+function ReorderList({ ids, renderRow, onChange }) {
+  const move = (id, dir) => {
+    const i = ids.indexOf(id);
+    const to = i + dir;
+    if (to < 0 || to >= ids.length) return;
+    Haptics.selectionAsync();
+    onChange(moveItem(ids, i, to));
+  };
   return (
     <View>
-      {order.map((id) => {
-        const dragging = dragId === id;
-        return (
-          <Animated.View key={id}
-            style={[{ height: rowHeight, marginBottom: gap }, dragging && { transform: [{ translateY: dragY }, { scale }], zIndex: 10, elevation: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } }]}>
-            {renderRow(id, dragging, wrapHandle(id))}
-          </Animated.View>
-        );
-      })}
+      {ids.map((id, i) => (
+        <View key={id} style={{ marginBottom: 10 }}>
+          {renderRow(id, { up: () => move(id, -1), down: () => move(id, 1), isFirst: i === 0, isLast: i === ids.length - 1 })}
+        </View>
+      ))}
     </View>
   );
 }
@@ -1585,18 +1579,18 @@ function SortModal({ visible, onClose, items, onReorder }) {
           </View>
           <GHScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
             <Text style={s.giftHero}>並べ替え</Text>
-            <Text style={s.giftLead}>右の ≡ を指で上下にドラッグして、好きな順に並べ替えできます。</Text>
+            <Text style={s.giftLead}>右の ▲▼ ボタンで順番を入れ替えできます。</Text>
             <View style={{ marginTop: 16 }}>
-              <ReorderList ids={ids} onChange={onReorder} renderRow={(id, dragging, handle) => {
+              <ReorderList ids={ids} onChange={onReorder} renderRow={(id, ctrl) => {
                 const it = byId[id]; if (!it) return null;
                 const cat = getCategory(it.category);
                 return (
-                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: cat.tint }, dragging && s.sortRowActive]}>
+                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: cat.tint }]}>
                     {it.imageUri
                       ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
                       : <View style={[s.sortThumb, { backgroundColor: catSoft(cat, t.mode), alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color={cat.tint} /></View>}
                     <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
-                    {handle(<Ionicons name="reorder-three" size={26} color={t.sub} />)}
+                    <MoveControls ctrl={ctrl} />
                   </View>
                 );
               }} />
@@ -1623,17 +1617,17 @@ function VisionSortModal({ visible, onClose, slots, onReorder }) {
           </View>
           <GHScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
             <Text style={s.giftHero}>並べ替え</Text>
-            <Text style={s.giftLead}>右の ≡ を指で上下にドラッグして、枠を好きな順に並べ替えできます。</Text>
+            <Text style={s.giftLead}>右の ▲▼ ボタンで枠の順番を入れ替えできます。</Text>
             <View style={{ marginTop: 16 }}>
-              <ReorderList ids={ids} onChange={onReorder} renderRow={(id, dragging, handle) => {
+              <ReorderList ids={ids} onChange={onReorder} renderRow={(id, ctrl) => {
                 const sl = byId[id]; if (!sl) return null;
                 return (
-                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }, dragging && s.sortRowActive]}>
+                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }]}>
                     {sl.imageUri
                       ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
                       : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
                     <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
-                    {handle(<Ionicons name="reorder-three" size={26} color={t.sub} />)}
+                    <MoveControls ctrl={ctrl} />
                   </View>
                 );
               }} />
@@ -2017,6 +2011,8 @@ function makeStyles(t) {
     sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
     sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },
     sortHandle: { paddingHorizontal: 6, paddingVertical: 10 },
+    sortMoveCol: { justifyContent: 'center', gap: 2 },
+    sortMoveBtn: { width: 44, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: t.surface2 },
     brand: { fontSize: 24, fontWeight: '700', color: t.text, letterSpacing: 0.3, fontFamily: FONT.bold },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
@@ -2255,6 +2251,8 @@ function makeStyles(t) {
     photoSubText: { color: t.accent, fontSize: 13, fontWeight: '700' },
     snsDetected: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
     snsDetectedText: { color: t.accent, fontSize: 12.5, fontWeight: '700' },
+    linkLoadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, backgroundColor: t.accent, borderRadius: 12, paddingVertical: 11 },
+    linkLoadText: { color: '#fff', fontSize: 13.5, fontWeight: '800' },
     label: { marginTop: 18, marginBottom: 10, fontSize: 13, fontWeight: '700', color: t.text },
     catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     rowScroll: { flexDirection: 'row', gap: 8, paddingRight: 12 },
