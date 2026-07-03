@@ -1,4 +1,30 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+
+describe('isMapsUrl', () => {
+  test('Googleマップのリンクを判定', () => {
+    expect(isMapsUrl('https://maps.google.com/?q=x')).toBe(true);
+    expect(isMapsUrl('https://www.google.com/maps/place/Cafe')).toBe(true);
+    expect(isMapsUrl('https://maps.app.goo.gl/abc')).toBe(true);
+    expect(isMapsUrl('https://example.com')).toBe(false);
+  });
+});
+
+describe('guessCategoryFromUrl', () => {
+  test('通販は欲しい', () => {
+    expect(guessCategoryFromUrl('https://www.amazon.co.jp/dp/x')).toBe('want');
+    expect(guessCategoryFromUrl('https://zozo.jp/shop/x')).toBe('want');
+    expect(guessCategoryFromUrl('https://item.rakuten.co.jp/x')).toBe('want');
+  });
+  test('レシピ/動画/グルメ/地図', () => {
+    expect(guessCategoryFromUrl('https://cookpad.com/recipe/1')).toBe('cook');
+    expect(guessCategoryFromUrl('https://youtu.be/x')).toBe('see');
+    expect(guessCategoryFromUrl('https://tabelog.com/x')).toBe('eat');
+    expect(guessCategoryFromUrl('https://maps.google.com/x')).toBe('go');
+  });
+  test('不明は null', () => {
+    expect(guessCategoryFromUrl('https://example.com')).toBe(null);
+  });
+});
 
 describe('isUrl', () => {
   test('http/https をURLと判定', () => {

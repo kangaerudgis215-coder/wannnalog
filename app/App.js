@@ -24,7 +24,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
-import { fetchOgp, cleanTitle, isUrl } from './ogp';
+import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1403,10 +1403,13 @@ function SaveModal({ visible, onClose, onSave }) {
     setOgpLoading(true);
     const ogp = await fetchOgp(url);
     setOgpLoading(false);
+    const maps = isMapsUrl(url); // マップの og:image は汎用ピンなので画像は使わない
     let got = false;
-    if (ogp.image && !image) { setImage(ogp.image); setCoords(null); got = true; }
+    if (ogp.image && !maps && !image) { setImage(ogp.image); setCoords(null); got = true; }
     const better = cleanTitle(ogp.title, url, '');
     if (better && !title.trim()) { setTitle(better); got = true; }
+    const guess = guessCategoryFromUrl(url); // ドメインからカテゴリを推測
+    if (guess) { setCategory(guess); got = true; }
     if (!got) Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を選ぶ」から手動で追加できます。');
   }
   function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }

@@ -70,6 +70,22 @@ export async function fetchOgp(url) {
   }
 }
 
+// Googleマップのリンク判定（og:image が汎用ピンなので画像は使わない）
+export function isMapsUrl(url) {
+  return /google\.[^/]+\/maps|maps\.google\.|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(url || '');
+}
+
+// ドメインから「したい」カテゴリを推測（純粋関数・保存時の初期選択に使う）
+export function guessCategoryFromUrl(url) {
+  const u = (url || '').toLowerCase();
+  if (/amazon\.|amzn\.|rakuten\.|zozo\.jp|zozotown|mercari\.|paypaymall|shopping\.yahoo|uniqlo|gu-global|shein\.|qoo10|buyma/.test(u)) return 'want';
+  if (/cookpad\.|recipe\.rakuten|kurashiru|delishkitchen|macaro-ni/.test(u)) return 'cook';
+  if (/youtube\.|youtu\.be|netflix\.|hulu\.|disneyplus|primevideo|eiga\.|filmarks/.test(u)) return 'see';
+  if (/tabelog\.|gurunavi\.|hotpepper|retty\.|foodie/.test(u)) return 'eat';
+  if (isMapsUrl(u)) return 'go';
+  return null;
+}
+
 // 汎用タイトル（店名でない）の判定
 const GENERIC_TITLE = /^(google\s*マップ|google\s*maps|マップ|ストリートビュー)$/i;
 
