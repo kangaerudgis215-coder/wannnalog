@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl, buildLinkAttachPatch } from '../ogp';
 
 describe('isMapsUrl', () => {
   test('Googleマップのリンクを判定', () => {
@@ -104,6 +104,28 @@ describe('extractPlaceFromUrl', () => {
   test('該当しないURLは null', () => {
     expect(extractPlaceFromUrl('https://example.com/x')).toBeNull();
     expect(extractPlaceFromUrl(undefined)).toBeNull();
+  });
+});
+
+describe('buildLinkAttachPatch', () => {
+  test('YouTubeはサムネを優先で使う', () => {
+    const sns = { platform: 'youtube', url: 'https://youtu.be/abc123', thumbnail: 'https://img.youtube.com/vi/abc123/hqdefault.jpg' };
+    const patch = buildLinkAttachPatch('https://youtu.be/abc123', sns, { image: null });
+    expect(patch).toEqual({ sourceUrl: 'https://youtu.be/abc123', sourcePlatform: 'youtube', imageUri: 'https://img.youtube.com/vi/abc123/hqdefault.jpg' });
+  });
+  test('SNS判定が無ければOGP画像を使う', () => {
+    const patch = buildLinkAttachPatch('https://zozo.jp/shop/x', null, { image: 'https://img/x.jpg' });
+    expect(patch).toEqual({ sourceUrl: 'https://zozo.jp/shop/x', sourcePlatform: null, imageUri: 'https://img/x.jpg' });
+  });
+  test('地図は汎用ピンを避けるためOGP画像を使わない', () => {
+    const patch = buildLinkAttachPatch('https://maps.google.com/?q=x', null, { image: 'https://pin.png' });
+    expect(patch).toEqual({ sourceUrl: 'https://maps.google.com/?q=x', sourcePlatform: null });
+    expect(patch.imageUri).toBeUndefined();
+  });
+  test('画像が無ければ imageUri を含めない（sourceUrlは常に保存）', () => {
+    const sns = { platform: 'instagram', url: 'https://instagram.com/p/x', thumbnail: null };
+    const patch = buildLinkAttachPatch('https://instagram.com/p/x', sns, { image: null });
+    expect(patch).toEqual({ sourceUrl: 'https://instagram.com/p/x', sourcePlatform: 'instagram' });
   });
 });
 

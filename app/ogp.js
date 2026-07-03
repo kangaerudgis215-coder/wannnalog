@@ -75,6 +75,15 @@ export function isMapsUrl(url) {
   return /google\.[^/]+\/maps|maps\.google\.|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(url || '');
 }
 
+// 詳細画面「リンクから読み込む」用：URL・SNS判定・OGP結果から更新パッチを作る（純粋関数）
+// 画像はYouTubeサムネ（sns.thumbnail）を優先し、無ければOGP画像（地図の汎用ピンは除く）を使う。
+export function buildLinkAttachPatch(url, sns, ogp) {
+  const image = (sns && sns.thumbnail) || (!isMapsUrl(url) && ogp && ogp.image) || null;
+  const patch = { sourceUrl: url, sourcePlatform: (sns && sns.platform) || null };
+  if (image) patch.imageUri = image;
+  return patch;
+}
+
 // ドメインから「したい」カテゴリを推測（純粋関数・保存時の初期選択に使う）
 export function guessCategoryFromUrl(url) {
   const u = (url || '').toLowerCase();

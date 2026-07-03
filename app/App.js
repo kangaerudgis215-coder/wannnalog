@@ -24,7 +24,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
-import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl, buildLinkAttachPatch } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1833,6 +1833,9 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
   const [memo, setMemo] = useState(item.memo || '');
   const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(false);
+  const [showLinkBox, setShowLinkBox] = useState(false);
+  const [linkInput, setLinkInput] = useState(item.sourceUrl || '');
+  const [ogpLoading, setOgpLoading] = useState(false);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
   const openLink = onOpenLink;
@@ -1860,6 +1863,18 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
     else { Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
     onUpdate(patch);
   }
+  // リンクから画像・出典を読み込む（後付けの「写真を紐付ける」導線）
+  async function loadImageFromLink() {
+    const url = linkInput.trim();
+    if (!isUrl(url)) { Alert.alert('リンクを入力してください', 'http(s):// で始まるURLを貼ってください。'); return; }
+    setOgpLoading(true);
+    const sns = parseSnsLink(url);
+    const ogp = await fetchOgp(url);
+    setOgpLoading(false);
+    const patch = buildLinkAttachPatch(url, sns, ogp);
+    onUpdate(patch);
+    if (!patch.imageUri) Alert.alert('画像は読み取れませんでした', 'リンクは保存しました。写真は「写真を変更」から手動で追加できます（Amazon・Instagram・Xなどは自動取得が難しい場合があります）。');
+  }
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
 
   return (
@@ -1882,7 +1897,18 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
           <View style={s.photoActions}>
             <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
             <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
+            <Pressable onPress={() => setShowLinkBox((v) => !v)} style={s.photoActBtn}><Ionicons name="link-outline" size={16} color={t.accent} /><Text style={s.photoActText}>リンクから読み込む</Text></Pressable>
             {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
+          </View>
+        )}
+        {editMode && showLinkBox && (
+          <View style={{ marginTop: 10 }}>
+            <TextInput style={s.input} placeholder="リンクを貼る（Amazon・Instagram・地図 など）" placeholderTextColor={t.sub}
+              value={linkInput} onChangeText={setLinkInput} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+            <Pressable style={[s.linkLoadBtn, ogpLoading && { opacity: 0.6 }]} onPress={loadImageFromLink} disabled={ogpLoading}>
+              {ogpLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="download-outline" size={16} color="#fff" />}
+              <Text style={s.linkLoadText}>{ogpLoading ? '読み込み中…' : 'リンクから画像を読み込む'}</Text>
+            </Pressable>
           </View>
         )}
 
