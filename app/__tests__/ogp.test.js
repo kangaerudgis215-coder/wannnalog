@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl, buildLinkLoadPatch } from '../ogp';
 
 describe('isMapsUrl', () => {
   test('Googleマップのリンクを判定', () => {
@@ -122,5 +122,24 @@ describe('cleanTitle', () => {
   test('汎用かつ手掛かり無しは fallback、それも無ければ null', () => {
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '手入力')).toBe('手入力');
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '')).toBeNull();
+  });
+});
+
+describe('buildLinkLoadPatch', () => {
+  test('写真が無い項目は、読み取った画像とリンクを反映', () => {
+    const patch = buildLinkLoadPatch('https://zozo.jp/item/x', { image: 'https://img/x.jpg' }, null);
+    expect(patch).toEqual({ sourceUrl: 'https://zozo.jp/item/x', imageUri: 'https://img/x.jpg' });
+  });
+  test('すでに写真がある項目は上書きしない（あとで仕上げても既存の写真を守る）', () => {
+    const patch = buildLinkLoadPatch('https://zozo.jp/item/x', { image: 'https://img/x.jpg' }, 'file://already-set.jpg');
+    expect(patch).toEqual({ sourceUrl: 'https://zozo.jp/item/x' });
+  });
+  test('Googleマップは og:image が汎用ピンなので画像を採用しない', () => {
+    const patch = buildLinkLoadPatch('https://maps.google.com/maps/place/一蘭', { image: 'https://maps/pin.png' }, null);
+    expect(patch).toEqual({ sourceUrl: 'https://maps.google.com/maps/place/一蘭' });
+  });
+  test('画像が取得できなくてもリンクは保存する', () => {
+    const patch = buildLinkLoadPatch('https://example.com/x', { image: null }, null);
+    expect(patch).toEqual({ sourceUrl: 'https://example.com/x' });
   });
 });

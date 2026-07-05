@@ -24,7 +24,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
-import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl, buildLinkLoadPatch } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1833,8 +1833,22 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
   const [memo, setMemo] = useState(item.memo || '');
   const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(false);
+  const [link, setLink] = useState(item.sourceUrl || '');
+  const [linkLoading, setLinkLoading] = useState(false);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
+  // あとからリンクを貼って写真を紐付ける（熱い瞬間は文字だけで保存→あとで仕上げる導線）
+  async function loadFromLink() {
+    const url = link.trim();
+    if (!isUrl(url)) { Alert.alert('リンクを入力してください', 'http(s):// で始まるURLを貼ってください。'); return; }
+    setLinkLoading(true);
+    const ogp = await fetchOgp(url);
+    setLinkLoading(false);
+    const patch = buildLinkLoadPatch(url, ogp, item.imageUri);
+    onUpdate(patch);
+    if (patch.imageUri) Alert.alert('読み込みました', '写真とリンクを保存しました。');
+    else Alert.alert('リンクを保存しました', '写真は見つかりませんでした（Amazon・Instagram・Xなどは制限が強めです）。「写真を変更」から手動でも追加できます。');
+  }
   const openLink = onOpenLink;
   function confirmDelete() {
     Alert.alert('削除しますか？', 'この「したい」を削除します。元に戻せません。', [
@@ -1883,6 +1897,20 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
             <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
             <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
             {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
+          </View>
+        )}
+        {editMode && (
+          <View style={{ marginTop: 4, marginBottom: 12 }}>
+            <Text style={s.sectionLabel}>リンク（任意）</Text>
+            <TextInput style={s.input} placeholder="リンクを貼る（あとから写真を紐付けられます）"
+              placeholderTextColor={t.sub} value={link} onChangeText={setLink}
+              autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+            {isUrl(link.trim()) && (
+              <Pressable style={[s.linkLoadBtn, linkLoading && { opacity: 0.6 }]} onPress={loadFromLink} disabled={linkLoading}>
+                {linkLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="download-outline" size={16} color="#fff" />}
+                <Text style={s.linkLoadText}>{linkLoading ? '読み込み中…' : 'リンクから写真を読み込む'}</Text>
+              </Pressable>
+            )}
           </View>
         )}
 

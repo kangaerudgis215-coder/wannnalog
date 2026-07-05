@@ -86,6 +86,14 @@ export function guessCategoryFromUrl(url) {
   return null;
 }
 
+// 既存項目にあとからリンクを貼ったときのパッチを作る（純粋関数）
+// 「熱いうちは文字だけで保存→あとで写真を仕上げる」を実現：既に写真がある場合は上書きしない。
+export function buildLinkLoadPatch(url, ogp, currentImageUri) {
+  const patch = { sourceUrl: url };
+  if (ogp && ogp.image && !isMapsUrl(url) && !currentImageUri) patch.imageUri = ogp.image;
+  return patch;
+}
+
 // 汎用タイトル（店名でない）の判定
 const GENERIC_TITLE = /^(google\s*マップ|google\s*maps|マップ|ストリートビュー)$/i;
 
