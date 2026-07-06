@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl, ogpUpdatePatch } from '../ogp';
 
 describe('isMapsUrl', () => {
   test('Googleマップのリンクを判定', () => {
@@ -104,6 +104,29 @@ describe('extractPlaceFromUrl', () => {
   test('該当しないURLは null', () => {
     expect(extractPlaceFromUrl('https://example.com/x')).toBeNull();
     expect(extractPlaceFromUrl(undefined)).toBeNull();
+  });
+});
+
+describe('ogpUpdatePatch', () => {
+  test('写真が無いアイテムには画像を紐付ける', () => {
+    const patch = ogpUpdatePatch('https://amazon.co.jp/dp/x', { image: 'https://img/x.jpg', title: null }, { imageUri: null, title: 'AirPods' });
+    expect(patch).toEqual({ sourceUrl: 'https://amazon.co.jp/dp/x', imageUri: 'https://img/x.jpg' });
+  });
+  test('既に写真があるアイテムは上書きしない', () => {
+    const patch = ogpUpdatePatch('https://amazon.co.jp/dp/x', { image: 'https://img/x.jpg', title: null }, { imageUri: 'https://existing.jpg', title: 'AirPods' });
+    expect(patch).toEqual({ sourceUrl: 'https://amazon.co.jp/dp/x' });
+  });
+  test('マップは汎用ピン画像を紐付けない', () => {
+    const patch = ogpUpdatePatch('https://maps.google.com/maps/place/一蘭', { image: 'https://maps/pin.png', title: 'Google マップ' }, { imageUri: null, title: '一蘭' });
+    expect(patch.imageUri).toBeUndefined();
+  });
+  test('タイトルが空のときだけURL由来のタイトルで埋める', () => {
+    const patch = ogpUpdatePatch('https://www.google.com/maps/place/一蘭+渋谷/@x', { image: null, title: 'Google マップ' }, { imageUri: 'x.jpg', title: '' });
+    expect(patch.title).toBe('一蘭 渋谷');
+  });
+  test('タイトルが既にあれば上書きしない', () => {
+    const patch = ogpUpdatePatch('https://example.com', { image: null, title: '新しいタイトル' }, { imageUri: 'x.jpg', title: '元のタイトル' });
+    expect(patch.title).toBeUndefined();
   });
 });
 

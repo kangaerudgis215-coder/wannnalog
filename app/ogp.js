@@ -102,6 +102,16 @@ export function extractPlaceFromUrl(url) {
   }
 }
 
+// 登録済みアイテムへ「リンクから読み込む」した結果を反映するパッチを作る（純粋関数）
+// 熱いうちの保存を止めないポリシー：既に画像/タイトルがあるものは上書きしない。マップは汎用ピン画像を使わない。
+export function ogpUpdatePatch(url, ogp, current) {
+  const patch = { sourceUrl: url };
+  if (ogp.image && !isMapsUrl(url) && !current?.imageUri) patch.imageUri = ogp.image;
+  const better = cleanTitle(ogp.title, url, '');
+  if (better && (!current?.title || current.title.trim() === '')) patch.title = better;
+  return patch;
+}
+
 // 取得タイトルを「店名/品名」に整える（純粋関数）
 // 優先：良い非汎用タイトル > URL由来の店名 > fallback（入力）
 export function cleanTitle(rawTitle, url, fallback) {
