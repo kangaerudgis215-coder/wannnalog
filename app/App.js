@@ -1833,6 +1833,7 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
   const [memo, setMemo] = useState(item.memo || '');
   const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(false);
+  const [ogpLoading, setOgpLoading] = useState(false); // リンクからの読み込み中
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
   const openLink = onOpenLink;
@@ -1860,6 +1861,17 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
     else { Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
     onUpdate(patch);
   }
+  // 保存済みのリンク先から画像を後から読み込む（Amazon/Instagram等、保存時に画像が取れなかった場合の仕上げ用）
+  async function loadImageFromLink() {
+    const url = item.sourceUrl;
+    if (!isUrl(url)) return;
+    setOgpLoading(true);
+    const ogp = await fetchOgp(url);
+    setOgpLoading(false);
+    const maps = isMapsUrl(url); // マップの og:image は汎用ピンなので画像は使わない
+    if (ogp.image && !maps) onUpdate({ imageUri: ogp.image });
+    else Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。「写真を変更」から手動で追加できます。');
+  }
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
 
   return (
@@ -1882,6 +1894,12 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
           <View style={s.photoActions}>
             <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
             <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
+            {item.sourceUrl && isUrl(item.sourceUrl) && (
+              <Pressable onPress={loadImageFromLink} style={s.photoActBtn} disabled={ogpLoading}>
+                {ogpLoading ? <ActivityIndicator size="small" color={t.accent} /> : <Ionicons name="link-outline" size={16} color={t.accent} />}
+                <Text style={s.photoActText}>{ogpLoading ? '読み込み中…' : 'リンクから読み込む'}</Text>
+              </Pressable>
+            )}
             {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
           </View>
         )}
