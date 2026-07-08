@@ -25,6 +25,7 @@ import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { analyzeText } from './textAnalysis';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1371,6 +1372,8 @@ function SaveModal({ visible, onClose, onSave }) {
   const [heat, setHeat] = useState(2);
   const [reminder, setReminder] = useState({ remind: '3days' });
   const [ogpLoading, setOgpLoading] = useState(false); // リンク読み込み中
+  const [showTextPaste, setShowTextPaste] = useState(false); // スクショの文字貼り付け欄の開閉
+  const [pastedText, setPastedText] = useState(''); // 貼り付けたテキスト（Live Textコピー等）
 
   const sns = parseSnsLink(link);            // SNSリンクを認識（X/Instagram/YouTube など）
   const previewUri = image || (sns && sns.thumbnail); // 写真未選択でもYouTubeはサムネを表示
@@ -1412,7 +1415,19 @@ function SaveModal({ visible, onClose, onSave }) {
     if (guess) { setCategory(guess); got = true; }
     if (!got) Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を選ぶ」から手動で追加できます。');
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  // スクショの文字（iPhoneの「テキストを選択」でコピーした物）からタイトル・カテゴリを推測して埋める
+  function applyPastedText() {
+    const text = pastedText.trim();
+    if (!text) { Alert.alert('文字を貼り付けてください'); return; }
+    const guess = analyzeText(text);
+    let got = false;
+    if (guess.title && !title.trim()) { setTitle(guess.title); got = true; }
+    if (guess.category) { setCategory(guess.category); got = true; }
+    if (!got) Alert.alert('読み取れませんでした', 'タイトルは手入力してください。');
+    setPastedText('');
+    setShowTextPaste(false);
+  }
+  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); setPastedText(''); setShowTextPaste(false); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
     const finalImage = image || (sns ? sns.thumbnail : null);
@@ -1457,6 +1472,24 @@ function SaveModal({ visible, onClose, onSave }) {
                 {ogpLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="download-outline" size={16} color="#fff" />}
                 <Text style={s.linkLoadText}>{ogpLoading ? '読み込み中…' : 'リンクから画像・タイトルを読み込む'}</Text>
               </Pressable>
+            )}
+
+            <Pressable style={s.photoSubBtn} onPress={() => setShowTextPaste((v) => !v)}>
+              <Ionicons name="text-outline" size={15} color={t.accent} />
+              <Text style={s.photoSubText}>スクショの文字から自動入力</Text>
+            </Pressable>
+            {showTextPaste && (
+              <View>
+                <TextInput
+                  style={[s.input, { marginTop: 8, minHeight: 70, textAlignVertical: 'top' }]}
+                  placeholder="iPhoneで文字を「テキストを選択」してコピーし、ここに貼り付け"
+                  placeholderTextColor={t.sub} value={pastedText} onChangeText={setPastedText}
+                  multiline autoCapitalize="none" />
+                <Pressable style={s.linkLoadBtn} onPress={applyPastedText}>
+                  <Ionicons name="sparkles-outline" size={16} color="#fff" />
+                  <Text style={s.linkLoadText}>読み取る</Text>
+                </Pressable>
+              </View>
             )}
 
             <Pressable style={s.photoPick} onPress={pickImage}>
