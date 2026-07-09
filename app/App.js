@@ -25,6 +25,7 @@ import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { needsPhoto, countNeedsPhoto } from './photo';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -633,9 +634,11 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
   const t = useTheme(); const s = useStyles();
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
+  const noPhotoCount = countNeedsPhoto(items); // 写真が無く「仕上げ待ち」の件数
   let visible;
   if (filter === 'done') visible = items.filter((it) => it.doneAt);
   else if (filter === 'serious') visible = items.filter((it) => !it.doneAt && (it.heat || 2) === 3).slice().sort(byHeatThenNew);
+  else if (filter === 'noPhoto') visible = items.filter(needsPhoto).slice().sort(byHeatThenNew);
   else if (filter.startsWith('sns:')) { const p = filter.slice(4); visible = items.filter((it) => !it.doneAt && it.sourcePlatform === p).slice().sort(byHeatThenNew); }
   else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
   else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
@@ -664,6 +667,9 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
         {CATEGORIES.map((c) => (
           <Chip key={c.key} cat={c} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
         ))}
+        {noPhotoCount > 0 && (
+          <Chip icon="image-outline" label={`写真なし ${noPhotoCount}`} active={filter === 'noPhoto'} onPress={() => setFilter('noPhoto')} />
+        )}
         {snsPresent.map((p) => (
           <Chip key={p} icon={snsMeta(p).icon} label={snsMeta(p).label} active={filter === 'sns:' + p} onPress={() => setFilter('sns:' + p)} />
         ))}
@@ -673,7 +679,11 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
       {upcoming.length > 0 && <RemindCarousel items={upcoming} onOpen={onOpen} />}
 
       {visible.length === 0 ? (
-        <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
+        <EmptyState text={
+          filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。'
+          : filter === 'noPhoto' ? '写真なしはもうありません。\nどれも仕上がっています。'
+          : 'まだ何もありません。\n気になったことを、逃さないうちに。'
+        } />
       ) : comfy ? (
         <View style={{ paddingHorizontal: 20, gap: 16, paddingTop: 2 }}>
           {visible.map((it, i) => (
