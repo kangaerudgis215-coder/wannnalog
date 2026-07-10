@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl, buildPhotoLoadPatch } from '../ogp';
 
 describe('isMapsUrl', () => {
   test('Googleマップのリンクを判定', () => {
@@ -104,6 +104,29 @@ describe('extractPlaceFromUrl', () => {
   test('該当しないURLは null', () => {
     expect(extractPlaceFromUrl('https://example.com/x')).toBeNull();
     expect(extractPlaceFromUrl(undefined)).toBeNull();
+  });
+});
+
+describe('buildPhotoLoadPatch', () => {
+  test('写真が無いアイテムはOGP画像を反映', () => {
+    const item = { imageUri: null };
+    const ogp = { image: 'https://img/x.jpg' };
+    expect(buildPhotoLoadPatch(item, ogp, 'https://tabelog.com/x')).toEqual({ imageUri: 'https://img/x.jpg' });
+  });
+  test('既に写真があるアイテムは上書きしない', () => {
+    const item = { imageUri: 'https://existing.jpg' };
+    const ogp = { image: 'https://img/x.jpg' };
+    expect(buildPhotoLoadPatch(item, ogp, 'https://tabelog.com/x')).toBeNull();
+  });
+  test('Googleマップの汎用ピンは使わない', () => {
+    const item = { imageUri: null };
+    const ogp = { image: 'https://maps.gstatic.com/pin.png' };
+    expect(buildPhotoLoadPatch(item, ogp, 'https://maps.google.com/maps/place/x')).toBeNull();
+  });
+  test('OGP画像が取れなければ null', () => {
+    const item = { imageUri: null };
+    expect(buildPhotoLoadPatch(item, { image: null }, 'https://example.com')).toBeNull();
+    expect(buildPhotoLoadPatch(item, null, 'https://example.com')).toBeNull();
   });
 });
 

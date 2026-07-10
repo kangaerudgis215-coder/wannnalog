@@ -86,6 +86,15 @@ export function guessCategoryFromUrl(url) {
   return null;
 }
 
+// 詳細画面の「リンクから読み込む」用パッチ。既に写真があれば上書きしない。
+// マップの og:image は汎用ピンなので使わない（純粋関数）
+export function buildPhotoLoadPatch(item, ogp, url) {
+  if (item && item.imageUri) return null;
+  if (!ogp || !ogp.image) return null;
+  if (isMapsUrl(url)) return null;
+  return { imageUri: ogp.image };
+}
+
 // 汎用タイトル（店名でない）の判定
 const GENERIC_TITLE = /^(google\s*マップ|google\s*maps|マップ|ストリートビュー)$/i;
 

@@ -24,7 +24,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
-import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl, buildPhotoLoadPatch } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1999,6 +1999,7 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
   const [memo, setMemo] = useState(item.memo || '');
   const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(!!startInEdit);
+  const [linkLoading, setLinkLoading] = useState(false);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
   const openLink = onOpenLink;
@@ -2026,6 +2027,17 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
     else { Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
     onUpdate(patch);
   }
+  // リンクから写真だけを後付けで読み込む（Amazon/Instagram/地図など保存時に画像が取れなかった項目向け）
+  // 既に写真がある場合は上書きしない（buildPhotoLoadPatch）。
+  async function loadPhotoFromLink() {
+    if (!item.sourceUrl) return;
+    setLinkLoading(true);
+    const ogp = await fetchOgp(item.sourceUrl);
+    setLinkLoading(false);
+    const patch = buildPhotoLoadPatch(item, ogp, item.sourceUrl);
+    if (patch) { onUpdate(patch); Alert.alert('読み込みました', 'リンク先の写真を反映しました。'); }
+    else Alert.alert('読み込めませんでした', 'このサイトは自動取得に対応していない場合があります（Amazon・Instagram・Xなど）。「写真を変更」から手動で追加できます。');
+  }
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
 
   return (
@@ -2048,6 +2060,14 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
           <View style={s.photoActions}>
             <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
             <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
+            {item.sourceUrl && !item.imageUri && (
+              <Pressable onPress={loadPhotoFromLink} disabled={linkLoading} style={s.photoActBtn}>
+                {linkLoading
+                  ? <ActivityIndicator size="small" color={t.accent} />
+                  : <Ionicons name="cloud-download-outline" size={16} color={t.accent} />}
+                <Text style={s.photoActText}>{linkLoading ? '読み込み中…' : 'リンクから読み込む'}</Text>
+              </Pressable>
+            )}
             {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
           </View>
         )}
