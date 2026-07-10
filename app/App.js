@@ -165,6 +165,8 @@ export default function App() {
   const [tab, setTab] = useState('home');
   const [selectedId, setSelectedId] = useState(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false); // スクショ/リンクからのクイック保存
+  const [detailStartEdit, setDetailStartEdit] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [giftOpen, setGiftOpen] = useState(false);
   const [gardenOpen, setGardenOpen] = useState(false);
@@ -308,14 +310,17 @@ export default function App() {
     Haptics.selectionAsync();
   }
 
-  async function addItem(data) {
+  async function addItem(data, opts = {}) {
     const { title, category, due, imageUri, heat, reminder, link, withWho, coords } = data;
     const rem = reminder || { remind: '3days' };
-    const item = { id: String(Date.now()), title, category, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, withWho: withWho || null, lat: coords?.lat ?? null, lng: coords?.lng ?? null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
+    const item = { id: String(Date.now()), title, category: category || null, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, withWho: withWho || null, lat: coords?.lat ?? null, lng: coords?.lng ?? null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
     item.notifId = await scheduleReminder(item);
     await persist([item, ...items]);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert('保存しました', item.remind === 'none' ? 'ボードに追加しました。' : `${remindSummary(item)} に思い出させます。`);
+    if (!opts.silent) { // クイック保存は独自アニメがあるのでAlert抑制
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('保存しました', item.remind === 'none' ? 'ボードに追加しました。' : `${remindSummary(item)} に思い出させます。`);
+    }
+    return item.id;
   }
 
   function triggerMypageBounce() {
@@ -373,8 +378,8 @@ export default function App() {
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         {selected ? (
           <DetailScreen
-            key={selected.id} item={selected} browser={browser}
-            onBack={() => setSelectedId(null)}
+            key={selected.id} item={selected} browser={browser} startInEdit={detailStartEdit}
+            onBack={() => { setSelectedId(null); setDetailStartEdit(false); }}
             onDone={() => { markDone(selected.id); setSelectedId(null); }}
             onUpdate={(patch) => updateItem(selected.id, patch)}
             onReminder={(reminder) => applyReminder(selected.id, reminder)}
@@ -387,9 +392,14 @@ export default function App() {
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} onSnooze={(id) => applyReminder(id, { remind: 'at', remindAt: Date.now() + DAY_MS })} onStop={(id) => applyReminder(id, { remind: 'none' })} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
-            <TabBar tab={tab} onTab={setTab} onAdd={() => setSaveOpen(true)} mypageBounce={mypageBounce} />
+            <TabBar tab={tab} onTab={setTab} onAdd={() => setQuickOpen(true)} mypageBounce={mypageBounce} />
           </>
         )}
+
+        <QuickCaptureModal visible={quickOpen} onClose={() => setQuickOpen(false)}
+          onSave={(draft) => { addItem(draft, { silent: true }); setQuickOpen(false); }}
+          onEdit={async (draft) => { const id = await addItem(draft, { silent: true }); setQuickOpen(false); setDetailStartEdit(true); setSelectedId(id); }}
+          onManual={() => { setQuickOpen(false); setSaveOpen(true); }} />
 
         <SaveModal visible={saveOpen} onClose={() => setSaveOpen(false)}
           onSave={(data) => { addItem(data); setSaveOpen(false); }} />
@@ -1362,6 +1372,158 @@ function ReminderEditor({ value, onChange }) {
   );
 }
 
+/* ---------- クイック保存（スクショ/リンク → スキャン演出 → カードが生成される） ---------- */
+const SCAN_ICONS = ['scan-outline', 'sparkles-outline', 'image-outline', 'text-outline', 'pricetag-outline'];
+function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
+  const t = useTheme(); const s = useStyles();
+  const [phase, setPhase] = useState('pick'); // pick | processing | reveal | saving
+  const [draft, setDraft] = useState({ title: '', category: null, imageUri: null, link: '' });
+  const [linkInput, setLinkInput] = useState('');
+  const [iconIdx, setIconIdx] = useState(0);
+  const scan = useRef(new Animated.Value(0)).current;
+  const shimmer = useRef(new Animated.Value(0)).current;
+  const catPop = useRef(new Animated.Value(0)).current;
+  const titleR = useRef(new Animated.Value(0)).current;
+  const settle = useRef(new Animated.Value(0)).current;
+  const draftRef = useRef(draft); draftRef.current = draft;
+
+  useEffect(() => { if (visible) { setPhase('pick'); setDraft({ title: '', category: null, imageUri: null, link: '' }); setLinkInput(''); settle.setValue(0); } }, [visible]);
+  useEffect(() => {
+    if (phase !== 'processing') return;
+    scan.setValue(0);
+    const loop = Animated.loop(Animated.timing(scan, { toValue: 1, duration: 1100, useNativeDriver: true }));
+    loop.start();
+    const timer = setInterval(() => setIconIdx((i) => i + 1), 320);
+    return () => { loop.stop(); clearInterval(timer); };
+  }, [phase]);
+
+  async function startFromImage() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+    if (res.canceled) return;
+    setDraft({ title: '', category: null, imageUri: res.assets[0].uri, link: '' });
+    setPhase('processing');
+    setTimeout(runReveal, 1700); // ExpoGoでは画像OCR不可→演出のみ（タイトルは編集で）
+  }
+  async function startFromLink() {
+    const url = linkInput.trim();
+    if (!isUrl(url)) { Alert.alert('リンクを入力してください', 'http(s):// で始まるURLを貼ってください。'); return; }
+    setDraft({ title: '', category: guessCategoryFromUrl(url), imageUri: null, link: url });
+    setPhase('processing');
+    const started = Date.now();
+    const ogp = await fetchOgp(url);
+    const maps = isMapsUrl(url);
+    setDraft({ title: cleanTitle(ogp.title, url, '') || '', category: guessCategoryFromUrl(url), imageUri: (ogp.image && !maps) ? ogp.image : null, link: url });
+    setTimeout(runReveal, Math.max(0, 1100 - (Date.now() - started)));
+  }
+  function runReveal() {
+    setPhase('reveal');
+    shimmer.setValue(0); catPop.setValue(0); titleR.setValue(0);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.sequence([
+      Animated.timing(shimmer, { toValue: 1, duration: 650, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.timing(titleR, { toValue: 1, duration: 420, useNativeDriver: true }),
+        Animated.spring(catPop, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }),
+      ]),
+    ]).start(() => Haptics.selectionAsync());
+  }
+  function buildDraft() {
+    const d = draftRef.current;
+    return { title: (d.title || '').trim() || '（無題）', category: d.category || null, imageUri: d.imageUri || null, heat: 2, due: 'none', withWho: null, reminder: { remind: '3days' }, link: d.link ? { url: d.link, platform: null } : null };
+  }
+  function doSave() {
+    setPhase('saving');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.timing(settle, { toValue: 1, duration: 540, useNativeDriver: true }).start(() => onSave(buildDraft()));
+  }
+
+  const cat = getCategory(draft.category);
+  const scanY = scan.interpolate({ inputRange: [0, 1], outputRange: [0, 300] });
+  const settleScale = settle.interpolate({ inputRange: [0, 1], outputRange: [1, 0.2] });
+  const settleY = settle.interpolate({ inputRange: [0, 1], outputRange: [0, 280] });
+  const settleOpacity = settle.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] });
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={s.qcBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={phase === 'pick' ? onClose : undefined} />
+
+        {phase === 'pick' && (
+          <View style={s.qcSheet}>
+            <View style={s.qcHandle} />
+            <Text style={s.qcTitle}>“したい”を、熱いうちに</Text>
+            <Text style={s.qcSub}>スクショやリンクから、ほぼワンタップで。</Text>
+            <PressBounce onPress={startFromImage} style={{ borderRadius: 18, overflow: 'hidden', marginTop: 16 }}>
+              <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.qcBigBtn}>
+                <Ionicons name="image" size={22} color="#fff" /><Text style={s.qcBigBtnText}>スクショ・写真から</Text>
+              </LinearGradient>
+            </PressBounce>
+            <View style={s.qcLinkRow}>
+              <Ionicons name="link" size={16} color={t.sub} />
+              <TextInput style={s.qcLinkInput} value={linkInput} onChangeText={setLinkInput} placeholder="リンクを貼る（楽天・YouTube・地図…）" placeholderTextColor={t.sub} autoCapitalize="none" autoCorrect={false} keyboardType="url" onSubmitEditing={startFromLink} />
+              <Pressable onPress={startFromLink} style={s.qcLinkGo}><Ionicons name="arrow-forward" size={18} color="#fff" /></Pressable>
+            </View>
+            <Pressable onPress={onManual} style={s.qcManual}><Text style={s.qcManualText}>自分で書いて残す</Text></Pressable>
+          </View>
+        )}
+
+        {phase === 'processing' && (
+          <View style={s.qcCenter}>
+            {draft.imageUri ? (
+              <View style={s.qcScanCard}>
+                <Image source={{ uri: draft.imageUri }} style={s.qcScanImg} />
+                <View style={s.qcScanTint} />
+                <Animated.View style={[s.qcScanLine, { transform: [{ translateY: scanY }] }]} />
+                <View style={s.qcScanBadge}><Ionicons name="scan" size={14} color="#fff" /><Text style={s.qcScanBadgeText}>読み取り中…</Text></View>
+              </View>
+            ) : (
+              <View style={s.qcLoadCard}>
+                <Ionicons name={SCAN_ICONS[iconIdx % SCAN_ICONS.length]} size={42} color={t.accent} />
+                <Text style={s.qcLoadText}>情報取得中…</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {(phase === 'reveal' || phase === 'saving') && (
+          <View style={s.qcCenter}>
+            <Animated.View style={{ transform: [{ scale: settleScale }, { translateY: settleY }], opacity: settleOpacity }}>
+              <View style={[s.qcCard, { shadowColor: cat.tint }]}>
+                <View style={{ width: '100%', aspectRatio: 4 / 5 }}>
+                  {draft.imageUri
+                    ? <Image source={{ uri: draft.imageUri }} style={s.cardImg} />
+                    : <LinearGradient colors={[catSoft(cat, t.mode), t.surface]} style={[s.cardImg, s.cardCenter]}><VIcon set={cat.iconSet} name={cat.icon} size={44} color={cat.tint} /></LinearGradient>}
+                  <Animated.View pointerEvents="none" style={[s.qcShine, { opacity: shimmer.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.85, 0] }), transform: [{ translateX: shimmer.interpolate({ inputRange: [0, 1], outputRange: [-160, 260] }) }, { rotate: '18deg' }] }]} />
+                  <Animated.View style={[s.qcCardChip, { backgroundColor: cat.tint, transform: [{ scale: catPop.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }) }] }]}>
+                    <VIcon set={cat.iconSet} name={cat.icon} size={11} color="#fff" /><Text style={s.qcCardChipText}>{cat.label}</Text>
+                  </Animated.View>
+                </View>
+                <Animated.View style={[s.qcCardPanel, { opacity: titleR, transform: [{ translateY: titleR.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }]}>
+                  <Text style={s.qcCardTitle} numberOfLines={2}>{draft.title || '（タイトルは編集で）'}</Text>
+                </Animated.View>
+              </View>
+            </Animated.View>
+
+            {phase === 'reveal' && (
+              <View style={s.qcConfirm}>
+                <Text style={s.qcConfirmText}>この情報でいいですか？</Text>
+                <View style={s.qcConfirmBtns}>
+                  <Pressable style={s.qcEditBtn} onPress={() => onEdit(buildDraft())}><Ionicons name="create-outline" size={16} color={t.accent} /><Text style={s.qcEditText}>編集する</Text></Pressable>
+                  <PressBounce onPress={doSave} style={{ borderRadius: 999, overflow: 'hidden', flex: 1 }}>
+                    <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.qcSaveBtn}><Ionicons name="checkmark" size={18} color="#fff" /><Text style={s.qcSaveText}>保存</Text></LinearGradient>
+                  </PressBounce>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
 /* ---------- 保存シート ---------- */
 function SaveModal({ visible, onClose, onSave }) {
   const t = useTheme(); const s = useStyles();
@@ -1821,7 +1983,7 @@ function GardenModal({ visible, onClose, garden, doneCount, onWater }) {
 }
 
 /* ---------- 詳細 ---------- */
-function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onOpenLink, onDelete }) {
+function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, onReminder, onOpenLink, onDelete }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
@@ -1836,7 +1998,7 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
   const [title, setTitle] = useState(item.title);
   const [memo, setMemo] = useState(item.memo || '');
   const [recipe, setRecipe] = useState(item.recipe || '');
-  const [editMode, setEditMode] = useState(false);
+  const [editMode, setEditMode] = useState(!!startInEdit);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
   const openLink = onOpenLink;
@@ -2245,6 +2407,42 @@ function makeStyles(t) {
     tabLabel: { fontSize: 10, color: t.sub, fontWeight: '600' },
     tabAdd: { width: 60, height: 60, marginTop: -18, borderRadius: 30, alignItems: 'center', justifyContent: 'center', shadowColor: t.accent, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
     tabAddGrad: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
+
+    // クイック保存
+    qcBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
+    qcSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: t.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 34 },
+    qcHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: t.line, marginBottom: 16 },
+    qcTitle: { fontSize: 20, color: t.text, fontFamily: FONT.bold },
+    qcSub: { fontSize: 13, color: t.sub, marginTop: 6 },
+    qcBigBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 18 },
+    qcBigBtnText: { color: '#fff', fontSize: 16, fontWeight: '900', fontFamily: FONT.bold },
+    qcLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, backgroundColor: t.surface, borderRadius: 14, paddingLeft: 14, paddingRight: 6, paddingVertical: 6 },
+    qcLinkInput: { flex: 1, fontSize: 15, color: t.text, paddingVertical: 8 },
+    qcLinkGo: { width: 38, height: 38, borderRadius: 12, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' },
+    qcManual: { alignSelf: 'center', marginTop: 18, paddingVertical: 8 },
+    qcManualText: { color: t.sub, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
+    qcCenter: { alignItems: 'center', justifyContent: 'center' },
+    qcScanCard: { width: 230, height: 300, borderRadius: 22, overflow: 'hidden', backgroundColor: t.surface },
+    qcScanImg: { width: '100%', height: '100%' },
+    qcScanTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' },
+    qcScanLine: { position: 'absolute', left: 0, right: 0, height: 3, backgroundColor: t.accent, shadowColor: t.accent, shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+    qcScanBadge: { position: 'absolute', left: 12, top: 12, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+    qcScanBadgeText: { color: '#fff', fontSize: 11.5, fontWeight: '800' },
+    qcLoadCard: { width: 230, height: 150, borderRadius: 22, backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center', gap: 12 },
+    qcLoadText: { color: t.text, fontSize: 15, fontWeight: '800', fontFamily: FONT.bold },
+    qcCard: { width: 230, borderRadius: 24, backgroundColor: t.surface, overflow: 'hidden', shadowOpacity: 0.35, shadowRadius: 20, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
+    qcShine: { position: 'absolute', top: -40, bottom: -40, width: 70, backgroundColor: 'rgba(255,255,255,0.8)' },
+    qcCardChip: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
+    qcCardChipText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+    qcCardPanel: { padding: 14 },
+    qcCardTitle: { fontSize: 15, lineHeight: 21, color: t.text, fontFamily: FONT.bold },
+    qcConfirm: { marginTop: 22, alignItems: 'center', width: 260 },
+    qcConfirmText: { fontSize: 15, color: '#fff', fontWeight: '800', marginBottom: 12 },
+    qcConfirmBtns: { flexDirection: 'row', gap: 10, alignItems: 'stretch', alignSelf: 'stretch' },
+    qcEditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)' },
+    qcEditText: { color: t.accent, fontSize: 14, fontWeight: '800' },
+    qcSaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 13 },
+    qcSaveText: { color: '#fff', fontSize: 15, fontWeight: '900', fontFamily: FONT.bold },
 
     // 保存シート
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
