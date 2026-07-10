@@ -50,8 +50,12 @@ export const CATEGORIES = [
   { key: 'know', label: '知りたい', icon: 'book', color: '#D99A1F', soft: '#FDECC8', darkSoft: 'rgba(217,154,31,0.16)', tint: '#D99A1F', glow: 'rgba(217,154,31,0.35)' },
 ];
 
+// 未設定（保存時のデフォルト。あとで編集で選べる）
+export const NEUTRAL_CATEGORY = { key: 'none', label: '未設定', icon: 'ellipse-outline', color: '#9A938A', soft: '#EFE9DF', darkSoft: 'rgba(255,255,255,0.06)', tint: '#9A938A', glow: 'rgba(154,147,138,0.3)' };
+
 export function getCategory(key) {
-  return CATEGORIES.find((c) => c.key === key) || CATEGORIES[0];
+  if (!key || key === 'none') return NEUTRAL_CATEGORY;
+  return CATEGORIES.find((c) => c.key === key) || NEUTRAL_CATEGORY;
 }
 
 // カテゴリのチップ/プレースホルダー背景：ライトはパステル、ダークはカテゴリ色の薄いオーバーレイ。

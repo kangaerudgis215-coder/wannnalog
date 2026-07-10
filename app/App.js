@@ -62,6 +62,8 @@ const VISION_TITLE_KEY = 'wannalog_vision_title';
 const GARDEN_KEY = 'wannalog_garden_v1';
 // 箱庭は「将来の設計」としてステイ。今はSNS認知づくりに集中するため非表示（true で復活）。
 const GARDEN_ENABLED = false;
+// 共有／プレゼント機能は一旦保留（true で復活）。スクショ保存の強化に集中する。
+const SHARE_ENABLED = false;
 
 // ビジョンボードは「したい」とは別データ。テンプレの枠に写真を嵌める。
 // 「3枚テンプレ」を初期表示にして、足りなければ「枠を追加」で増やせる。
@@ -1137,7 +1139,8 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
       </Pressable>
       )}
 
-      {/* ギフトページ（ほしいものリストの共有） */}
+      {/* ギフトページ（共有機能・一旦保留：SHARE_ENABLED で復活） */}
+      {SHARE_ENABLED && (
       <Pressable style={s.giftCard} onPress={onOpenGift}>
         <View style={s.giftIcon}><Ionicons name="gift" size={22} color="#fff" /></View>
         <View style={{ flex: 1 }}>
@@ -1146,6 +1149,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
         </View>
         <Ionicons name="chevron-forward" size={18} color={t.sub} />
       </Pressable>
+      )}
 
       {/* 達成サマリー＋グラフ */}
       <View style={s.statCard}>
@@ -1362,7 +1366,7 @@ function ReminderEditor({ value, onChange }) {
 function SaveModal({ visible, onClose, onSave }) {
   const t = useTheme(); const s = useStyles();
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('eat');
+  const [category, setCategory] = useState(null); // 既定は未設定（あとで編集で選べる）
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
   const [coords, setCoords] = useState(null); // 写真から読み取った撮影場所
@@ -1412,7 +1416,7 @@ function SaveModal({ visible, onClose, onSave }) {
     if (guess) { setCategory(guess); got = true; }
     if (!got) Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を選ぶ」から手動で追加できます。');
   }
-  function resetForm() { setTitle(''); setCategory('eat'); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory(null); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
     const finalImage = image || (sns ? sns.thumbnail : null);
@@ -1483,7 +1487,7 @@ function SaveModal({ visible, onClose, onSave }) {
             <Text style={s.label}>カテゴリ</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.rowScroll}>
               {CATEGORIES.map((c) => (
-                <Pressable key={c.key} onPress={() => setCategory(c.key)} style={optChip(category === c.key, c.color)}>
+                <Pressable key={c.key} onPress={() => setCategory(category === c.key ? null : c.key)} style={optChip(category === c.key, c.color)}>
                   <VIcon set={c.iconSet} name={c.icon} size={13} color={category === c.key ? '#fff' : t.text} />
                   <Text style={[s.catChipText, category === c.key && { color: '#fff' }]}>{c.label}</Text>
                 </Pressable>
@@ -1950,14 +1954,18 @@ function DetailScreen({ item, browser, onBack, onDone, onUpdate, onReminder, onO
               </>
             )}
 
-            <View style={s.giftToggleRow}>
-              <View style={s.settingLeft}>
-                <Ionicons name="gift-outline" size={18} color={t.accent} />
-                <Text style={s.settingText}>ギフトページに公開</Text>
-              </View>
-              <Switch value={!!item.isPublic} onValueChange={(v) => onUpdate({ isPublic: v })} trackColor={{ true: t.accent }} />
-            </View>
-            <Text style={s.giftToggleHint}>オンにすると「マイページ → ギフトページ」に並び、友だちに共有できます（誕生日・記念日に便利）。</Text>
+            {SHARE_ENABLED && (
+              <>
+                <View style={s.giftToggleRow}>
+                  <View style={s.settingLeft}>
+                    <Ionicons name="gift-outline" size={18} color={t.accent} />
+                    <Text style={s.settingText}>ギフトページに公開</Text>
+                  </View>
+                  <Switch value={!!item.isPublic} onValueChange={(v) => onUpdate({ isPublic: v })} trackColor={{ true: t.accent }} />
+                </View>
+                <Text style={s.giftToggleHint}>オンにすると「マイページ → ギフトページ」に並び、友だちに共有できます（誕生日・記念日に便利）。</Text>
+              </>
+            )}
           </>
         ) : (
           <>
