@@ -26,6 +26,7 @@ import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
+import { needsPhoto, countNeedsPhoto } from './photo';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -645,9 +646,11 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
   const t = useTheme(); const s = useStyles();
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
+  const noPhotoCount = countNeedsPhoto(items);
   let visible;
   if (filter === 'done') visible = items.filter((it) => it.doneAt);
   else if (filter === 'serious') visible = items.filter((it) => !it.doneAt && (it.heat || 2) === 3).slice().sort(byHeatThenNew);
+  else if (filter === 'nophoto') visible = items.filter(needsPhoto).slice().sort(byHeatThenNew);
   else if (filter.startsWith('sns:')) { const p = filter.slice(4); visible = items.filter((it) => !it.doneAt && it.sourcePlatform === p).slice().sort(byHeatThenNew); }
   else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
   else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
@@ -679,13 +682,16 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
         {snsPresent.map((p) => (
           <Chip key={p} icon={snsMeta(p).icon} label={snsMeta(p).label} active={filter === 'sns:' + p} onPress={() => setFilter('sns:' + p)} />
         ))}
+        {noPhotoCount > 0 && (
+          <Chip icon="image-outline" label={`写真なし ${noPhotoCount}`} active={filter === 'nophoto'} onPress={() => setFilter('nophoto')} />
+        )}
         <Chip icon="trophy" label={`叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
       </ScrollView>
 
       {upcoming.length > 0 && <RemindCarousel items={upcoming} onOpen={onOpen} />}
 
       {visible.length === 0 ? (
-        <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
+        <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : filter === 'nophoto' ? '写真が無いものはありません。\nどれも仕上がっています。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
       ) : comfy ? (
         <View style={{ paddingHorizontal: 20, gap: 16, paddingTop: 2 }}>
           {visible.map((it, i) => (
