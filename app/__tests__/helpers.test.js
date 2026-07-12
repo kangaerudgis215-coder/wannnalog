@@ -1,6 +1,6 @@
 // 純粋ロジックのテスト（links.js / theme.js）
 import { actionLinks, dueLabel } from '../links';
-import { getCategory, reminderBody, CATEGORIES } from '../theme';
+import { getCategory, reminderBody, NEUTRAL_CATEGORY } from '../theme';
 
 describe('actionLinks', () => {
   test('食べたい は 地図 と 食べログ(Google) を返す', () => {
@@ -56,8 +56,12 @@ describe('theme', () => {
     expect(getCategory('eat').label).toBe('食べたい');
     expect(getCategory('go').label).toBe('行きたい');
   });
-  test('未知キーは既定（先頭カテゴリ）を返す', () => {
-    expect(getCategory('???')).toBe(CATEGORIES[0]);
+  test('未知キーは既定（未設定カテゴリ）を返す', () => {
+    expect(getCategory('???')).toBe(NEUTRAL_CATEGORY);
+  });
+  test('未指定(falsy)や"none"も未設定カテゴリを返す', () => {
+    expect(getCategory(undefined)).toBe(NEUTRAL_CATEGORY);
+    expect(getCategory('none')).toBe(NEUTRAL_CATEGORY);
   });
   test('reminderBody はカテゴリ別の文言を返し、既定もある', () => {
     expect(typeof reminderBody('eat')).toBe('string');
