@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl, ogpFillPatch } from '../ogp';
 
 describe('isMapsUrl', () => {
   test('Googleマップのリンクを判定', () => {
@@ -122,5 +122,40 @@ describe('cleanTitle', () => {
   test('汎用かつ手掛かり無しは fallback、それも無ければ null', () => {
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '手入力')).toBe('手入力');
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '')).toBeNull();
+  });
+});
+
+describe('ogpFillPatch', () => {
+  test('画像・タイトル(無題)・カテゴリが空なら埋める', () => {
+    const item = { title: '（無題）', imageUri: null, category: null };
+    const ogp = { title: 'AirPods Pro 第2世代', image: 'https://img/x.jpg' };
+    const patch = ogpFillPatch(item, ogp, 'https://www.amazon.co.jp/dp/x');
+    expect(patch).toEqual({
+      sourceUrl: 'https://www.amazon.co.jp/dp/x',
+      imageUri: 'https://img/x.jpg',
+      title: 'AirPods Pro 第2世代',
+      category: 'want',
+    });
+  });
+
+  test('すでに写真・タイトル・カテゴリがあれば上書きしない', () => {
+    const item = { title: '鎌倉のカフェ', imageUri: 'file:///existing.jpg', category: 'eat' };
+    const ogp = { title: '違うタイトル', image: 'https://img/other.jpg' };
+    const patch = ogpFillPatch(item, ogp, 'https://example.com/a');
+    expect(patch).toEqual({ sourceUrl: 'https://example.com/a' });
+  });
+
+  test('Googleマップは og:image があっても画像を使わない', () => {
+    const item = { title: '（無題）', imageUri: null, category: null };
+    const ogp = { title: 'スターバックス 鎌倉店 - Google マップ', image: 'https://maps/pin.png' };
+    const patch = ogpFillPatch(item, ogp, 'https://maps.google.com/maps/place/x');
+    expect(patch.imageUri).toBeUndefined();
+    expect(patch.title).toBe('スターバックス 鎌倉店');
+  });
+
+  test('OGPが取れなくても sourceUrl だけは反映する', () => {
+    const item = { title: '手入力タイトル', imageUri: null, category: 'want' };
+    const patch = ogpFillPatch(item, { title: null, image: null }, 'https://example.com/a');
+    expect(patch).toEqual({ sourceUrl: 'https://example.com/a' });
   });
 });

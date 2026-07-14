@@ -102,6 +102,24 @@ export function extractPlaceFromUrl(url) {
   }
 }
 
+// 保存済みアイテムに「あとからリンクを読み込む」結果を反映するパッチを作る（純粋関数）
+// 方針：既にある情報（画像・カテゴリ）は上書きしない。タイトルは空欄/「（無題）」の時だけ補う。
+export function ogpFillPatch(item, ogp, url) {
+  const patch = { sourceUrl: url };
+  const maps = isMapsUrl(url);
+  if (ogp && ogp.image && !maps && !item.imageUri) patch.imageUri = ogp.image;
+  const currentTitle = (item.title || '').trim();
+  if (!currentTitle || currentTitle === '（無題）') {
+    const better = cleanTitle(ogp && ogp.title, url, '');
+    if (better) patch.title = better;
+  }
+  if (!item.category) {
+    const guess = guessCategoryFromUrl(url);
+    if (guess) patch.category = guess;
+  }
+  return patch;
+}
+
 // 取得タイトルを「店名/品名」に整える（純粋関数）
 // 優先：良い非汎用タイトル > URL由来の店名 > fallback（入力）
 export function cleanTitle(rawTitle, url, fallback) {
