@@ -24,7 +24,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
-import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl, ogpFillPatch } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1999,6 +1999,8 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
   const [memo, setMemo] = useState(item.memo || '');
   const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(!!startInEdit);
+  const [linkInput, setLinkInput] = useState(item.sourceUrl || '');
+  const [linkLoading, setLinkLoading] = useState(false);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
   const openLink = onOpenLink;
@@ -2026,6 +2028,20 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
     else { Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
     onUpdate(patch);
   }
+  // リンクから画像・タイトルを後付けで読み込む（熱いうちは仮保存→あとで仕上げる導線）
+  async function loadFromLinkDetail() {
+    const url = linkInput.trim();
+    if (!isUrl(url)) { Alert.alert('リンクを入力してください', 'http(s):// で始まるURLを貼ってください。'); return; }
+    setLinkLoading(true);
+    const ogp = await fetchOgp(url);
+    setLinkLoading(false);
+    const patch = ogpFillPatch(item, ogp, url);
+    onUpdate(patch);
+    if (patch.title) setTitle(patch.title);
+    if (!patch.imageUri && !patch.title && !patch.category) {
+      Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を変更」から手動で追加できます。');
+    }
+  }
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
 
   return (
@@ -2049,6 +2065,20 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
             <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
             <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
             {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
+          </View>
+        )}
+
+        {editMode && (
+          <View style={{ marginTop: 16 }}>
+            <Text style={s.sectionLabel}>リンクから読み込む（任意）</Text>
+            <TextInput style={s.input} placeholder="http(s):// のリンクを貼る" placeholderTextColor={t.sub}
+              value={linkInput} onChangeText={setLinkInput} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+            {isUrl(linkInput.trim()) && (
+              <Pressable style={[s.linkLoadBtn, linkLoading && { opacity: 0.6 }]} onPress={loadFromLinkDetail} disabled={linkLoading}>
+                {linkLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="download-outline" size={16} color="#fff" />}
+                <Text style={s.linkLoadText}>{linkLoading ? '読み込み中…' : '画像・タイトルを読み込む'}</Text>
+              </Pressable>
+            )}
           </View>
         )}
 
