@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform,
+  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Linking, Modal, Platform,
   Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
-import { GestureHandlerRootView, PanGestureHandler, State, ScrollView as GHScrollView, Swipeable } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable } from 'react-native-gesture-handler';
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, dueLabel, browserUrl } from './links';
@@ -424,7 +424,6 @@ function FadeInView({ index = 0, children }) {
   useEffect(() => { Animated.timing(a, { toValue: 1, duration: 340, delay: Math.min(index, 8) * 45, useNativeDriver: true }).start(); }, []);
   return <Animated.View style={{ opacity: a, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] }}>{children}</Animated.View>;
 }
-const TILE_HEIGHTS = [160, 215, 175, 235, 165, 205];
 function Masonry({ items, renderTile }) {
   const s = useStyles();
   const cols = [[], []];
@@ -2177,13 +2176,9 @@ function makeStyles(t) {
     safe: { flex: 1, backgroundColor: t.bg },
     topbar: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
     brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.surface, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-    sortBtnText: { color: t.accent, fontSize: 13, fontWeight: '800' },
     sortRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 16, paddingHorizontal: 12 },
-    sortRowActive: { backgroundColor: t.surface2, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
     sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
     sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },
-    sortHandle: { paddingHorizontal: 6, paddingVertical: 10 },
     sortMoveCol: { justifyContent: 'center', gap: 2 },
     sortMoveBtn: { width: 44, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: t.surface2 },
     brand: { fontSize: 24, fontWeight: '700', color: t.text, letterSpacing: 0.3, fontFamily: FONT.bold },
@@ -2200,14 +2195,10 @@ function makeStyles(t) {
     empty: { textAlign: 'center', color: t.sub, marginTop: 44, paddingHorizontal: 40, lineHeight: 22 },
 
     visionTitle: { fontSize: 32, fontWeight: '400', color: t.text, letterSpacing: 4, marginTop: 6, padding: 0, fontFamily: FONT.mincho },
-    visionEmpty: { borderRadius: 20, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed', backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center', gap: 6 },
     visionEmptyText: { color: t.sub, fontSize: 12, fontWeight: '600' },
     visionAdd: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 6, marginTop: 18, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, backgroundColor: t.surface },
     visionAddText: { color: t.accent, fontSize: 14, fontWeight: '800' },
     visionLabelWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: 'rgba(0,0,0,0.22)' },
-    visionSlotLabel: { color: '#fff', fontSize: 20, fontWeight: '400', letterSpacing: 2, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 8, fontFamily: FONT.mincho },
-    visionStatusPill: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
-    visionStatusText: { color: '#fff', fontSize: 10.5, fontWeight: '800' },
     // ビジョンボード（ピン留めされた夢）
     heroWrap: { paddingHorizontal: 24, marginTop: 6 },
     heroCard: { borderRadius: 22, overflow: 'hidden', transform: [{ rotate: '-1deg' }], backgroundColor: t.surface, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
@@ -2269,23 +2260,6 @@ function makeStyles(t) {
     emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingHorizontal: 40 },
     emptyBlob1: { position: 'absolute', top: 44, width: 120, height: 120, borderRadius: 60, backgroundColor: t.accent, opacity: 0.10 },
     emptyBlob2: { position: 'absolute', top: 92, left: '54%', width: 66, height: 66, borderRadius: 33, backgroundColor: t.gold, opacity: 0.12 },
-
-    // 写真前面タイル
-    tile: { borderRadius: 20, overflow: 'hidden', justifyContent: 'flex-end', backgroundColor: t.surface },
-    tileImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-    tileShade: { ...StyleSheet.absoluteFillObject, top: '48%', backgroundColor: 'rgba(0,0,0,0.5)' },
-    tileTag: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
-    tileTagText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-    tileDone: { position: 'absolute', right: 10, top: 10 },
-    tileSns: { position: 'absolute', right: 10, top: 10, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
-    tileBottom: { padding: 12 },
-    tileTitle: { color: '#fff', fontSize: 13.5, fontWeight: '800', lineHeight: 17, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 6 },
-    tileMetaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
-    tileMetaLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-    tileWith: { width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-    tileDueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    tileDue: { color: '#fff', fontSize: 11.5, fontWeight: '700' },
-    tileFlames: { flexDirection: 'row', gap: 1 },
 
     // 通知
     notifyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 16, padding: 14 },
@@ -2454,7 +2428,6 @@ function makeStyles(t) {
     photoPickInner: { alignItems: 'center', gap: 6 },
     photoPickText: { color: t.sub, fontSize: 13, fontWeight: '600' },
     photoPreview: { width: '100%', height: '100%' },
-    removeText: { textAlign: 'center', color: '#E5484D', fontSize: 12, fontWeight: '700', marginTop: 8 },
     photoSubRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 10 },
     photoSubBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     photoSubText: { color: t.accent, fontSize: 13, fontWeight: '700' },
