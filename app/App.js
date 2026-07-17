@@ -1998,6 +1998,8 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
   const [memo, setMemo] = useState(item.memo || '');
   const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(!!startInEdit);
+  const [linkInput, setLinkInput] = useState(item.sourceUrl || '');
+  const [ogpLoading, setOgpLoading] = useState(false);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
   const openLink = onOpenLink;
@@ -2025,6 +2027,20 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
     else { Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
     onUpdate(patch);
   }
+  // リンクから画像を読み込み、まだ写真が無ければ紐付ける（Amazon/Instagram等は後から仕上げる想定）
+  async function loadFromLink() {
+    const url = linkInput.trim();
+    if (!isUrl(url)) { Alert.alert('リンクを入力してください', 'http(s):// で始まるURLを貼ってください。'); return; }
+    setOgpLoading(true);
+    const ogp = await fetchOgp(url);
+    setOgpLoading(false);
+    const maps = isMapsUrl(url); // マップの og:image は汎用ピンなので画像は使わない
+    const patch = { sourceUrl: url };
+    let gotImage = false;
+    if (ogp.image && !maps && !item.imageUri) { patch.imageUri = ogp.image; gotImage = true; }
+    onUpdate(patch);
+    if (!item.imageUri && !gotImage) Alert.alert('画像は自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。「写真を変更」から手動で追加できます。');
+  }
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
 
   return (
@@ -2049,6 +2065,19 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
             <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
             {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
           </View>
+        )}
+
+        {editMode && (
+          <>
+            <TextInput style={[s.input, { marginTop: 8 }]} placeholder="リンクを貼る（Amazon・地図・レシピなど／任意）" placeholderTextColor={t.sub}
+              value={linkInput} onChangeText={setLinkInput} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+            {isUrl(linkInput.trim()) && (
+              <Pressable style={[s.linkLoadBtn, ogpLoading && { opacity: 0.6 }]} onPress={loadFromLink} disabled={ogpLoading}>
+                {ogpLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="download-outline" size={16} color="#fff" />}
+                <Text style={s.linkLoadText}>{ogpLoading ? '読み込み中…' : '写真を紐付ける（リンクから読み込む）'}</Text>
+              </Pressable>
+            )}
+          </>
         )}
 
         {editMode
