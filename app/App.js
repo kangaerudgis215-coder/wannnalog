@@ -25,6 +25,7 @@ import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { filterByQuery } from './search';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -642,6 +643,7 @@ function homeBlocks(visible) {
 }
 function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
+  const [query, setQuery] = useState('');
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
   let visible;
@@ -650,9 +652,10 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
   else if (filter.startsWith('sns:')) { const p = filter.slice(4); visible = items.filter((it) => !it.doneAt && it.sourcePlatform === p).slice().sort(byHeatThenNew); }
   else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
   else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
-  const canSort = filter === 'all' && visible.length > 1;
-  // 「そろそろ思い出す」：締切が近い（今日/今週）未達成を先出し（0件なら非表示）
-  const upcoming = filter === 'all' ? items.filter((it) => !it.doneAt && (it.dueTag === 'today' || it.dueTag === 'thisWeek')).slice(0, 4) : [];
+  const canSort = filter === 'all' && visible.length > 1 && !query.trim();
+  visible = filterByQuery(visible, query);
+  // 「そろそろ思い出す」：締切が近い（今日/今週）未達成を先出し（0件なら非表示）。検索中は出さない。
+  const upcoming = (filter === 'all' && !query.trim()) ? items.filter((it) => !it.doneAt && (it.dueTag === 'today' || it.dueTag === 'thisWeek')).slice(0, 4) : [];
   const comfy = density === 'comfy' && filter === 'all';
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
@@ -669,6 +672,16 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
           <Text style={s.statCapsuleText}>叶えた <Text style={s.statCapsuleNum}>{doneCount}</Text>　・　のこり <Text style={s.statCapsuleNum}>{activeCount}</Text></Text>
         </View>
       </View>
+      <View style={s.searchBar}>
+        <Ionicons name="search" size={17} color={t.sub} />
+        <TextInput style={s.searchInput} placeholder="キーワードで検索" placeholderTextColor={t.sub}
+          value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
+        {query.length > 0 && (
+          <Pressable onPress={() => setQuery('')} accessibilityLabel="検索をクリア">
+            <Ionicons name="close-circle" size={17} color={t.sub} />
+          </Pressable>
+        )}
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
         <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
         <Chip icon="flame" label="本気" active={filter === 'serious'} onPress={() => setFilter('serious')} />
@@ -684,7 +697,7 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
       {upcoming.length > 0 && <RemindCarousel items={upcoming} onOpen={onOpen} />}
 
       {visible.length === 0 ? (
-        <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
+        <EmptyState text={query.trim() ? '一致するものが見つかりませんでした。' : (filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。')} />
       ) : comfy ? (
         <View style={{ paddingHorizontal: 20, gap: 16, paddingTop: 2 }}>
           {visible.map((it, i) => (
@@ -2184,6 +2197,9 @@ function makeStyles(t) {
     brand: { fontSize: 24, fontWeight: '700', color: t.text, letterSpacing: 0.3, fontFamily: FONT.bold },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
+
+    searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: t.surface, borderRadius: 14, paddingHorizontal: 14, height: 44, marginHorizontal: 20, marginBottom: 12 },
+    searchInput: { flex: 1, fontSize: 15, color: t.text, height: '100%' },
 
     chips: { gap: 8, paddingHorizontal: 20, paddingBottom: 16 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
