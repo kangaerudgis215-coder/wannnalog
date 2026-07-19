@@ -102,6 +102,22 @@ export function extractPlaceFromUrl(url) {
   }
 }
 
+// OGP取得結果から「今の内容に何を反映するか」を決める（純粋関数）
+// 空欄（未入力）の項目だけを埋める＝すでに自分で入れた内容は上書きしない
+export function buildOgpImportPatch({ ogp, url, current }) {
+  const patch = {};
+  const maps = isMapsUrl(url);
+  if (ogp && ogp.image && !maps && !(current && current.imageUri)) patch.imageUri = ogp.image;
+  const better = cleanTitle(ogp && ogp.title, url, '');
+  if (better && !((current && current.title) || '').trim()) patch.title = better;
+  const currentCategory = current && current.category;
+  if (!currentCategory || currentCategory === 'none') {
+    const guess = guessCategoryFromUrl(url);
+    if (guess) patch.category = guess;
+  }
+  return patch;
+}
+
 // 取得タイトルを「店名/品名」に整える（純粋関数）
 // 優先：良い非汎用タイトル > URL由来の店名 > fallback（入力）
 export function cleanTitle(rawTitle, url, fallback) {

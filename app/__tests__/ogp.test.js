@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl, buildOgpImportPatch } from '../ogp';
 
 describe('isMapsUrl', () => {
   test('Googleマップのリンクを判定', () => {
@@ -122,5 +122,43 @@ describe('cleanTitle', () => {
   test('汎用かつ手掛かり無しは fallback、それも無ければ null', () => {
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '手入力')).toBe('手入力');
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '')).toBeNull();
+  });
+});
+
+describe('buildOgpImportPatch', () => {
+  const ogp = { title: 'すてきなカフェ', image: 'https://img/x.jpg', description: null };
+
+  test('空欄なら画像・タイトル・カテゴリを反映', () => {
+    const patch = buildOgpImportPatch({ ogp, url: 'https://tabelog.com/x', current: { title: '', imageUri: null, category: null } });
+    expect(patch).toEqual({ imageUri: 'https://img/x.jpg', title: 'すてきなカフェ', category: 'eat' });
+  });
+
+  test('すでに入力済みの項目は上書きしない', () => {
+    const patch = buildOgpImportPatch({
+      ogp,
+      url: 'https://tabelog.com/x',
+      current: { title: '手入力タイトル', imageUri: 'file://own.jpg', category: 'want' },
+    });
+    expect(patch).toEqual({});
+  });
+
+  test('カテゴリが未設定(none)なら推測して埋める', () => {
+    const patch = buildOgpImportPatch({ ogp, url: 'https://cookpad.com/recipe/1', current: { title: '入力済み', imageUri: 'x', category: 'none' } });
+    expect(patch).toEqual({ category: 'cook' });
+  });
+
+  test('Googleマップは画像を反映しない（汎用ピンのため）', () => {
+    const patch = buildOgpImportPatch({
+      ogp: { title: 'Google マップ', image: 'https://maps/pin.png' },
+      url: 'https://www.google.com/maps/place/一蘭+渋谷/@x',
+      current: { title: '', imageUri: null, category: null },
+    });
+    expect(patch.imageUri).toBeUndefined();
+    expect(patch.title).toBe('一蘭 渋谷');
+    expect(patch.category).toBe('go');
+  });
+
+  test('OGPが何も取れなければ空パッチ', () => {
+    expect(buildOgpImportPatch({ ogp: { title: null, image: null }, url: 'https://example.com', current: { title: '', imageUri: null, category: null } })).toEqual({});
   });
 });

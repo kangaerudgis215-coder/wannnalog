@@ -24,7 +24,7 @@ import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
-import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl, buildOgpImportPatch } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1998,8 +1998,27 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
   const [memo, setMemo] = useState(item.memo || '');
   const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(!!startInEdit);
+  const [linkInput, setLinkInput] = useState(item.sourceUrl || '');
+  const [linkLoading, setLinkLoading] = useState(false);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
+  // リンク先のOGP（タイトル・画像）を読み取り、空欄なら自動で埋める
+  async function loadFromLink() {
+    const url = linkInput.trim();
+    if (!isUrl(url)) { Alert.alert('リンクを入力してください', 'http(s):// で始まるURLを貼ってください。'); return; }
+    setLinkLoading(true);
+    const ogp = await fetchOgp(url);
+    setLinkLoading(false);
+    const patch = buildOgpImportPatch({ ogp, url, current: { title, imageUri: item.imageUri, category: item.category } });
+    const sns = parseSnsLink(url);
+    onUpdate({ ...patch, sourceUrl: url, sourcePlatform: sns ? sns.platform : item.sourcePlatform || null });
+    if (patch.title) setTitle(patch.title);
+    if (Object.keys(patch).length === 0) {
+      Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります。写真は「写真を変更」から手動で追加できます。');
+    } else {
+      Alert.alert('読み込みました', 'リンク先の情報を反映しました。');
+    }
+  }
   const openLink = onOpenLink;
   function confirmDelete() {
     Alert.alert('削除しますか？', 'この「したい」を削除します。元に戻せません。', [
@@ -2049,6 +2068,20 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
             <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
             {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
           </View>
+        )}
+
+        {editMode && (
+          <>
+            <Text style={s.sectionLabel}>リンク</Text>
+            <TextInput style={s.input} placeholder="リンクを貼る（任意）" placeholderTextColor={t.sub}
+              value={linkInput} onChangeText={setLinkInput} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+            {isUrl(linkInput.trim()) && (
+              <Pressable style={[s.linkLoadBtn, linkLoading && { opacity: 0.6 }]} onPress={loadFromLink} disabled={linkLoading}>
+                {linkLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="download-outline" size={16} color="#fff" />}
+                <Text style={s.linkLoadText}>{linkLoading ? '読み込み中…' : 'リンクから画像・タイトルを読み込む'}</Text>
+              </Pressable>
+            )}
+          </>
         )}
 
         {editMode
