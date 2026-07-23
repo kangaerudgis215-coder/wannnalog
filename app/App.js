@@ -25,6 +25,7 @@ import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { guessCategoryFromText } from './textParse';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1528,6 +1529,7 @@ function SaveModal({ visible, onClose, onSave }) {
   const t = useTheme(); const s = useStyles();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(null); // 既定は未設定（あとで編集で選べる）
+  const [categoryTouched, setCategoryTouched] = useState(false); // カテゴリを自分で選んだら以後は自動推測しない
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
   const [coords, setCoords] = useState(null); // 写真から読み取った撮影場所
@@ -1542,6 +1544,12 @@ function SaveModal({ visible, onClose, onSave }) {
 
   // 熱量を変えると「思い出す（通知）」の既定が出し分けされる
   function chooseHeat(h) { setHeat(h); setReminder({ remind: defaultRemindForHeat(h) }); }
+  // タイトルから自動でカテゴリを推測（自分で選んだ後は上書きしない）
+  function changeTitle(v) {
+    setTitle(v);
+    if (!categoryTouched) setCategory(guessCategoryFromText(v));
+  }
+  function chooseCategory(key) { setCategory(category === key ? null : key); setCategoryTouched(true); }
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1574,10 +1582,10 @@ function SaveModal({ visible, onClose, onSave }) {
     const better = cleanTitle(ogp.title, url, '');
     if (better && !title.trim()) { setTitle(better); got = true; }
     const guess = guessCategoryFromUrl(url); // ドメインからカテゴリを推測
-    if (guess) { setCategory(guess); got = true; }
+    if (guess) { setCategory(guess); setCategoryTouched(true); got = true; }
     if (!got) Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を選ぶ」から手動で追加できます。');
   }
-  function resetForm() { setTitle(''); setCategory(null); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory(null); setCategoryTouched(false); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
     const finalImage = image || (sns ? sns.thumbnail : null);
@@ -1606,7 +1614,7 @@ function SaveModal({ visible, onClose, onSave }) {
             </View>
 
             <TextInput style={s.input} placeholder="例：鎌倉の海が見えるカフェ" placeholderTextColor={t.sub}
-              value={title} onChangeText={setTitle} autoFocus />
+              value={title} onChangeText={changeTitle} autoFocus />
 
             <TextInput style={[s.input, { marginTop: 12 }]} placeholder="リンクを貼る（X・Instagram・YouTube など／任意）"
               placeholderTextColor={t.sub} value={link} onChangeText={setLink}
@@ -1648,7 +1656,7 @@ function SaveModal({ visible, onClose, onSave }) {
             <Text style={s.label}>カテゴリ</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.rowScroll}>
               {CATEGORIES.map((c) => (
-                <Pressable key={c.key} onPress={() => setCategory(category === c.key ? null : c.key)} style={optChip(category === c.key, c.color)}>
+                <Pressable key={c.key} onPress={() => chooseCategory(c.key)} style={optChip(category === c.key, c.color)}>
                   <VIcon set={c.iconSet} name={c.icon} size={13} color={category === c.key ? '#fff' : t.text} />
                   <Text style={[s.catChipText, category === c.key && { color: '#fff' }]}>{c.label}</Text>
                 </Pressable>
