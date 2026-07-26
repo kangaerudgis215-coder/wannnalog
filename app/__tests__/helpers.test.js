@@ -56,8 +56,9 @@ describe('theme', () => {
     expect(getCategory('eat').label).toBe('食べたい');
     expect(getCategory('go').label).toBe('行きたい');
   });
-  test('未知キーは既定（先頭カテゴリ）を返す', () => {
-    expect(getCategory('???')).toBe(CATEGORIES[0]);
+  test('未知キーは既定（未設定カテゴリ）を返す', () => {
+    expect(getCategory('???').key).toBe('none');
+    expect(getCategory(undefined).key).toBe('none');
   });
   test('reminderBody はカテゴリ別の文言を返し、既定もある', () => {
     expect(typeof reminderBody('eat')).toBe('string');
