@@ -75,6 +75,13 @@ export function isMapsUrl(url) {
   return /google\.[^/]+\/maps|maps\.google\.|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(url || '');
 }
 
+// OGP結果から「使ってよい画像」を選ぶ（地図の汎用ピンは除外）。純粋関数。
+export function pickOgpImage(ogp, url) {
+  if (!ogp || !ogp.image) return null;
+  if (isMapsUrl(url)) return null;
+  return ogp.image;
+}
+
 // ドメインから「したい」カテゴリを推測（純粋関数・保存時の初期選択に使う）
 export function guessCategoryFromUrl(url) {
   const u = (url || '').toLowerCase();

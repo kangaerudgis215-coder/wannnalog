@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl, pickOgpImage } from '../ogp';
 
 describe('isMapsUrl', () => {
   test('Googleマップのリンクを判定', () => {
@@ -23,6 +23,19 @@ describe('guessCategoryFromUrl', () => {
   });
   test('不明は null', () => {
     expect(guessCategoryFromUrl('https://example.com')).toBe(null);
+  });
+});
+
+describe('pickOgpImage', () => {
+  test('通常のURLは og:image を採用', () => {
+    expect(pickOgpImage({ image: 'https://img/x.jpg' }, 'https://example.com/a')).toBe('https://img/x.jpg');
+  });
+  test('Googleマップは汎用ピンなので採用しない', () => {
+    expect(pickOgpImage({ image: 'https://img/pin.png' }, 'https://maps.google.com/?q=x')).toBeNull();
+  });
+  test('画像が無ければ null', () => {
+    expect(pickOgpImage({ image: null }, 'https://example.com')).toBeNull();
+    expect(pickOgpImage(null, 'https://example.com')).toBeNull();
   });
 });
 
