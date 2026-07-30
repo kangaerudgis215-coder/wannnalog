@@ -21,6 +21,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith,
 import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary, nextRemindAt } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
+import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
@@ -1019,8 +1020,6 @@ function NotifyTab({ items, onOpen, onSnooze, onStop }) {
 }
 
 /* ---------- マイページ ---------- */
-const DAY_MS = 86400000;
-function startOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
 // カテゴリ別の達成バー：表示時に白いハイライトが一度すっと流れる（達成演出と世界観をつなぐ）
 function CatStatBar({ c }) {
   const s = useStyles();
@@ -1050,7 +1049,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
   const plantStage = growthProgress((garden && garden.points) || 0);
   const total = items.length;
-  const rate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+  const rate = achievementRate(doneCount, total);
   const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
   const casualDone = done.filter((it) => (it.heat || 2) === 1).length;
   // カテゴリ別の達成（そのカテゴリの中で叶えた割合）
@@ -1060,11 +1059,9 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
     return { ...c, total: catItems.length, done: catDone, rate: catItems.length ? catDone / catItems.length : 0 };
   }).filter((c) => c.total > 0);
   // 直近7日の達成数バー
-  const today = startOfDay(Date.now());
-  const week = [...Array(7)].map((_, i) => today - (6 - i) * DAY_MS);
-  const counts = week.map((d) => done.filter((it) => startOfDay(it.doneAt) === d).length);
+  const { week, counts } = weeklyDoneCounts(done);
   const max = Math.max(1, ...counts);
-  const W = ['日', '月', '火', '水', '木', '金', '土'];
+  const W = WEEKDAY_LABELS;
 
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
