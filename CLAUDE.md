@@ -11,7 +11,7 @@
 - 開発は Claude Code（ウェブ／リモート）で行う。オーナーは **Windows** を使用していて、**Mac はまだ無い**。
 - 技術スタックは **React Native + Expo**。
   - 理由：**Mac 無しの Windows でも開発・配信できる**ため。Swift/SwiftUI は Mac（Xcode）必須なので採用しない。
-- Expo SDK は **56**（App Store の Expo Go が対応する版に合わせる）。**SDK を上げるときは必ず Expo Go の対応状況を先に確認**する（上げすぎると実機で開けなくなる）。
+- Expo SDK は **55**（App Store の Expo Go が対応する版に合わせる）。**SDK を上げるときは必ず Expo Go の対応状況を先に確認**する（上げすぎると実機で開けなくなる）。
 - **Node は必ず LTS（v20 か v22）**を使う。最新の非 LTS（v24 等）は Expo の道具が未対応でエラーになる。
 - 実機確認は **iPhone の Expo Go アプリ**で QR を読む。配信が必要になったら **EAS Build（クラウド・Mac不要）**。Apple Developer 登録（$99/年）は配信時に。
 - → コードの正しさに、いつも以上に注意する。ロジックは小さく分け、テストで検証できる形にする。
