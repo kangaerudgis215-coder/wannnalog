@@ -22,3 +22,12 @@ export function weeklyDoneCounts(done, now = Date.now()) {
   const counts = week.map((d) => done.filter((it) => startOfDay(it.doneAt) === d).length);
   return { week, counts };
 }
+
+// 今日から遡って、達成した日が何日連続で続いているか（連続達成日数）。
+export function currentStreak(items, now = Date.now()) {
+  const days = new Set(items.filter((i) => i.doneAt).map((i) => startOfDay(i.doneAt)));
+  let streak = 0;
+  let d = startOfDay(now);
+  while (days.has(d)) { streak++; d -= DAY_MS; }
+  return streak;
+}

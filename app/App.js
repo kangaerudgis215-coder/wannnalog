@@ -21,7 +21,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith,
 import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary, nextRemindAt } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
-import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
+import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, currentStreak, WEEKDAY_LABELS } from './stats';
 import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
@@ -440,13 +440,6 @@ function Masonry({ items, renderTile }) {
 
 /* ---------- 達成演出（ポラロイド現像＋紙吹雪。本気のときだけ特別演出） ---------- */
 // 連続達成日数（今日から遡って、達成のある日が続く数）。本気達成のメッセージに使う。
-function currentStreak(items) {
-  const days = new Set(items.filter((i) => i.doneAt).map((i) => startOfDay(i.doneAt)));
-  let streak = 0; let d = startOfDay(Date.now());
-  while (days.has(d)) { streak++; d -= DAY_MS; }
-  return streak;
-}
-
 // カテゴリ色＋白の2トーンの紙吹雪（軽量・useNativeDriver）
 function Confetti({ colors, count, originY }) {
   const parts = useRef([...Array(count)].map(() => ({
