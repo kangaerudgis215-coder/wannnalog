@@ -1,6 +1,8 @@
 // 通知タイミングの純粋ロジック（テストしやすい形）。
 // アイテムごとに「いつ思い出すか」を選べるようにする。
 
+import { DAY_MS, startOfDay } from './stats';
+
 export const REMIND_OPTIONS = [
   { key: 'none', label: 'なし' },
   { key: 'tomorrow', label: '明日' },
@@ -87,4 +89,20 @@ export function remindSummary(item) {
   if (r === 'daily') return `毎日 ${pad(item.remindHour ?? 9)}:${pad(item.remindMinute ?? 0)}`;
   if (r === 'weekly') return `毎週${WD[(item.remindWeekday ?? 1) - 1]} ${pad(item.remindHour ?? 9)}:${pad(item.remindMinute ?? 0)}`;
   return remindLabel(r);
+}
+
+// 通知画面のセクション見出し（今日/今週/それ以降）
+export const NOTIFY_SECTIONS = [
+  { key: 'today', label: '今日' },
+  { key: 'week', label: '今週' },
+  { key: 'later', label: 'それ以降' },
+];
+
+// 次に思い出す時刻(ms) → どのセクションに入れるか（純粋関数）
+export function notifyBucket(at, now = Date.now()) {
+  if (at == null) return 'later';
+  const startTomorrow = startOfDay(now) + DAY_MS;
+  if (at < startTomorrow) return 'today';
+  if (at < startOfDay(now) + 7 * DAY_MS) return 'week';
+  return 'later';
 }

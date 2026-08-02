@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable } from 'r
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, dueLabel, browserUrl } from './links';
-import { reminderPlan, remindSummary, nextRemindAt } from './notify';
+import { reminderPlan, remindSummary, nextRemindAt, notifyBucket, NOTIFY_SECTIONS } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
 import { parseGps, coordsMapsUrl } from './geo';
@@ -950,14 +950,6 @@ function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate })
 }
 
 /* ---------- 通知（時系列セクション＋左スワイプでスヌーズ/削除） ---------- */
-function notifyBucket(at, now) {
-  if (at == null) return 'later';
-  const startTomorrow = startOfDay(now) + DAY_MS;
-  if (at < startTomorrow) return 'today';
-  if (at < startOfDay(now) + 7 * DAY_MS) return 'week';
-  return 'later';
-}
-const NOTIFY_SECTIONS = [{ key: 'today', label: '今日' }, { key: 'week', label: '今週' }, { key: 'later', label: 'それ以降' }];
 function NotifyRow({ item, onOpen, onSnooze, onStop }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
