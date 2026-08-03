@@ -21,7 +21,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith,
 import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary, nextRemindAt } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
-import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
+import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, currentStreak } from './stats';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
@@ -436,14 +436,6 @@ function Masonry({ items, renderTile }) {
 }
 
 /* ---------- 達成演出（ポラロイド現像＋紙吹雪。本気のときだけ特別演出） ---------- */
-// 連続達成日数（今日から遡って、達成のある日が続く数）。本気達成のメッセージに使う。
-function currentStreak(items) {
-  const days = new Set(items.filter((i) => i.doneAt).map((i) => startOfDay(i.doneAt)));
-  let streak = 0; let d = startOfDay(Date.now());
-  while (days.has(d)) { streak++; d -= DAY_MS; }
-  return streak;
-}
-
 // 達成時の英語の称賛メッセージ（数パターンからランダムで1つ選ぶ）
 const PRAISE = [
   { big: 'Nailed it!', sub: 'One more dream, done.' },

@@ -1,4 +1,4 @@
-import { DAY_MS, WEEKDAY_LABELS, startOfDay, achievementRate, weeklyDoneCounts } from '../stats';
+import { DAY_MS, WEEKDAY_LABELS, startOfDay, achievementRate, weeklyDoneCounts, currentStreak } from '../stats';
 
 describe('startOfDay', () => {
   test('時刻を00:00:00に揃える', () => {
@@ -45,6 +45,40 @@ describe('weeklyDoneCounts', () => {
     expect(counts[6]).toBe(1); // 今日
     expect(counts[5]).toBe(2); // 昨日
     expect(counts.slice(0, 5).every((c) => c === 0)).toBe(true);
+  });
+});
+
+describe('currentStreak', () => {
+  test('達成が1件もなければ0', () => {
+    const now = new Date(2026, 5, 21, 10, 0, 0).getTime();
+    expect(currentStreak([], now)).toBe(0);
+  });
+
+  test('今日から連続で達成があれば日数を数える', () => {
+    const now = new Date(2026, 5, 21, 10, 0, 0).getTime();
+    const items = [
+      { doneAt: new Date(2026, 5, 21, 9, 0, 0).getTime() }, // 今日
+      { doneAt: new Date(2026, 5, 20, 9, 0, 0).getTime() }, // 昨日
+      { doneAt: new Date(2026, 5, 19, 9, 0, 0).getTime() }, // 一昨日
+    ];
+    expect(currentStreak(items, now)).toBe(3);
+  });
+
+  test('途中で途切れていればそこで止まる', () => {
+    const now = new Date(2026, 5, 21, 10, 0, 0).getTime();
+    const items = [
+      { doneAt: new Date(2026, 5, 21, 9, 0, 0).getTime() }, // 今日
+      { doneAt: new Date(2026, 5, 19, 9, 0, 0).getTime() }, // 一昨日（昨日が抜けている）
+    ];
+    expect(currentStreak(items, now)).toBe(1);
+  });
+
+  test('今日まだ達成していなければ0', () => {
+    const now = new Date(2026, 5, 21, 10, 0, 0).getTime();
+    const items = [
+      { doneAt: new Date(2026, 5, 20, 9, 0, 0).getTime() }, // 昨日
+    ];
+    expect(currentStreak(items, now)).toBe(0);
   });
 });
 
