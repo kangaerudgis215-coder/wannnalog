@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Linking, Modal, Platform,
+  ActivityIndicator, Animated, Easing, Image, KeyboardAvoidingView, Linking, Modal, Platform,
   Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View, Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
-import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, dueLabel, browserUrl } from './links';
@@ -445,6 +445,54 @@ function currentStreak(items) {
   return streak;
 }
 
+// 達成時の英語の称賛メッセージ（数パターンからランダムで1つ選ぶ）
+const PRAISE = [
+  { big: 'Nailed it!', sub: 'One more dream, done.' },
+  { big: 'You did it!', sub: 'Another wish came true.' },
+  { big: 'Bravo!', sub: 'Look at you go.' },
+  { big: 'Wish granted', sub: 'Keep the magic going.' },
+  { big: 'Way to go!', sub: 'Turning dreams into real life.' },
+  { big: 'Amazing!', sub: 'That’s the spirit.' },
+  { big: 'Yes! Done.', sub: 'You made it happen.' },
+  { big: 'So proud of you', sub: 'Another one for the books.' },
+];
+function pickPraise() { return PRAISE[Math.floor(Math.random() * PRAISE.length)]; }
+
+// カードの周りでキラキラ瞬く星（キラキラ演出）。位置は一度だけ決めて再描画で動かない。
+function Sparkles({ count = 14, color = '#FFFFFF' }) {
+  const parts = useRef([...Array(count)].map(() => ({
+    x: (Math.random() * 2 - 1) * 150,                 // カード中心からの左右
+    y: (Math.random() * 2 - 1) * 190,                 // 上下
+    size: 7 + Math.random() * 12,
+    delay: Math.random() * 900,
+    dur: 700 + Math.random() * 700,
+    a: new Animated.Value(0),
+  }))).current;
+  useEffect(() => {
+    parts.forEach((p) => {
+      Animated.loop(Animated.sequence([
+        Animated.delay(p.delay),
+        Animated.timing(p.a, { toValue: 1, duration: p.dur, useNativeDriver: true }),
+        Animated.timing(p.a, { toValue: 0, duration: p.dur, useNativeDriver: true }),
+      ])).start();
+    });
+  }, []);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {parts.map((p, i) => (
+        <Animated.View key={i} style={{
+          position: 'absolute', left: '50%', top: '50%',
+          marginLeft: p.x, marginTop: p.y,
+          opacity: p.a,
+          transform: [{ scale: p.a.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }],
+        }}>
+          <Ionicons name="sparkles" size={p.size} color={color} />
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
 // 自然な物理の紙吹雪：上に弾けて重力で落ちる（放物線）＋回転＋フェード。
 function Confetti({ colors, count }) {
   const parts = useRef([...Array(count)].map(() => {
@@ -487,41 +535,74 @@ function Confetti({ colors, count }) {
 
 function Celebration({ celeb, onTabBounce, onDone }) {
   const t = useTheme(); const s = useStyles();
+  const { width, height } = useWindowDimensions();
   const { item, serious, streak } = celeb;
   const cat = getCategory(item.category);
+  const praise = useRef(pickPraise()).current;         // 表示のたびに1パターン選ぶ
   const bg = useRef(new Animated.Value(0)).current;    // 背景のふわっとフェード
   const pop = useRef(new Animated.Value(0)).current;   // カード＆チェックのやわらかいポップ
-  const glow = useRef(new Animated.Value(0)).current;  // 本気のゴールドグロー（呼吸）
+  const glow = useRef(new Animated.Value(0)).current;  // 周囲のグロー（ゆっくり呼吸）
+  const fly = useRef(new Animated.Value(0)).current;   // 最後にマイページタブへ飛ぶ
   const [confetti, setConfetti] = useState(false);
   const done = useRef(false);
-  function finish() { if (!done.current) { done.current = true; onTabBounce && onTabBounce(); onDone(); } }
+  function finish() { if (!done.current) { done.current = true; onDone(); } }
 
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Animated.parallel([
-      Animated.timing(bg, { toValue: 1, duration: 240, useNativeDriver: true }),
-      Animated.spring(pop, { toValue: 1, friction: 6, tension: 70, useNativeDriver: true }),
+      Animated.timing(bg, { toValue: 1, duration: 320, useNativeDriver: true }),
+      Animated.spring(pop, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }),
     ]).start(() => setConfetti(true));
-    if (serious) {
-      Animated.loop(Animated.sequence([
-        Animated.timing(glow, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(glow, { toValue: 0, duration: 700, useNativeDriver: true }),
-      ])).start();
-    }
+    // グローは常時ゆっくり呼吸（本気はより強く）
+    Animated.loop(Animated.sequence([
+      Animated.timing(glow, { toValue: 1, duration: 1100, useNativeDriver: true }),
+      Animated.timing(glow, { toValue: 0, duration: 1100, useNativeDriver: true }),
+    ])).start();
+    // ゆっくり見せてから、カードをマイページタブへ吸い込ませる
     const timer = setTimeout(() => {
-      Animated.timing(bg, { toValue: 0, duration: 320, useNativeDriver: true }).start(() => finish());
-    }, serious ? 2400 : 1700);
+      onTabBounce && onTabBounce();
+      Animated.parallel([
+        Animated.timing(fly, { toValue: 1, duration: 620, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(bg, { toValue: 0, duration: 620, delay: 160, useNativeDriver: true }),
+      ]).start(() => finish());
+    }, serious ? 2900 : 2200);
     return () => clearTimeout(timer);
   }, []);
 
-  function skip() { Animated.timing(bg, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => finish()); }
+  function skip() {
+    if (done.current) return;
+    Animated.timing(bg, { toValue: 0, duration: 220, useNativeDriver: true }).start(() => { onTabBounce && onTabBounce(); finish(); });
+  }
   const colors = serious ? [cat.tint, '#FFFFFF', t.gold] : [cat.tint, '#FFFFFF'];
+  // マイページタブ（右端）へ向かう飛び先。中心からの移動量。
+  const flyX = width * 0.36;
+  const flyY = height * 0.42;
 
   return (
     <Animated.View style={[s.celebrate, { opacity: bg }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={skip} />
-      <Animated.View style={{ alignItems: 'center', opacity: pop, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }, { translateY: pop.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }}>
-        {serious && <Animated.View pointerEvents="none" style={[s.celebGlow, { backgroundColor: t.gold, opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.34] }) }]} />}
+      <Animated.View style={{
+        alignItems: 'center',
+        opacity: fly.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] }),
+        transform: [
+          { translateX: fly.interpolate({ inputRange: [0, 1], outputRange: [0, flyX] }) },
+          { translateY: Animated.add(
+              pop.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }),
+              fly.interpolate({ inputRange: [0, 1], outputRange: [0, flyY] })
+            ) },
+          { scale: Animated.multiply(
+              pop.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
+              fly.interpolate({ inputRange: [0, 1], outputRange: [1, 0.18] })
+            ) },
+        ],
+      }}>
+        {/* 周囲がキラキラ光るグロー */}
+        <Animated.View pointerEvents="none" style={[s.celebGlow, {
+          backgroundColor: serious ? t.gold : cat.tint,
+          opacity: glow.interpolate({ inputRange: [0, 1], outputRange: serious ? [0.14, 0.4] : [0.1, 0.28] }),
+        }]} />
+        {/* 周囲で瞬く星 */}
+        {confetti && <Sparkles count={serious ? 18 : 12} color={serious ? t.gold : '#FFFFFF'} />}
         <View style={[s.celebCard, { shadowColor: cat.tint }]}>
           <View style={s.celebPhotoWrap}>
             {item.imageUri
@@ -533,10 +614,11 @@ function Celebration({ celeb, onTabBounce, onDone }) {
           </View>
           <Text style={s.celebCaption} numberOfLines={1}>{item.title}</Text>
         </View>
-        <Text style={s.celebBig}>叶えた！</Text>
-        {serious && streak > 1 ? <Text style={s.celebStreak}>{streak}日連続で叶えています</Text> : null}
+        <Text style={s.celebBig}>{praise.big}</Text>
+        <Text style={s.celebSub}>{praise.sub}</Text>
+        {serious && streak > 1 ? <Text style={s.celebStreak}>{streak}-day streak 🔥</Text> : null}
       </Animated.View>
-      {confetti && <Confetti colors={colors} count={serious ? 90 : 42} />}
+      {confetti && <Confetti colors={colors} count={serious ? 110 : 54} />}
     </Animated.View>
   );
 }
@@ -615,6 +697,7 @@ function homeBlocks(visible) {
 function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
   const [reorderMode, setReorderMode] = useState(false);
+  const [dragging, setDragging] = useState(false);   // ドラッグ中は外側スクロールを止める
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
   let visible;
@@ -630,7 +713,7 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
   const upcoming = filter === 'all' && !inReorder ? items.filter((it) => !it.doneAt && (it.dueTag === 'today' || it.dueTag === 'thisWeek')).slice(0, 4) : [];
   const comfy = density === 'comfy' && filter === 'all';
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false} scrollEnabled={!dragging}>
       <View style={s.topbar}>
         <View style={s.brandRow}>
           <Text style={s.brand}>WannaLog</Text>
@@ -648,20 +731,20 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
       {inReorder ? (
         <View>
           <View style={s.reorderBar}>
-            <Text style={s.reorderBarText}>並べ替え中　▲▼ で移動</Text>
+            <Text style={s.reorderBarText}>長押しでつまんで、上下にドラッグ</Text>
             <Pressable onPress={() => setReorderMode(false)} style={s.reorderDone}><Text style={s.reorderDoneText}>完了</Text></Pressable>
           </View>
           <View style={{ paddingHorizontal: 20 }}>
-            <ReorderList ids={visible.map((it) => it.id)} onChange={onReorder} renderRow={(id, ctrl) => {
+            <DragReorderList ids={visible.map((it) => it.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging }) => {
               const it = byId[id]; if (!it) return null;
               const cat = getCategory(it.category);
               return (
-                <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: cat.tint }]}>
+                <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: cat.tint }, rowDragging && s.sortRowDrag]}>
                   {it.imageUri
                     ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
                     : <View style={[s.sortThumb, { backgroundColor: catSoft(cat, t.mode), alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color={cat.tint} /></View>}
                   <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
-                  <MoveControls ctrl={ctrl} />
+                  <DragGrip />
                 </View>
               );
             }} />
@@ -682,7 +765,7 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
           </ScrollView>
 
           {upcoming.length > 0 && <RemindCarousel items={upcoming} onOpen={onOpen} />}
-          {canSort && <Text style={s.reorderHintHome}>カードを長押し、または右上の ⇅ で並べ替え</Text>}
+          {canSort && <Text style={s.reorderHintHome}>カードを長押し、または右上の ⇅ で並べ替え（つまんでドラッグ）</Text>}
 
           {visible.length === 0 ? (
             <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
@@ -1705,79 +1788,83 @@ function SaveModal({ visible, onClose, onSave }) {
 }
 
 /* ---------- 並べ替え（▲▼で移動：ジェスチャー競合が無く確実に動く） ---------- */
-function MoveControls({ ctrl }) {
-  const t = useTheme(); const s = useStyles();
-  return (
-    <View style={s.sortMoveCol}>
-      <Pressable onPress={ctrl.up} disabled={ctrl.isFirst} hitSlop={6} style={s.sortMoveBtn}>
-        <Ionicons name="chevron-up" size={22} color={ctrl.isFirst ? t.line : t.accent} />
-      </Pressable>
-      <Pressable onPress={ctrl.down} disabled={ctrl.isLast} hitSlop={6} style={s.sortMoveBtn}>
-        <Ionicons name="chevron-down" size={22} color={ctrl.isLast ? t.line : t.accent} />
-      </Pressable>
-    </View>
-  );
-}
-// ids は親が持つ現在の並び。移動のたびに onChange(新しい並び) を呼ぶ（制御コンポーネント）。
-function ReorderList({ ids, renderRow, onChange }) {
-  const move = (id, dir) => {
-    const i = ids.indexOf(id);
-    const to = i + dir;
-    if (to < 0 || to >= ids.length) return;
-    Haptics.selectionAsync();
-    onChange(moveItem(ids, i, to));
+// 1行の高さ（sortRow：thumb 44 + 上下パディング 16 + marginBottom 10 の目安）
+const DRAG_ROW_H = 70;
+
+// 指でつまんでドラッグする並べ替えリスト（矢印より直感的）。
+// 行を「長押し」でつまみ、上下にドラッグすると、しきい値を越えるたびに1つずつ入れ替わる。
+// ids は親が持つ現在の並び。入れ替わるたびに onChange(新しい並び) を呼ぶ（制御コンポーネント）。
+function DragReorderList({ ids, renderRow, onChange, onDragActive, rowH = DRAG_ROW_H }) {
+  const [dragId, setDragId] = useState(null);
+  const dragY = useRef(new Animated.Value(0)).current;
+  const idsRef = useRef(ids); idsRef.current = ids;   // 常に最新の並びを参照
+  const committed = useRef(0);                         // すでに入れ替えで反映した移動量(px)
+
+  const begin = (id) => {
+    committed.current = 0;
+    dragY.setValue(0);
+    setDragId(id);
+    onDragActive && onDragActive(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
+  const update = (id, ty) => {
+    dragY.setValue(ty - committed.current);
+    const cur = idsRef.current;
+    const i = cur.indexOf(id);
+    if (i < 0) return;
+    const rel = ty - committed.current;
+    if (rel > rowH * 0.6 && i < cur.length - 1) {
+      committed.current += rowH;
+      Haptics.selectionAsync();
+      onChange(moveItem(cur, i, i + 1));
+    } else if (rel < -rowH * 0.6 && i > 0) {
+      committed.current -= rowH;
+      Haptics.selectionAsync();
+      onChange(moveItem(cur, i, i - 1));
+    }
+  };
+  const end = () => {
+    setDragId(null);
+    committed.current = 0;
+    onDragActive && onDragActive(false);
+    Animated.spring(dragY, { toValue: 0, useNativeDriver: false, friction: 9, tension: 120 }).start();
+  };
+
   return (
     <View>
-      {ids.map((id, i) => (
-        <View key={id} style={{ marginBottom: 10 }}>
-          {renderRow(id, { up: () => move(id, -1), down: () => move(id, 1), isFirst: i === 0, isLast: i === ids.length - 1 })}
-        </View>
-      ))}
+      {ids.map((id) => {
+        const dragging = id === dragId;
+        // 長押し(200ms)でつまんでからドラッグ開始。外側スクロールと競合しない。
+        const pan = Gesture.Pan()
+          .activateAfterLongPress(200)
+          .onStart(() => begin(id))
+          .onUpdate((e) => update(id, e.translationY))
+          .onFinalize(() => end());
+        return (
+          <GestureDetector key={id} gesture={pan}>
+            <Animated.View style={[
+              { marginBottom: 10 },
+              dragging && { transform: [{ translateY: dragY }], zIndex: 30, opacity: 0.97 },
+            ]}>
+              {renderRow(id, { dragging })}
+            </Animated.View>
+          </GestureDetector>
+        );
+      })}
     </View>
   );
 }
 
-function SortModal({ visible, onClose, items, onReorder }) {
+// 並べ替え行の右端に置く「つまむ」グリップ（三本線）
+function DragGrip() {
   const t = useTheme(); const s = useStyles();
-  const byId = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items]);
-  const ids = useMemo(() => items.map((i) => i.id), [items]);
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaView style={s.safe}>
-          <View style={s.detailBar}>
-            <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
-            <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
-          </View>
-          <GHScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-            <Text style={s.giftHero}>並べ替え</Text>
-            <Text style={s.giftLead}>右の ▲▼ ボタンで順番を入れ替えできます。</Text>
-            <View style={{ marginTop: 16 }}>
-              <ReorderList ids={ids} onChange={onReorder} renderRow={(id, ctrl) => {
-                const it = byId[id]; if (!it) return null;
-                const cat = getCategory(it.category);
-                return (
-                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: cat.tint }]}>
-                    {it.imageUri
-                      ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
-                      : <View style={[s.sortThumb, { backgroundColor: catSoft(cat, t.mode), alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color={cat.tint} /></View>}
-                    <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
-                    <MoveControls ctrl={ctrl} />
-                  </View>
-                );
-              }} />
-            </View>
-          </GHScrollView>
-        </SafeAreaView>
-      </GestureHandlerRootView>
-    </Modal>
-  );
+  return <View style={s.sortGrip}><Ionicons name="reorder-three" size={26} color={t.sub} /></View>;
 }
 
 // ビジョンボードの並べ替え（枠の順番をドラッグで入れ替え）
 function VisionSortModal({ visible, onClose, slots, onReorder }) {
   const t = useTheme(); const s = useStyles();
+  const [dragging, setDragging] = useState(false);
   const byId = useMemo(() => Object.fromEntries(slots.map((sl) => [sl.id, sl])), [slots]);
   const ids = useMemo(() => slots.map((sl) => sl.id), [slots]);
   return (
@@ -1788,19 +1875,19 @@ function VisionSortModal({ visible, onClose, slots, onReorder }) {
             <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
             <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
           </View>
-          <GHScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <GHScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false} scrollEnabled={!dragging}>
             <Text style={s.giftHero}>並べ替え</Text>
-            <Text style={s.giftLead}>右の ▲▼ ボタンで枠の順番を入れ替えできます。</Text>
+            <Text style={s.giftLead}>枠を長押しでつまんで、上下にドラッグすると順番を入れ替えできます。</Text>
             <View style={{ marginTop: 16 }}>
-              <ReorderList ids={ids} onChange={onReorder} renderRow={(id, ctrl) => {
+              <DragReorderList ids={ids} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging }) => {
                 const sl = byId[id]; if (!sl) return null;
                 return (
-                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }]}>
+                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }, rowDragging && s.sortRowDrag]}>
                     {sl.imageUri
                       ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
                       : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
                     <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
-                    <MoveControls ctrl={ctrl} />
+                    <DragGrip />
                   </View>
                 );
               }} />
@@ -2166,16 +2253,16 @@ function makeStyles(t) {
     safe: { flex: 1, backgroundColor: t.bg },
     topbar: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 },
     brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    sortRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 16, paddingHorizontal: 12 },
+    sortRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: t.surface, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+    sortRowDrag: { shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 10, backgroundColor: t.surface2 },
     sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
     sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },
-    sortMoveCol: { justifyContent: 'center', gap: 2 },
+    sortGrip: { paddingHorizontal: 4, paddingVertical: 6 },
     reorderBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginBottom: 12, backgroundColor: t.capsule, borderRadius: 999, paddingLeft: 16, paddingRight: 6, paddingVertical: 6 },
     reorderBarText: { fontSize: 13, color: t.text, fontWeight: '800' },
     reorderDone: { backgroundColor: t.accent, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 7 },
     reorderDoneText: { color: '#fff', fontSize: 13, fontWeight: '800' },
     reorderHintHome: { fontSize: 11.5, color: t.sub, paddingHorizontal: 20, marginBottom: 8 },
-    sortMoveBtn: { width: 44, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: t.surface2 },
     brand: { fontSize: 24, fontWeight: '700', color: t.text, letterSpacing: 0.3, fontFamily: FONT.bold },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
@@ -2482,9 +2569,10 @@ function makeStyles(t) {
     celebPhoto: { width: '100%', height: '100%' },
     celebCheck: { position: 'absolute', backgroundColor: '#fff', borderRadius: 27 },
     celebCaption: { marginTop: 10, fontSize: 15, color: '#2B2622', textAlign: 'center', fontFamily: FONT.bold },
-    celebGlow: { position: 'absolute', width: 300, height: 360, borderRadius: 60, top: -30 },
-    celebBig: { marginTop: 18, fontSize: 26, color: t.gold, fontFamily: FONT.bold, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6 },
-    celebStreak: { marginTop: 6, fontSize: 14, color: t.accent, fontFamily: FONT.num },
+    celebGlow: { position: 'absolute', width: 320, height: 380, borderRadius: 70, top: -40, left: '50%', marginLeft: -160 },
+    celebBig: { marginTop: 18, fontSize: 30, color: t.gold, fontFamily: FONT.bold, letterSpacing: 0.3, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6 },
+    celebSub: { marginTop: 4, fontSize: 14, color: t.text, opacity: 0.85, fontFamily: FONT.bold },
+    celebStreak: { marginTop: 8, fontSize: 14, color: t.accent, fontFamily: FONT.num },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
   for (const k in styles) {
