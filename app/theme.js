@@ -40,11 +40,12 @@ export const palettes = {
 
 // カテゴリ：アイコン + 3色（soft=パステル背景 / tint=濃色アイコン・文字 / glow=極薄グロー影）
 // 「原色はアイコン一点だけ、背景はパステル、影は極薄」で上品に見せる（キャンディボックス）。
+// 4カテゴリの色は色相を大きく離して“偏り”をなくす（暖赤 → 青緑 → 藍青 → 薔薇）。
 export const CATEGORIES = [
   { key: 'eat', label: '食べたい', icon: 'restaurant', color: '#FF6F5E', soft: '#FFE4DE', darkSoft: 'rgba(255,111,94,0.16)', tint: '#FF6F5E', glow: 'rgba(255,111,94,0.35)' },
-  { key: 'go', label: '行きたい', icon: 'location', color: '#4FA3D1', soft: '#DCEEFB', darkSoft: 'rgba(79,163,209,0.16)', tint: '#4FA3D1', glow: 'rgba(79,163,209,0.35)' },
-  { key: 'see', label: '見たい', icon: 'film', color: '#8B7CF6', soft: '#E7E2FF', darkSoft: 'rgba(139,124,246,0.16)', tint: '#8B7CF6', glow: 'rgba(139,124,246,0.35)' },
-  { key: 'want', label: '欲しい', icon: 'pricetag', color: '#D66BC7', soft: '#F8DFF5', darkSoft: 'rgba(214,107,199,0.16)', tint: '#D66BC7', glow: 'rgba(214,107,199,0.35)' },
+  { key: 'go', label: '行きたい', icon: 'location', color: '#23B39E', soft: '#D6F0EA', darkSoft: 'rgba(35,179,158,0.16)', tint: '#23B39E', glow: 'rgba(35,179,158,0.35)' },
+  { key: 'see', label: '見たい', icon: 'film', color: '#6C74E8', soft: '#E1E3FB', darkSoft: 'rgba(108,116,232,0.16)', tint: '#6C74E8', glow: 'rgba(108,116,232,0.35)' },
+  { key: 'want', label: '欲しい', icon: 'pricetag', color: '#D96BB0', soft: '#F8DFEE', darkSoft: 'rgba(217,107,176,0.16)', tint: '#D96BB0', glow: 'rgba(217,107,176,0.35)' },
 ];
 
 // 未設定（保存時のデフォルト。あとで編集で選べる）

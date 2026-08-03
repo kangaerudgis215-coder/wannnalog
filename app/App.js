@@ -22,7 +22,6 @@ import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary, nextRemindAt } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
-import { parseGps, coordsMapsUrl } from './geo';
 import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
@@ -313,9 +312,9 @@ export default function App() {
   }
 
   async function addItem(data, opts = {}) {
-    const { title, category, due, imageUri, heat, reminder, link, withWho, coords } = data;
+    const { title, category, due, imageUri, heat, reminder, link, withWho } = data;
     const rem = reminder || { remind: '3days' };
-    const item = { id: String(Date.now()), title, category: category || null, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, withWho: withWho || null, lat: coords?.lat ?? null, lng: coords?.lng ?? null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
+    const item = { id: String(Date.now()), title, category: category || null, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, withWho: withWho || null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
     item.notifId = await scheduleReminder(item);
     await persist([item, ...items]);
     if (!opts.silent) { // クイック保存は独自アニメがあるのでAlert抑制
@@ -536,7 +535,8 @@ function Confetti({ colors, count }) {
 function Celebration({ celeb, onTabBounce, onDone }) {
   const t = useTheme(); const s = useStyles();
   const { width, height } = useWindowDimensions();
-  const { item, serious, streak } = celeb;
+  // 演出は熱量に関わらず一律で豪華に（本気/気になっただけの区別は無し）。
+  const { item, streak } = celeb;
   const cat = getCategory(item.category);
   const praise = useRef(pickPraise()).current;         // 表示のたびに1パターン選ぶ
   const bg = useRef(new Animated.Value(0)).current;    // 背景のふわっとフェード
@@ -553,7 +553,7 @@ function Celebration({ celeb, onTabBounce, onDone }) {
       Animated.timing(bg, { toValue: 1, duration: 320, useNativeDriver: true }),
       Animated.spring(pop, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }),
     ]).start(() => setConfetti(true));
-    // グローは常時ゆっくり呼吸（本気はより強く）
+    // グローは常時ゆっくり呼吸
     Animated.loop(Animated.sequence([
       Animated.timing(glow, { toValue: 1, duration: 1100, useNativeDriver: true }),
       Animated.timing(glow, { toValue: 0, duration: 1100, useNativeDriver: true }),
@@ -565,7 +565,7 @@ function Celebration({ celeb, onTabBounce, onDone }) {
         Animated.timing(fly, { toValue: 1, duration: 620, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
         Animated.timing(bg, { toValue: 0, duration: 620, delay: 160, useNativeDriver: true }),
       ]).start(() => finish());
-    }, serious ? 2900 : 2200);
+    }, 2900);
     return () => clearTimeout(timer);
   }, []);
 
@@ -573,7 +573,7 @@ function Celebration({ celeb, onTabBounce, onDone }) {
     if (done.current) return;
     Animated.timing(bg, { toValue: 0, duration: 220, useNativeDriver: true }).start(() => { onTabBounce && onTabBounce(); finish(); });
   }
-  const colors = serious ? [cat.tint, '#FFFFFF', t.gold] : [cat.tint, '#FFFFFF'];
+  const colors = [cat.tint, '#FFFFFF', t.gold];
   // マイページタブ（右端）へ向かう飛び先。中心からの移動量。
   const flyX = width * 0.36;
   const flyY = height * 0.42;
@@ -598,11 +598,11 @@ function Celebration({ celeb, onTabBounce, onDone }) {
       }}>
         {/* 周囲がキラキラ光るグロー */}
         <Animated.View pointerEvents="none" style={[s.celebGlow, {
-          backgroundColor: serious ? t.gold : cat.tint,
-          opacity: glow.interpolate({ inputRange: [0, 1], outputRange: serious ? [0.14, 0.4] : [0.1, 0.28] }),
+          backgroundColor: t.gold,
+          opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.14, 0.4] }),
         }]} />
         {/* 周囲で瞬く星 */}
-        {confetti && <Sparkles count={serious ? 18 : 12} color={serious ? t.gold : '#FFFFFF'} />}
+        {confetti && <Sparkles count={18} color={t.gold} />}
         <View style={[s.celebCard, { shadowColor: cat.tint }]}>
           <View style={s.celebPhotoWrap}>
             {item.imageUri
@@ -616,9 +616,9 @@ function Celebration({ celeb, onTabBounce, onDone }) {
         </View>
         <Text style={s.celebBig}>{praise.big}</Text>
         <Text style={s.celebSub}>{praise.sub}</Text>
-        {serious && streak > 1 ? <Text style={s.celebStreak}>{streak}-day streak 🔥</Text> : null}
+        {streak > 1 ? <Text style={s.celebStreak}>{streak}-day streak 🔥</Text> : null}
       </Animated.View>
-      {confetti && <Confetti colors={colors} count={serious ? 110 : 54} />}
+      {confetti && <Confetti colors={colors} count={110} />}
     </Animated.View>
   );
 }
@@ -731,11 +731,11 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
       {inReorder ? (
         <View>
           <View style={s.reorderBar}>
-            <Text style={s.reorderBarText}>長押しでつまんで、上下にドラッグ</Text>
+            <Text style={s.reorderBarText}>右端の ≡ をつまんで、上下にドラッグ</Text>
             <Pressable onPress={() => setReorderMode(false)} style={s.reorderDone}><Text style={s.reorderDoneText}>完了</Text></Pressable>
           </View>
           <View style={{ paddingHorizontal: 20 }}>
-            <DragReorderList ids={visible.map((it) => it.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging }) => {
+            <DragReorderList ids={visible.map((it) => it.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging, grip }) => {
               const it = byId[id]; if (!it) return null;
               const cat = getCategory(it.category);
               return (
@@ -744,7 +744,7 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
                     ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
                     : <View style={[s.sortThumb, { backgroundColor: catSoft(cat, t.mode), alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color={cat.tint} /></View>}
                   <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
-                  <DragGrip />
+                  {grip}
                 </View>
               );
             }} />
@@ -765,21 +765,21 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
           </ScrollView>
 
           {upcoming.length > 0 && <RemindCarousel items={upcoming} onOpen={onOpen} />}
-          {canSort && <Text style={s.reorderHintHome}>カードを長押し、または右上の ⇅ で並べ替え（つまんでドラッグ）</Text>}
+          {canSort && <Text style={s.reorderHintHome}>右上の ⇅ を押すと、並べ替えできます</Text>}
 
           {visible.length === 0 ? (
             <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
           ) : comfy ? (
             <View style={{ paddingHorizontal: 20, gap: 16, paddingTop: 2 }}>
               {visible.map((it, i) => (
-                <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} onLongPress={() => canSort && setReorderMode(true)} feature /></FadeInView>
+                <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} feature /></FadeInView>
               ))}
             </View>
           ) : filter === 'all' ? (
             homeBlocks(visible).map((b, bi) => b.type === 'feature'
-              ? <FadeInView key={b.item.id} index={bi}><View style={{ paddingHorizontal: 20, paddingTop: 2 }}><PhotoTile item={b.item} feature onPress={() => onOpen(b.item)} onLongPress={() => setReorderMode(true)} /></View></FadeInView>
+              ? <FadeInView key={b.item.id} index={bi}><View style={{ paddingHorizontal: 20, paddingTop: 2 }}><PhotoTile item={b.item} feature onPress={() => onOpen(b.item)} /></View></FadeInView>
               : <Masonry key={'m' + bi} items={b.items} renderTile={(it, i) => (
-                  <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} onLongPress={() => canSort && setReorderMode(true)} /></FadeInView>
+                  <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} /></FadeInView>
                 )} />
             )
           ) : (
@@ -852,7 +852,8 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
   const shelves = VISION_SHELVES.map((sec) => ({ ...sec, items: rest.filter(sec.match) })).filter((sec) => sec.items.length > 0);
   return (
     <View style={{ flex: 1 }}>
-      <LinearGradient colors={t.mode === 'dark' ? ['#1C1917', '#241F2C'] : ['#FFFBF3', '#F3EEFF']} style={StyleSheet.absoluteFill} />
+      {/* コルクボード風の背景（あたたかいコルク色） */}
+      <LinearGradient colors={t.mode === 'dark' ? ['#33291E', '#3E3222'] : ['#D8BC8E', '#CBA877']} style={StyleSheet.absoluteFill} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
         <View style={s.topbar}>
           <View style={s.brandRow}>
@@ -874,7 +875,7 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
               <Text style={s.shelfTitle}>{sec.emoji} {sec.label}</Text>
               <Text style={s.shelfCount}>{sec.items.length}</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 10, gap: 14 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, gap: 18 }}>
               {sec.items.map((sl) => <VisionCard key={sl.id} slot={sl} onPress={() => setEditId(sl.id)} />)}
             </ScrollView>
           </View>
@@ -901,46 +902,63 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
     </View>
   );
 }
-// ヒーロー：最上部に1枚だけ大きく（4:3・微回転・ワシテープ・下30%にだけ影）
+// コルクボードに刺さった画鋲（プッシュピン）。IDで色を決めて再描画で変わらない。
+const PIN_COLORS = ['#E5484D', '#3E9DF0', '#F5A524', '#30A46C', '#8E4EC6'];
+function Pushpin({ id }) {
+  const s = useStyles();
+  const color = PIN_COLORS[hashCode(String(id)) % PIN_COLORS.length];
+  return (
+    <View style={s.pinWrap} pointerEvents="none">
+      <View style={[s.pinHead, { backgroundColor: color }]}>
+        <View style={s.pinShine} />
+      </View>
+    </View>
+  );
+}
+// ヒーロー：最上部に1枚だけ大きく。白フチの写真プリント＋画鋲でコルクに留めた見た目。
 function VisionHero({ slot, onPress }) {
   const t = useTheme(); const s = useStyles();
   const f = visionFont(slot.font); const st = visionStatus(slot.status);
   return (
     <PressBounce onPress={onPress} style={s.heroWrap}>
-      <View style={s.heroCard}>
-        <View style={{ width: '100%', aspectRatio: 4 / 3 }}>
-          <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
-          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={s.heroShade} />
-          <View style={s.washi} />
-          <View style={s.heroTextWrap}>
-            {st ? <View style={s.heroStatus}><View style={[s.statusDot, { backgroundColor: st.color }]} /><Text style={s.heroStatusText}>{st.label}</Text></View> : null}
-            {slot.label ? <Text style={[s.heroTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label}</Text> : null}
+      <View style={{ transform: [{ rotate: '-1.2deg' }] }}>
+        <View style={s.heroFrame}>
+          <View style={s.heroPhoto}>
+            <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
+            <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={s.heroShade} />
+            <View style={s.heroTextWrap}>
+              {st ? <View style={s.heroStatus}><View style={[s.statusDot, { backgroundColor: st.color }]} /><Text style={s.heroStatusText}>{st.label}</Text></View> : null}
+              {slot.label ? <Text style={[s.heroTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label}</Text> : null}
+            </View>
           </View>
         </View>
+        <Pushpin id={slot.id} />
       </View>
     </PressBounce>
   );
 }
-// 棚のカード：写真＋白キャプション（コメント＋ステータスのドット）。IDで微回転を固定。
+// 棚のカード：白フチの写真プリント（四角め）＋下に手書き風キャプション、上に画鋲。IDで微回転を固定。
 function VisionCard({ slot, onPress }) {
   const t = useTheme(); const s = useStyles();
   const { width } = useWindowDimensions();
-  const w = Math.round(width * 0.6);
+  const w = Math.round(width * 0.56);
   const f = visionFont(slot.font); const st = visionStatus(slot.status);
   const rot = (hashCode(slot.id) % 7) - 3; // -3〜3度
   return (
-    <PressBounce onPress={onPress} style={{ width: w, transform: [{ rotate: rot + 'deg' }] }}>
-      <View style={s.visionCard}>
-        <View style={{ width: '100%', aspectRatio: 4 / 5 }}>
-          {slot.imageUri
-            ? <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
-            : <View style={[s.cardImg, s.cardCenter, { backgroundColor: t.surface2 }]}><Ionicons name="image-outline" size={30} color={t.sub} /></View>}
-          <View style={s.washi} />
+    <PressBounce onPress={onPress} style={{ width: w }}>
+      <View style={{ transform: [{ rotate: rot + 'deg' }] }}>
+        <View style={s.visionFrame}>
+          <View style={s.visionPhoto}>
+            {slot.imageUri
+              ? <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
+              : <View style={[s.cardImg, s.cardCenter, { backgroundColor: '#EFE7DA' }]}><Ionicons name="image-outline" size={30} color={t.sub} /></View>}
+          </View>
+          <View style={s.visionCaption}>
+            <Text style={[s.visionCaptionText, { fontFamily: f.family }]} numberOfLines={2}>{slot.label || '（コメントなし）'}</Text>
+            {st ? <View style={s.visionStatusRow}><View style={[s.statusDot, { backgroundColor: st.color }]} /><Text style={s.visionStatusLabel}>{st.label}</Text></View> : null}
+          </View>
         </View>
-        <View style={s.cardPanel}>
-          <Text style={[s.cardTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label || '（コメントなし）'}</Text>
-          {st ? <View style={s.visionStatusRow}><View style={[s.statusDot, { backgroundColor: st.color }]} /><Text style={s.visionStatusLabel}>{st.label}</Text></View> : null}
-        </View>
+        <Pushpin id={slot.id} />
       </View>
     </PressBounce>
   );
@@ -1082,7 +1100,7 @@ function NotifyTab({ items, onOpen, onSnooze, onStop }) {
     <View style={{ flex: 1 }}>
       <View style={s.topbar}>
         <Text style={s.screenTitle}>通知</Text>
-        <Text style={s.greet}>これから、そっと思い出すこと</Text>
+        <Text style={s.greet}>今のこの気持ちを、いつでもそっと思い出せます</Text>
       </View>
       {reminders.length === 0 ? (
         <EmptyState text={'まだ思い出す予定はありません。\n保存時に「思い出す」を選ぶと、ここに並びます。'} />
@@ -1135,8 +1153,6 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
   const plantStage = growthProgress((garden && garden.points) || 0);
   const total = items.length;
   const rate = achievementRate(doneCount, total);
-  const seriousDone = done.filter((it) => (it.heat || 2) === 3).length;
-  const casualDone = done.filter((it) => (it.heat || 2) === 1).length;
   // カテゴリ別の達成（そのカテゴリの中で叶えた割合）
   const byCat = CATEGORIES.map((c) => {
     const catItems = items.filter((it) => it.category === c.key);
@@ -1264,9 +1280,6 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
           ))}
         </View>
         <Text style={s.statSub}>この1週間で {counts.reduce((a, b) => a + b, 0)} 個 達成</Text>
-        {(seriousDone > 0 || casualDone > 0) && (
-          <Text style={s.statSub}>本気で叶えた {seriousDone}　／　気になっただけ {casualDone}</Text>
-        )}
       </View>
 
       {/* カテゴリ別の達成バー（色分け） */}
@@ -1539,8 +1552,8 @@ function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.qcSheetWrap}>
             <View style={s.qcSheet}>
               <View style={s.qcHandle} />
-              <Text style={s.qcTitle}>“したい”を、熱いうちに</Text>
-              <Text style={s.qcSub}>スクショやリンクから、ほぼワンタップで。</Text>
+              <Text style={s.qcTitle}>今の気持ち、熱いままに残しましょう</Text>
+              <Text style={s.qcSub}>スクショ、リンクからワンタップで保存できます。</Text>
               <PressBounce onPress={startFromImage} style={{ borderRadius: 18, overflow: 'hidden', marginTop: 16 }}>
                 <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.qcBigBtn}>
                   <Ionicons name="image" size={22} color="#fff" /><Text style={s.qcBigBtnText}>スクショ・写真から</Text>
@@ -1618,7 +1631,6 @@ function SaveModal({ visible, onClose, onSave }) {
   const [category, setCategory] = useState(null); // 既定は未設定（あとで編集で選べる）
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
-  const [coords, setCoords] = useState(null); // 写真から読み取った撮影場所
   const [withWho, setWithWho] = useState(null); // 誰と
   const [link, setLink] = useState('');
   const [heat, setHeat] = useState(2);
@@ -1635,19 +1647,7 @@ function SaveModal({ visible, onClose, onSave }) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
-    if (!res.canceled) { setImage(res.assets[0].uri); setCoords(null); }
-  }
-  // 写真から撮影場所(GPS)を読む：切り抜き無し＋EXIFありで取り込む
-  async function pickWithLocation() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, exif: true, quality: 0.6 });
-    if (res.canceled) return;
-    const asset = res.assets[0];
-    setImage(asset.uri);
-    const gps = parseGps(asset.exif);
-    if (gps) { setCoords(gps); Alert.alert('場所を読み取りました', '保存すると「撮影場所を地図で開く」から開けます。'); }
-    else { setCoords(null); Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
+    if (!res.canceled) setImage(res.assets[0].uri);
   }
   // リンク先のOGP（タイトル・画像）を読み取り、空欄なら自動で埋める
   async function loadFromLink() {
@@ -1658,21 +1658,21 @@ function SaveModal({ visible, onClose, onSave }) {
     setOgpLoading(false);
     const maps = isMapsUrl(url); // マップの og:image は汎用ピンなので画像は使わない
     let got = false;
-    if (ogp.image && !maps && !image) { setImage(ogp.image); setCoords(null); got = true; }
+    if (ogp.image && !maps && !image) { setImage(ogp.image); got = true; }
     const better = cleanTitle(ogp.title, ogp.finalUrl || url, '');
     if (better && !title.trim()) { setTitle(better); got = true; }
     const guess = guessCategoryFromUrl(url); // ドメインからカテゴリを推測
     if (guess) { setCategory(guess); got = true; }
     if (!got) Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を選ぶ」から手動で追加できます。');
   }
-  function resetForm() { setTitle(''); setCategory(null); setDue('none'); setImage(null); setCoords(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory(null); setDue('none'); setImage(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
     const finalImage = image || (sns ? sns.thumbnail : null);
     const linkInfo = sns
       ? { url: sns.url, platform: sns.platform }
       : (link.trim() ? { url: link.trim(), platform: null } : null);
-    onSave({ title: title.trim(), category, due, imageUri: finalImage, heat, reminder, link: linkInfo, withWho, coords }); resetForm();
+    onSave({ title: title.trim(), category, due, imageUri: finalImage, heat, reminder, link: linkInfo, withWho }); resetForm();
   }
 
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
@@ -1716,20 +1716,12 @@ function SaveModal({ visible, onClose, onSave }) {
               {previewUri ? <Image source={{ uri: previewUri }} style={s.photoPreview} />
                 : <View style={s.photoPickInner}><Ionicons name="image-outline" size={22} color={t.sub} /><Text style={s.photoPickText}>写真を選ぶ（任意・切り取りできます）</Text></View>}
             </Pressable>
-            <View style={s.photoSubRow}>
-              <Pressable style={s.photoSubBtn} onPress={pickWithLocation}>
-                <Ionicons name="location-outline" size={15} color={t.accent} />
-                <Text style={s.photoSubText}>写真から場所を読む</Text>
-              </Pressable>
-              {image && <Pressable style={s.photoSubBtn} onPress={() => { setImage(null); setCoords(null); }}>
-                <Ionicons name="close" size={15} color="#E5484D" />
-                <Text style={[s.photoSubText, { color: '#E5484D' }]}>写真を外す</Text>
-              </Pressable>}
-            </View>
-            {coords && (
-              <View style={s.snsDetected}>
-                <Ionicons name="location" size={15} color={t.accent} />
-                <Text style={s.snsDetectedText}>撮影場所を読み取りました（地図で開けます）</Text>
+            {image && (
+              <View style={s.photoSubRow}>
+                <Pressable style={s.photoSubBtn} onPress={() => setImage(null)}>
+                  <Ionicons name="close" size={15} color="#E5484D" />
+                  <Text style={[s.photoSubText, { color: '#E5484D' }]}>写真を外す</Text>
+                </Pressable>
               </View>
             )}
 
@@ -1787,14 +1779,15 @@ function SaveModal({ visible, onClose, onSave }) {
   );
 }
 
-/* ---------- 並べ替え（▲▼で移動：ジェスチャー競合が無く確実に動く） ---------- */
+/* ---------- 並べ替え（右端のグリップをつまんで上下ドラッグ） ---------- */
 // 1行の高さ（sortRow：thumb 44 + 上下パディング 16 + marginBottom 10 の目安）
 const DRAG_ROW_H = 70;
 
-// 指でつまんでドラッグする並べ替えリスト（矢印より直感的）。
-// 行を「長押し」でつまみ、上下にドラッグすると、しきい値を越えるたびに1つずつ入れ替わる。
+// 右端の「≡（グリップ）」をつまんで上下にドラッグする並べ替えリスト（矢印・長押し不要）。
+// グリップだけにジェスチャーを付けるので、行の他の場所は普通にスクロールできる。
 // ids は親が持つ現在の並び。入れ替わるたびに onChange(新しい並び) を呼ぶ（制御コンポーネント）。
 function DragReorderList({ ids, renderRow, onChange, onDragActive, rowH = DRAG_ROW_H }) {
+  const t = useTheme(); const s = useStyles();
   const [dragId, setDragId] = useState(null);
   const dragY = useRef(new Animated.Value(0)).current;
   const idsRef = useRef(ids); idsRef.current = ids;   // 常に最新の並びを参照
@@ -1834,31 +1827,29 @@ function DragReorderList({ ids, renderRow, onChange, onDragActive, rowH = DRAG_R
     <View>
       {ids.map((id) => {
         const dragging = id === dragId;
-        // 長押し(200ms)でつまんでからドラッグ開始。外側スクロールと競合しない。
+        // グリップをつまんだ瞬間からドラッグ開始（長押し不要・縦方向だけ反応）。
         const pan = Gesture.Pan()
-          .activateAfterLongPress(200)
+          .activeOffsetY([-4, 4])
+          .hitSlop({ top: 10, bottom: 10, left: 12, right: 12 })
           .onStart(() => begin(id))
           .onUpdate((e) => update(id, e.translationY))
           .onFinalize(() => end());
-        return (
-          <GestureDetector key={id} gesture={pan}>
-            <Animated.View style={[
-              { marginBottom: 10 },
-              dragging && { transform: [{ translateY: dragY }], zIndex: 30, opacity: 0.97 },
-            ]}>
-              {renderRow(id, { dragging })}
-            </Animated.View>
+        const grip = (
+          <GestureDetector gesture={pan}>
+            <View style={s.sortGrip}><Ionicons name="reorder-three" size={28} color={dragging ? t.accent : t.sub} /></View>
           </GestureDetector>
+        );
+        return (
+          <Animated.View key={id} style={[
+            { marginBottom: 10 },
+            dragging && { transform: [{ translateY: dragY }], zIndex: 30 },
+          ]}>
+            {renderRow(id, { dragging, grip })}
+          </Animated.View>
         );
       })}
     </View>
   );
-}
-
-// 並べ替え行の右端に置く「つまむ」グリップ（三本線）
-function DragGrip() {
-  const t = useTheme(); const s = useStyles();
-  return <View style={s.sortGrip}><Ionicons name="reorder-three" size={26} color={t.sub} /></View>;
 }
 
 // ビジョンボードの並べ替え（枠の順番をドラッグで入れ替え）
@@ -1879,7 +1870,7 @@ function VisionSortModal({ visible, onClose, slots, onReorder }) {
             <Text style={s.giftHero}>並べ替え</Text>
             <Text style={s.giftLead}>枠を長押しでつまんで、上下にドラッグすると順番を入れ替えできます。</Text>
             <View style={{ marginTop: 16 }}>
-              <DragReorderList ids={ids} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging }) => {
+              <DragReorderList ids={ids} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging, grip }) => {
                 const sl = byId[id]; if (!sl) return null;
                 return (
                   <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }, rowDragging && s.sortRowDrag]}>
@@ -1887,7 +1878,7 @@ function VisionSortModal({ visible, onClose, slots, onReorder }) {
                       ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
                       : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
                     <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
-                    <DragGrip />
+                    {grip}
                   </View>
                 );
               }} />
@@ -2083,7 +2074,6 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
   const w = getWith(item.withWho);
   const links = [
     ...(item.sourceUrl ? [{ icon: snsMeta(item.sourcePlatform).icon, label: `${snsMeta(item.sourcePlatform).label}で開く`, url: item.sourceUrl }] : []),
-    ...(item.lat != null ? [{ icon: 'location', label: '撮影場所を地図で開く', url: coordsMapsUrl(item.lat, item.lng) }] : []),
     ...actionLinks(item.category, item.title),
   ];
   const [title, setTitle] = useState(item.title);
@@ -2097,24 +2087,12 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
       { text: 'キャンセル', style: 'cancel' }, { text: '削除', style: 'destructive', onPress: onDelete },
     ]);
   }
+  // 写真をタップ→そのまま写真ライブラリの切り取り(トリミング)画面へ（allowsEditing）
   async function changePhoto() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) onUpdate({ imageUri: res.assets[0].uri });
-  }
-  // 撮影場所を読む：切り抜き無し＋EXIFありで取り込み、GPSがあれば保存
-  async function readLocationFromPhoto() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, exif: true, quality: 0.6 });
-    if (res.canceled) return;
-    const asset = res.assets[0];
-    const gps = parseGps(asset.exif);
-    const patch = { imageUri: asset.uri };
-    if (gps) { patch.lat = gps.lat; patch.lng = gps.lng; Alert.alert('場所を読み取りました', '「撮影場所を地図で開く」から開けます。'); }
-    else { Alert.alert('位置情報が見つかりませんでした', 'この写真にGPSが無いか、iPhoneの設定で写真の位置情報が許可されていない可能性があります。'); }
-    onUpdate(patch);
   }
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
 
@@ -2131,14 +2109,22 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
         </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-        {item.imageUri
-          ? <Image source={{ uri: item.imageUri }} style={s.detailPhoto} />
-          : <View style={[s.detailPhoto, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={72} color="rgba(255,255,255,0.9)" /></View>}
-        {editMode && (
+        {/* 写真は1タップでトリミング（切り取り）へ。無い場合はタップで写真を追加。 */}
+        <Pressable onPress={changePhoto}>
+          {item.imageUri
+            ? <View>
+                <Image source={{ uri: item.imageUri }} style={s.detailPhoto} />
+                <View style={s.photoTapHint}><Ionicons name="crop-outline" size={13} color="#fff" /><Text style={s.photoTapHintText}>タップでトリミング</Text></View>
+              </View>
+            : <View style={[s.detailPhoto, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}>
+                <VIcon set={cat.iconSet} name={cat.icon} size={72} color="rgba(255,255,255,0.9)" />
+                <View style={s.photoTapHint}><Ionicons name="image-outline" size={13} color="#fff" /><Text style={s.photoTapHintText}>タップで写真を追加</Text></View>
+              </View>}
+        </Pressable>
+        {editMode && item.imageUri && (
           <View style={s.photoActions}>
-            <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="camera-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を変更</Text></Pressable>
-            <Pressable onPress={readLocationFromPhoto} style={s.photoActBtn}><Ionicons name="location-outline" size={16} color={t.accent} /><Text style={s.photoActText}>場所を読む</Text></Pressable>
-            {item.imageUri && <Pressable onPress={() => onUpdate({ imageUri: null, lat: null, lng: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>}
+            <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="crop-outline" size={16} color={t.accent} /><Text style={s.photoActText}>変更・トリミング</Text></Pressable>
+            <Pressable onPress={() => onUpdate({ imageUri: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>
           </View>
         )}
 
@@ -2236,7 +2222,10 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
           </Pressable>
         ))}
 
-        {done ? (
+        {editMode ? (
+          // 編集（入力）中は「完了」。入力の時点で達成しているわけではないので達成ボタンは出さない。
+          <Pressable style={({ pressed }) => [s.doneBtn, pressed && s.doneBtnPressed]} onPress={() => setEditMode(false)}><Ionicons name="checkmark" size={22} color="#fff" /><Text style={s.doneText}>完了</Text></Pressable>
+        ) : done ? (
           <Pressable style={s.undoneBtn} onPress={() => onUpdate({ doneAt: null })}><Text style={s.undoneText}>未達成に戻す</Text></Pressable>
         ) : (
           <Pressable style={({ pressed }) => [s.doneBtn, pressed && s.doneBtnPressed]} onPress={onDone}><Ionicons name="checkmark-circle" size={24} color="#fff" /><Text style={s.doneText}>達成した！</Text></Pressable>
@@ -2257,7 +2246,7 @@ function makeStyles(t) {
     sortRowDrag: { shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 10, backgroundColor: t.surface2 },
     sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
     sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },
-    sortGrip: { paddingHorizontal: 4, paddingVertical: 6 },
+    sortGrip: { paddingHorizontal: 8, paddingVertical: 10 },
     reorderBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginBottom: 12, backgroundColor: t.capsule, borderRadius: 999, paddingLeft: 16, paddingRight: 6, paddingVertical: 6 },
     reorderBarText: { fontSize: 13, color: t.text, fontWeight: '800' },
     reorderDone: { backgroundColor: t.accent, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 7 },
@@ -2282,15 +2271,23 @@ function makeStyles(t) {
     visionAddText: { color: t.accent, fontSize: 14, fontWeight: '800' },
     visionLabelWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: 'rgba(0,0,0,0.22)' },
     // ビジョンボード（ピン留めされた夢）
-    heroWrap: { paddingHorizontal: 24, marginTop: 6 },
-    heroCard: { borderRadius: 22, overflow: 'hidden', transform: [{ rotate: '-1deg' }], backgroundColor: t.surface, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
+    heroWrap: { paddingHorizontal: 24, marginTop: 18 },
+    // 白フチの写真プリント（四角め）＋コルクに刺した画鋲
+    heroFrame: { backgroundColor: '#FBF8F1', borderRadius: 6, padding: 9, paddingBottom: 9, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 10 }, elevation: 9 },
+    heroPhoto: { width: '100%', aspectRatio: 4 / 3, borderRadius: 3, overflow: 'hidden' },
     heroShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '40%' },
-    heroTextWrap: { position: 'absolute', left: 16, right: 16, bottom: 14, gap: 6 },
+    heroTextWrap: { position: 'absolute', left: 14, right: 14, bottom: 12, gap: 6 },
     heroStatus: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     heroStatusText: { color: '#fff', fontSize: 12, fontWeight: '800' },
     heroTitle: { color: '#fff', fontSize: 24, lineHeight: 30, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 8 },
-    washi: { position: 'absolute', top: -6, left: 22, width: 60, height: 20, backgroundColor: 'rgba(255,178,89,0.55)', transform: [{ rotate: '-8deg' }], borderRadius: 2 },
-    visionCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: t.surface, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
+    visionFrame: { backgroundColor: '#FBF8F1', borderRadius: 5, padding: 7, paddingBottom: 6, shadowColor: '#000', shadowOpacity: 0.24, shadowRadius: 10, shadowOffset: { width: 0, height: 7 }, elevation: 6 },
+    visionPhoto: { width: '100%', aspectRatio: 1, borderRadius: 2, overflow: 'hidden' },
+    visionCaption: { paddingTop: 8, paddingHorizontal: 3, paddingBottom: 3, gap: 4 },
+    visionCaptionText: { fontSize: 13.5, lineHeight: 19, color: '#3A322A', fontFamily: FONT.bold },
+    // 画鋲（プッシュピン）
+    pinWrap: { position: 'absolute', top: -11, left: 0, right: 0, alignItems: 'center', zIndex: 6 },
+    pinHead: { width: 18, height: 18, borderRadius: 9, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 3, shadowOffset: { width: 0, height: 3 }, elevation: 7 },
+    pinShine: { position: 'absolute', top: 3, left: 4, width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.75)' },
     visionStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
     visionStatusLabel: { fontSize: 12, color: t.sub, fontWeight: '700' },
     statusDot: { width: 8, height: 8, borderRadius: 4 },
@@ -2493,13 +2490,13 @@ function makeStyles(t) {
     qcCardChipText: { color: '#fff', fontSize: 11, fontWeight: '800' },
     qcCardPanel: { padding: 14 },
     qcCardTitle: { fontSize: 15, lineHeight: 21, color: t.text, fontFamily: FONT.bold },
-    qcConfirm: { marginTop: 22, alignItems: 'center', width: 260 },
-    qcConfirmText: { fontSize: 15, color: '#fff', fontWeight: '800', marginBottom: 12 },
-    qcConfirmBtns: { flexDirection: 'row', gap: 10, alignItems: 'stretch', alignSelf: 'stretch' },
-    qcEditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)' },
-    qcEditText: { color: t.accent, fontSize: 14, fontWeight: '800' },
-    qcSaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 13 },
-    qcSaveText: { color: '#fff', fontSize: 15, fontWeight: '900', fontFamily: FONT.bold },
+    qcConfirm: { marginTop: 24, alignItems: 'center', width: 320, maxWidth: '90%' },
+    qcConfirmText: { fontSize: 15, color: '#fff', fontWeight: '800', marginBottom: 14 },
+    qcConfirmBtns: { flexDirection: 'row', gap: 12, alignItems: 'stretch', alignSelf: 'stretch' },
+    qcEditBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 18, paddingVertical: 18, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)' },
+    qcEditText: { color: t.accent, fontSize: 15, fontWeight: '800' },
+    qcSaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 18, paddingHorizontal: 24 },
+    qcSaveText: { color: '#fff', fontSize: 18, fontWeight: '900', fontFamily: FONT.bold },
 
     // 保存シート
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -2544,6 +2541,8 @@ function makeStyles(t) {
     pillTextOn: { color: '#fff', fontWeight: '700', fontSize: 12.5 },
     memoText: { color: t.sub, fontSize: 14, lineHeight: 21, marginTop: 14 },
     detailPhoto: { width: '100%', height: 240, borderRadius: 22 },
+    photoTapHint: { position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+    photoTapHintText: { color: '#fff', fontSize: 11, fontWeight: '700' },
     photoActions: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 12 },
     photoActBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     photoActText: { color: t.accent, fontSize: 13, fontWeight: '700' },
