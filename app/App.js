@@ -65,6 +65,8 @@ const GARDEN_KEY = 'wannalog_garden_v1';
 const GARDEN_ENABLED = false;
 // 共有／プレゼント機能は一旦保留（true で復活）。スクショ保存の強化に集中する。
 const SHARE_ENABLED = false;
+// バックアップは試作・引っ越し用（リリース版はクラウド同期に置換予定）。今は非表示（true で復活）。
+const BACKUP_ENABLED = false;
 
 // ビジョンボードは「したい」とは別データ。テンプレの枠に写真を嵌める。
 // 「3枚テンプレ」を初期表示にして、足りなければ「枠を追加」で増やせる。
@@ -168,7 +170,6 @@ export default function App() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false); // スクショ/リンクからのクイック保存
   const [detailStartEdit, setDetailStartEdit] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
   const [giftOpen, setGiftOpen] = useState(false);
   const [gardenOpen, setGardenOpen] = useState(false);
   const [garden, setGarden] = useState({ points: 0, waterDate: '', waterCount: 0 });
@@ -389,7 +390,7 @@ export default function App() {
           />
         ) : (
           <>
-            {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onSort={() => setSortOpen(true)} density={density} doneCount={doneCount} activeCount={activeCount} />}
+            {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onReorder={reorderItems} density={density} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} onSnooze={(id) => applyReminder(id, { remind: 'at', remindAt: Date.now() + DAY_MS })} onStop={(id) => applyReminder(id, { remind: 'none' })} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
@@ -404,9 +405,6 @@ export default function App() {
 
         <SaveModal visible={saveOpen} onClose={() => setSaveOpen(false)}
           onSave={(data) => { addItem(data); setSaveOpen(false); }} />
-
-        <SortModal visible={sortOpen} onClose={() => setSortOpen(false)}
-          items={items.filter((it) => !it.doneAt)} onReorder={reorderItems} />
 
         <GiftModal visible={giftOpen} onClose={() => setGiftOpen(false)} items={items} name={profileName} onOpenLink={openInBrowser} onOpen={(it) => { setGiftOpen(false); openItem(it); }} />
 
@@ -447,18 +445,24 @@ function currentStreak(items) {
   return streak;
 }
 
-// カテゴリ色＋白の2トーンの紙吹雪（軽量・useNativeDriver）
-function Confetti({ colors, count, originY }) {
-  const parts = useRef([...Array(count)].map(() => ({
-    x: (Math.random() * 2 - 1) * 150,
-    y: 220 + Math.random() * 160,
-    delay: Math.random() * 120,
-    dur: 900 + Math.random() * 700,
-    size: 6 + Math.random() * 6,
-    color: colors[Math.floor(Math.random() * colors.length)],
-    rot: (Math.random() * 2 - 1) * 360,
-    a: new Animated.Value(0),
-  }))).current;
+// 自然な物理の紙吹雪：上に弾けて重力で落ちる（放物線）＋回転＋フェード。
+function Confetti({ colors, count }) {
+  const parts = useRef([...Array(count)].map(() => {
+    const angle = (Math.random() - 0.5) * Math.PI * 0.95;      // 上向き中心の広がり
+    const speed = 90 + Math.random() * 210;
+    return {
+      x: Math.sin(angle) * speed,
+      rise: 110 + Math.random() * 170,                         // 上昇のピーク高さ
+      fall: 340 + Math.random() * 300,                         // 落下量
+      delay: Math.random() * 140,
+      dur: 1200 + Math.random() * 1000,
+      size: 6 + Math.random() * 8,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: (Math.random() * 2 - 1) * 900,
+      round: Math.random() > 0.5,
+      a: new Animated.Value(0),
+    };
+  })).current;
   useEffect(() => {
     Animated.parallel(parts.map((p) => Animated.timing(p.a, { toValue: 1, duration: p.dur, delay: p.delay, useNativeDriver: true }))).start();
   }, []);
@@ -466,12 +470,13 @@ function Confetti({ colors, count, originY }) {
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {parts.map((p, i) => (
         <Animated.View key={i} style={{
-          position: 'absolute', left: '50%', top: originY,
-          width: p.size, height: p.size, borderRadius: 2, backgroundColor: p.color,
-          opacity: p.a.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] }),
+          position: 'absolute', left: '50%', top: '46%',
+          width: p.size, height: p.round ? p.size : p.size * 0.5,
+          borderRadius: p.round ? p.size / 2 : 1, backgroundColor: p.color,
+          opacity: p.a.interpolate({ inputRange: [0, 0.15, 0.75, 1], outputRange: [0, 1, 1, 0] }),
           transform: [
             { translateX: p.a.interpolate({ inputRange: [0, 1], outputRange: [0, p.x] }) },
-            { translateY: p.a.interpolate({ inputRange: [0, 1], outputRange: [0, p.y] }) },
+            { translateY: p.a.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, -p.rise, p.fall] }) }, // 放物線
             { rotate: p.a.interpolate({ inputRange: [0, 1], outputRange: ['0deg', p.rot + 'deg'] }) },
           ],
         }} />
@@ -482,100 +487,66 @@ function Confetti({ colors, count, originY }) {
 
 function Celebration({ celeb, onTabBounce, onDone }) {
   const t = useTheme(); const s = useStyles();
-  const { width, height } = useWindowDimensions();
   const { item, serious, streak } = celeb;
   const cat = getCategory(item.category);
-  const check = useRef(new Animated.Value(0)).current;   // チェックの自筆（ポップ）
-  const develop = useRef(new Animated.Value(0)).current;  // 現像（白ヴェールが晴れる）
-  const slide = useRef(new Animated.Value(0)).current;    // カードが少し下へ
-  const flash = useRef(new Animated.Value(0)).current;    // 本気フラッシュ
-  const sheet = useRef(new Animated.Value(0)).current;    // 本気メッセージのせり上がり
-  const fly = useRef(new Animated.Value(0)).current;      // マイページへ飛ぶ
+  const bg = useRef(new Animated.Value(0)).current;    // 背景のふわっとフェード
+  const pop = useRef(new Animated.Value(0)).current;   // カード＆チェックのやわらかいポップ
+  const glow = useRef(new Animated.Value(0)).current;  // 本気のゴールドグロー（呼吸）
   const [confetti, setConfetti] = useState(false);
   const done = useRef(false);
-
-  function flyAway() {
-    Animated.timing(fly, { toValue: 1, duration: 420, useNativeDriver: true }).start(() => { onTabBounce && onTabBounce(); finish(); });
-  }
-  function finish() { if (!done.current) { done.current = true; onDone(); } }
+  function finish() { if (!done.current) { done.current = true; onTabBounce && onTabBounce(); onDone(); } }
 
   useEffect(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.sequence([
-      Animated.spring(check, { toValue: 1, friction: 5, tension: 130, useNativeDriver: true }),
-      Animated.parallel([
-        Animated.timing(develop, { toValue: 1, duration: 620, useNativeDriver: true }),
-        Animated.spring(slide, { toValue: 1, friction: 7, useNativeDriver: true }),
-      ]),
-    ]).start(() => {
-      setConfetti(true);
-      if (serious) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Animated.sequence([
-          Animated.timing(flash, { toValue: 1, duration: 120, useNativeDriver: true }),
-          Animated.timing(flash, { toValue: 0, duration: 220, useNativeDriver: true }),
-          Animated.spring(sheet, { toValue: 1, friction: 8, useNativeDriver: true }),
-          Animated.delay(1300),
-          Animated.timing(sheet, { toValue: 0, duration: 250, useNativeDriver: true }),
-        ]).start(() => flyAway());
-      } else {
-        setTimeout(flyAway, 480);
-      }
-    });
-    return () => {};
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Animated.parallel([
+      Animated.timing(bg, { toValue: 1, duration: 240, useNativeDriver: true }),
+      Animated.spring(pop, { toValue: 1, friction: 6, tension: 70, useNativeDriver: true }),
+    ]).start(() => setConfetti(true));
+    if (serious) {
+      Animated.loop(Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0, duration: 700, useNativeDriver: true }),
+      ])).start();
+    }
+    const timer = setTimeout(() => {
+      Animated.timing(bg, { toValue: 0, duration: 320, useNativeDriver: true }).start(() => finish());
+    }, serious ? 2400 : 1700);
+    return () => clearTimeout(timer);
   }, []);
 
-  // マイページタブ（右下）へ縮んで飛ぶ
-  const flyX = fly.interpolate({ inputRange: [0, 1], outputRange: [0, width * 0.30] });
-  const flyY = fly.interpolate({ inputRange: [0, 1], outputRange: [0, height * 0.42] });
-  const flyScale = fly.interpolate({ inputRange: [0, 1], outputRange: [1, 0.14] });
-  const cardShift = slide.interpolate({ inputRange: [0, 1], outputRange: [-8, 14] });
+  function skip() { Animated.timing(bg, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => finish()); }
+  const colors = serious ? [cat.tint, '#FFFFFF', t.gold] : [cat.tint, '#FFFFFF'];
 
   return (
-    <Pressable style={s.celebrate} onPress={finish}>
-      {/* 本気フラッシュ */}
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: t.accent, opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0, 0.15] }) }]} />
-
-      {/* ポラロイド化するカード */}
-      <Animated.View style={{ transform: [{ translateY: cardShift }, { translateX: flyX }, { translateY: flyY }, { scale: flyScale }] }}>
+    <Animated.View style={[s.celebrate, { opacity: bg }]}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={skip} />
+      <Animated.View style={{ alignItems: 'center', opacity: pop, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }, { translateY: pop.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }}>
+        {serious && <Animated.View pointerEvents="none" style={[s.celebGlow, { backgroundColor: t.gold, opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.34] }) }]} />}
         <View style={[s.celebCard, { shadowColor: cat.tint }]}>
           <View style={s.celebPhotoWrap}>
             {item.imageUri
               ? <Image source={{ uri: item.imageUri }} style={s.celebPhoto} />
-              : <LinearGradient colors={[cat.soft, '#FFFFFF']} style={[s.celebPhoto, { alignItems: 'center', justifyContent: 'center' }]}>
+              : <LinearGradient colors={[catSoft(cat, t.mode), '#FFFFFF']} style={[s.celebPhoto, { alignItems: 'center', justifyContent: 'center' }]}>
                   <VIcon set={cat.iconSet} name={cat.icon} size={54} color={cat.tint} />
                 </LinearGradient>}
-            {/* 現像の白ヴェール（晴れていく） */}
-            <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: develop.interpolate({ inputRange: [0, 1], outputRange: [0.92, 0] }) }]} />
-            {/* 自筆チェック */}
-            <Animated.View style={[s.celebCheck, { opacity: check, transform: [{ scale: check.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] }]}>
-              <Ionicons name="checkmark-circle" size={54} color={cat.tint} />
-            </Animated.View>
+            <View style={s.celebCheck}><Ionicons name="checkmark-circle" size={54} color={cat.tint} /></View>
           </View>
           <Text style={s.celebCaption} numberOfLines={1}>{item.title}</Text>
         </View>
+        <Text style={s.celebBig}>叶えた！</Text>
+        {serious && streak > 1 ? <Text style={s.celebStreak}>{streak}日連続で叶えています</Text> : null}
       </Animated.View>
-
-      {confetti && <Confetti colors={[cat.tint, '#FFFFFF']} count={serious ? 74 : 26} originY={height * 0.42} />}
-
-      {/* 本気のときだけ：下からせり上がるメッセージ＋ストリーク */}
-      {serious && (
-        <Animated.View pointerEvents="none" style={[s.celebSheet, { transform: [{ translateY: sheet.interpolate({ inputRange: [0, 1], outputRange: [280, 0] }) }] }]}>
-          <Ionicons name="sparkles" size={22} color={t.gold} />
-          <Text style={s.celebSheetTitle}>やったね、叶えました</Text>
-          {streak > 1 ? <Text style={s.celebSheetSub}>{streak}日連続で叶えています</Text> : <Text style={s.celebSheetSub}>その一歩が、夢に近づく。</Text>}
-        </Animated.View>
-      )}
-    </Pressable>
+      {confetti && <Confetti colors={colors} count={serious ? 90 : 42} />}
+    </Animated.View>
   );
 }
 
 /* ---------- 触感フィードバック（押すとバネで縮む） ---------- */
-function PressBounce({ onPress, style, children, scaleTo = 0.97 }) {
+function PressBounce({ onPress, onLongPress, style, children, scaleTo = 0.97 }) {
   const a = useRef(new Animated.Value(1)).current;
   const to = (v) => Animated.spring(a, { toValue: v, useNativeDriver: true, stiffness: 300, damping: 20, mass: 0.6 }).start();
   return (
-    <Pressable onPress={onPress} onPressIn={() => to(scaleTo)} onPressOut={() => to(1)}>
+    <Pressable onPress={onPress} onLongPress={onLongPress} onPressIn={() => to(scaleTo)} onPressOut={() => to(1)}>
       <Animated.View style={[style, { transform: [{ scale: a }] }]}>{children}</Animated.View>
     </Pressable>
   );
@@ -588,7 +559,7 @@ function cardAspect(id) { return CARD_ASPECTS[hashCode(String(id)) % CARD_ASPECT
 
 /* ---------- Wishカード（キャンディボックス：画像＋白い情報パネルの2段） ---------- */
 // feature=true は2列幅の大カード（本気を目立たせる／ゆったり表示にも使う）
-function PhotoTile({ item, onPress, feature = false }) {
+function PhotoTile({ item, onPress, onLongPress, feature = false }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
@@ -596,7 +567,7 @@ function PhotoTile({ item, onPress, feature = false }) {
   const w = getWith(item.withWho);
   const heat = item.heat || 2;
   return (
-    <PressBounce onPress={onPress} style={[s.card, { shadowColor: cat.tint }]}>
+    <PressBounce onPress={onPress} onLongPress={onLongPress} style={[s.card, { shadowColor: cat.tint }]}>
       <View style={{ width: '100%', aspectRatio: feature ? 3 / 2 : cardAspect(item.id) }}>
         {item.imageUri
           ? <Image source={{ uri: item.imageUri }} style={s.cardImg} />
@@ -641,8 +612,9 @@ function homeBlocks(visible) {
   flush();
   return blocks;
 }
-function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount, activeCount }) {
+function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
+  const [reorderMode, setReorderMode] = useState(false);
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
   let visible;
@@ -652,8 +624,10 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
   else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
   else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
   const canSort = filter === 'all' && visible.length > 1;
+  const inReorder = reorderMode && canSort;
+  const byId = Object.fromEntries(visible.map((it) => [it.id, it]));
   // 「そろそろ思い出す」：締切が近い（今日/今週）未達成を先出し（0件なら非表示）
-  const upcoming = filter === 'all' ? items.filter((it) => !it.doneAt && (it.dueTag === 'today' || it.dueTag === 'thisWeek')).slice(0, 4) : [];
+  const upcoming = filter === 'all' && !inReorder ? items.filter((it) => !it.doneAt && (it.dueTag === 'today' || it.dueTag === 'thisWeek')).slice(0, 4) : [];
   const comfy = density === 'comfy' && filter === 'all';
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
@@ -661,8 +635,8 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
         <View style={s.brandRow}>
           <Text style={s.brand}>WannaLog</Text>
           {canSort && (
-            <Pressable style={s.ghostBtn} onPress={onSort} accessibilityLabel="並べ替え">
-              <Ionicons name="swap-vertical" size={18} color={t.sub} />
+            <Pressable style={s.ghostBtn} onPress={() => setReorderMode((v) => !v)} accessibilityLabel="並べ替え">
+              <Ionicons name={inReorder ? 'checkmark' : 'swap-vertical'} size={18} color={inReorder ? t.accent : t.sub} />
             </Pressable>
           )}
         </View>
@@ -670,39 +644,67 @@ function HomeTab({ items, filter, setFilter, onOpen, onSort, density, doneCount,
           <Text style={s.statCapsuleText}>叶えた <Text style={s.statCapsuleNum}>{doneCount}</Text>　・　のこり <Text style={s.statCapsuleNum}>{activeCount}</Text></Text>
         </View>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-        <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
-        <Chip icon="flame" label="本気" active={filter === 'serious'} onPress={() => setFilter('serious')} />
-        {CATEGORIES.map((c) => (
-          <Chip key={c.key} cat={c} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
-        ))}
-        {snsPresent.map((p) => (
-          <Chip key={p} icon={snsMeta(p).icon} label={snsMeta(p).label} active={filter === 'sns:' + p} onPress={() => setFilter('sns:' + p)} />
-        ))}
-        <Chip icon="trophy" label={`叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
-      </ScrollView>
 
-      {upcoming.length > 0 && <RemindCarousel items={upcoming} onOpen={onOpen} />}
-
-      {visible.length === 0 ? (
-        <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
-      ) : comfy ? (
-        <View style={{ paddingHorizontal: 20, gap: 16, paddingTop: 2 }}>
-          {visible.map((it, i) => (
-            <FadeInView key={it.id} index={i}><PhotoTile item={it} feature onPress={() => onOpen(it)} /></FadeInView>
-          ))}
+      {inReorder ? (
+        <View>
+          <View style={s.reorderBar}>
+            <Text style={s.reorderBarText}>並べ替え中　▲▼ で移動</Text>
+            <Pressable onPress={() => setReorderMode(false)} style={s.reorderDone}><Text style={s.reorderDoneText}>完了</Text></Pressable>
+          </View>
+          <View style={{ paddingHorizontal: 20 }}>
+            <ReorderList ids={visible.map((it) => it.id)} onChange={onReorder} renderRow={(id, ctrl) => {
+              const it = byId[id]; if (!it) return null;
+              const cat = getCategory(it.category);
+              return (
+                <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: cat.tint }]}>
+                  {it.imageUri
+                    ? <Image source={{ uri: it.imageUri }} style={s.sortThumb} />
+                    : <View style={[s.sortThumb, { backgroundColor: catSoft(cat, t.mode), alignItems: 'center', justifyContent: 'center' }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color={cat.tint} /></View>}
+                  <Text style={s.sortTitle} numberOfLines={1}>{it.title}</Text>
+                  <MoveControls ctrl={ctrl} />
+                </View>
+              );
+            }} />
+          </View>
         </View>
-      ) : filter === 'all' ? (
-        homeBlocks(visible).map((b, bi) => b.type === 'feature'
-          ? <FadeInView key={b.item.id} index={bi}><View style={{ paddingHorizontal: 20, paddingTop: 2 }}><PhotoTile item={b.item} feature onPress={() => onOpen(b.item)} /></View></FadeInView>
-          : <Masonry key={'m' + bi} items={b.items} renderTile={(it, i) => (
+      ) : (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+            <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
+            <Chip icon="flame" label="本気" active={filter === 'serious'} onPress={() => setFilter('serious')} />
+            {CATEGORIES.map((c) => (
+              <Chip key={c.key} cat={c} label={c.label} active={filter === c.key} onPress={() => setFilter(c.key)} />
+            ))}
+            {snsPresent.map((p) => (
+              <Chip key={p} icon={snsMeta(p).icon} label={snsMeta(p).label} active={filter === 'sns:' + p} onPress={() => setFilter('sns:' + p)} />
+            ))}
+            <Chip icon="trophy" label={`叶えた ${doneCount}`} active={filter === 'done'} onPress={() => setFilter('done')} />
+          </ScrollView>
+
+          {upcoming.length > 0 && <RemindCarousel items={upcoming} onOpen={onOpen} />}
+          {canSort && <Text style={s.reorderHintHome}>カードを長押し、または右上の ⇅ で並べ替え</Text>}
+
+          {visible.length === 0 ? (
+            <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
+          ) : comfy ? (
+            <View style={{ paddingHorizontal: 20, gap: 16, paddingTop: 2 }}>
+              {visible.map((it, i) => (
+                <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} onLongPress={() => canSort && setReorderMode(true)} feature /></FadeInView>
+              ))}
+            </View>
+          ) : filter === 'all' ? (
+            homeBlocks(visible).map((b, bi) => b.type === 'feature'
+              ? <FadeInView key={b.item.id} index={bi}><View style={{ paddingHorizontal: 20, paddingTop: 2 }}><PhotoTile item={b.item} feature onPress={() => onOpen(b.item)} onLongPress={() => setReorderMode(true)} /></View></FadeInView>
+              : <Masonry key={'m' + bi} items={b.items} renderTile={(it, i) => (
+                  <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} onLongPress={() => canSort && setReorderMode(true)} /></FadeInView>
+                )} />
+            )
+          ) : (
+            <Masonry items={visible} renderTile={(it, i) => (
               <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} /></FadeInView>
             )} />
-        )
-      ) : (
-        <Masonry items={visible} renderTile={(it, i) => (
-          <FadeInView key={it.id} index={i}><PhotoTile item={it} onPress={() => onOpen(it)} /></FadeInView>
-        )} />
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -1120,7 +1122,9 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
         </View>
       </View>
 
-      {/* バックアップ（書き出し／読み込み） */}
+      {/* バックアップ（試作・引っ越し用：BACKUP_ENABLED で表示） */}
+      {BACKUP_ENABLED && (
+      <>
       <View style={s.settingRow}>
         <View style={s.settingLeft}>
           <Ionicons name="save-outline" size={20} color={t.accent} />
@@ -1132,6 +1136,8 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
         </View>
       </View>
       <Text style={s.backupHint}>「したい」やビジョンを書き出して保存できます。機種変更や本物アプリへの引っ越しに（※写真そのものは含まれません）。</Text>
+      </>
+      )}
 
       {/* 箱庭（将来用にステイ：GARDEN_ENABLED で表示切替） */}
       {GARDEN_ENABLED && (
@@ -1410,7 +1416,7 @@ function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
     const started = Date.now();
     const ogp = await fetchOgp(url);
     const maps = isMapsUrl(url);
-    setDraft({ title: cleanTitle(ogp.title, url, '') || '', category: guessCategoryFromUrl(url), imageUri: (ogp.image && !maps) ? ogp.image : null, link: url });
+    setDraft({ title: cleanTitle(ogp.title, ogp.finalUrl || url, '') || '', category: guessCategoryFromUrl(url), imageUri: (ogp.image && !maps) ? ogp.image : null, link: url });
     setTimeout(runReveal, Math.max(0, 1100 - (Date.now() - started)));
   }
   function runReveal() {
@@ -1447,22 +1453,24 @@ function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
         <Pressable style={StyleSheet.absoluteFill} onPress={phase === 'pick' ? onClose : undefined} />
 
         {phase === 'pick' && (
-          <View style={s.qcSheet}>
-            <View style={s.qcHandle} />
-            <Text style={s.qcTitle}>“したい”を、熱いうちに</Text>
-            <Text style={s.qcSub}>スクショやリンクから、ほぼワンタップで。</Text>
-            <PressBounce onPress={startFromImage} style={{ borderRadius: 18, overflow: 'hidden', marginTop: 16 }}>
-              <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.qcBigBtn}>
-                <Ionicons name="image" size={22} color="#fff" /><Text style={s.qcBigBtnText}>スクショ・写真から</Text>
-              </LinearGradient>
-            </PressBounce>
-            <View style={s.qcLinkRow}>
-              <Ionicons name="link" size={16} color={t.sub} />
-              <TextInput style={s.qcLinkInput} value={linkInput} onChangeText={setLinkInput} placeholder="リンクを貼る（楽天・YouTube・地図…）" placeholderTextColor={t.sub} autoCapitalize="none" autoCorrect={false} keyboardType="url" onSubmitEditing={startFromLink} />
-              <Pressable onPress={startFromLink} style={s.qcLinkGo}><Ionicons name="arrow-forward" size={18} color="#fff" /></Pressable>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.qcSheetWrap}>
+            <View style={s.qcSheet}>
+              <View style={s.qcHandle} />
+              <Text style={s.qcTitle}>“したい”を、熱いうちに</Text>
+              <Text style={s.qcSub}>スクショやリンクから、ほぼワンタップで。</Text>
+              <PressBounce onPress={startFromImage} style={{ borderRadius: 18, overflow: 'hidden', marginTop: 16 }}>
+                <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.qcBigBtn}>
+                  <Ionicons name="image" size={22} color="#fff" /><Text style={s.qcBigBtnText}>スクショ・写真から</Text>
+                </LinearGradient>
+              </PressBounce>
+              <View style={s.qcLinkRow}>
+                <Ionicons name="link" size={16} color={t.sub} />
+                <TextInput style={s.qcLinkInput} value={linkInput} onChangeText={setLinkInput} placeholder="リンクを貼る（楽天・YouTube・地図…）" placeholderTextColor={t.sub} autoCapitalize="none" autoCorrect={false} keyboardType="url" onSubmitEditing={startFromLink} returnKeyType="go" />
+                <Pressable onPress={startFromLink} style={s.qcLinkGo}><Ionicons name="arrow-forward" size={18} color="#fff" /></Pressable>
+              </View>
+              <Pressable onPress={onManual} style={s.qcManual}><Text style={s.qcManualText}>自分で書いて残す</Text></Pressable>
             </View>
-            <Pressable onPress={onManual} style={s.qcManual}><Text style={s.qcManualText}>自分で書いて残す</Text></Pressable>
-          </View>
+          </KeyboardAvoidingView>
         )}
 
         {phase === 'processing' && (
@@ -1568,7 +1576,7 @@ function SaveModal({ visible, onClose, onSave }) {
     const maps = isMapsUrl(url); // マップの og:image は汎用ピンなので画像は使わない
     let got = false;
     if (ogp.image && !maps && !image) { setImage(ogp.image); setCoords(null); got = true; }
-    const better = cleanTitle(ogp.title, url, '');
+    const better = cleanTitle(ogp.title, ogp.finalUrl || url, '');
     if (better && !title.trim()) { setTitle(better); got = true; }
     const guess = guessCategoryFromUrl(url); // ドメインからカテゴリを推測
     if (guess) { setCategory(guess); got = true; }
@@ -1993,7 +2001,6 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
   ];
   const [title, setTitle] = useState(item.title);
   const [memo, setMemo] = useState(item.memo || '');
-  const [recipe, setRecipe] = useState(item.recipe || '');
   const [editMode, setEditMode] = useState(!!startInEdit);
 
   async function testNotify() { await scheduleInSeconds(item, 10); Alert.alert('テスト通知を予約しました', '約10秒後に通知が届きます。'); }
@@ -2104,14 +2111,6 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
             <Text style={s.sectionLabel}>メモ</Text>
             <TextInput style={s.memoInput} value={memo} onChangeText={(v) => { setMemo(v); onUpdate({ memo: v }); }} placeholder="ひとことメモ（任意）" placeholderTextColor={t.sub} multiline />
 
-            {item.category === 'cook' && (
-              <>
-                <Text style={s.sectionLabel}>レシピ（コピペOK）</Text>
-                <TextInput style={s.recipeInput} value={recipe} onChangeText={(v) => { setRecipe(v); onUpdate({ recipe: v }); }}
-                  placeholder="レシピのURLや材料・手順を貼り付け（任意）" placeholderTextColor={t.sub} multiline />
-              </>
-            )}
-
             {SHARE_ENABLED && (
               <>
                 <View style={s.giftToggleRow}>
@@ -2136,12 +2135,6 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
               {item.isPublic ? <View style={[s.pill, { backgroundColor: t.accent }]}><Ionicons name="gift" size={13} color="#fff" /><Text style={s.pillTextOn}>ギフト公開中</Text></View> : null}
             </View>
             {memo ? <Text style={s.memoText}>{memo}</Text> : null}
-            {item.category === 'cook' && item.recipe ? (
-              <View style={s.recipeBox}>
-                <Text style={s.recipeBoxTitle}>レシピ</Text>
-                <Text style={s.recipeBoxText} selectable>{item.recipe}</Text>
-              </View>
-            ) : null}
           </>
         )}
 
@@ -2177,6 +2170,11 @@ function makeStyles(t) {
     sortThumb: { width: 44, height: 44, borderRadius: 10, overflow: 'hidden' },
     sortTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text },
     sortMoveCol: { justifyContent: 'center', gap: 2 },
+    reorderBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginBottom: 12, backgroundColor: t.capsule, borderRadius: 999, paddingLeft: 16, paddingRight: 6, paddingVertical: 6 },
+    reorderBarText: { fontSize: 13, color: t.text, fontWeight: '800' },
+    reorderDone: { backgroundColor: t.accent, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 7 },
+    reorderDoneText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+    reorderHintHome: { fontSize: 11.5, color: t.sub, paddingHorizontal: 20, marginBottom: 8 },
     sortMoveBtn: { width: 44, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: t.surface2 },
     brand: { fontSize: 24, fontWeight: '700', color: t.text, letterSpacing: 0.3, fontFamily: FONT.bold },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
@@ -2381,7 +2379,8 @@ function makeStyles(t) {
 
     // クイック保存
     qcBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
-    qcSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: t.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 34 },
+    qcSheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+    qcSheet: { backgroundColor: t.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 34 },
     qcHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: t.line, marginBottom: 16 },
     qcTitle: { fontSize: 20, color: t.text, fontFamily: FONT.bold },
     qcSub: { fontSize: 13, color: t.sub, marginTop: 6 },
@@ -2466,10 +2465,6 @@ function makeStyles(t) {
     detailCat: { fontSize: 14, color: t.sub },
     sectionLabel: { marginTop: 24, marginBottom: 10, fontSize: 13, fontWeight: '800', color: t.text },
     memoInput: { backgroundColor: t.surface, borderRadius: 14, padding: 14, fontSize: 15, color: t.text, minHeight: 80, textAlignVertical: 'top' },
-    recipeInput: { backgroundColor: t.surface, borderRadius: 14, padding: 14, fontSize: 14, color: t.text, minHeight: 120, textAlignVertical: 'top', borderWidth: 1, borderColor: t.line },
-    recipeBox: { marginTop: 14, backgroundColor: t.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: t.line },
-    recipeBoxTitle: { fontSize: 12, fontWeight: '800', color: t.accent, marginBottom: 6 },
-    recipeBoxText: { fontSize: 14, color: t.text, lineHeight: 21 },
     actionBtn: { marginBottom: 10, backgroundColor: t.surface, borderRadius: 14, paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     actionLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     actionText: { fontSize: 15, fontWeight: '700', color: t.text },
@@ -2487,9 +2482,9 @@ function makeStyles(t) {
     celebPhoto: { width: '100%', height: '100%' },
     celebCheck: { position: 'absolute', backgroundColor: '#fff', borderRadius: 27 },
     celebCaption: { marginTop: 10, fontSize: 15, color: '#2B2622', textAlign: 'center', fontFamily: FONT.bold },
-    celebSheet: { position: 'absolute', left: 20, right: 20, bottom: 30, backgroundColor: t.surface, borderRadius: 20, paddingVertical: 20, paddingHorizontal: 16, alignItems: 'center', gap: 6, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
-    celebSheetTitle: { fontSize: 18, color: t.text, fontFamily: FONT.bold },
-    celebSheetSub: { fontSize: 14, color: t.accent, fontFamily: FONT.num },
+    celebGlow: { position: 'absolute', width: 300, height: 360, borderRadius: 60, top: -30 },
+    celebBig: { marginTop: 18, fontSize: 26, color: t.gold, fontFamily: FONT.bold, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6 },
+    celebStreak: { marginTop: 6, fontSize: 14, color: t.accent, fontFamily: FONT.num },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
   for (const k in styles) {

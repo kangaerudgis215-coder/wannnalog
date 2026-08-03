@@ -42,12 +42,9 @@ export const palettes = {
 // 「原色はアイコン一点だけ、背景はパステル、影は極薄」で上品に見せる（キャンディボックス）。
 export const CATEGORIES = [
   { key: 'eat', label: '食べたい', icon: 'restaurant', color: '#FF6F5E', soft: '#FFE4DE', darkSoft: 'rgba(255,111,94,0.16)', tint: '#FF6F5E', glow: 'rgba(255,111,94,0.35)' },
-  { key: 'cook', label: '作りたい', icon: 'chef-hat', iconSet: 'mci', color: '#F2A93B', soft: '#FFECD1', darkSoft: 'rgba(242,169,59,0.16)', tint: '#F2A93B', glow: 'rgba(242,169,59,0.35)' },
   { key: 'go', label: '行きたい', icon: 'location', color: '#4FA3D1', soft: '#DCEEFB', darkSoft: 'rgba(79,163,209,0.16)', tint: '#4FA3D1', glow: 'rgba(79,163,209,0.35)' },
   { key: 'see', label: '見たい', icon: 'film', color: '#8B7CF6', soft: '#E7E2FF', darkSoft: 'rgba(139,124,246,0.16)', tint: '#8B7CF6', glow: 'rgba(139,124,246,0.35)' },
   { key: 'want', label: '欲しい', icon: 'pricetag', color: '#D66BC7', soft: '#F8DFF5', darkSoft: 'rgba(214,107,199,0.16)', tint: '#D66BC7', glow: 'rgba(214,107,199,0.35)' },
-  { key: 'do', label: 'やりたい', icon: 'barbell', color: '#4FAF77', soft: '#DDF3E4', darkSoft: 'rgba(79,175,119,0.16)', tint: '#4FAF77', glow: 'rgba(79,175,119,0.35)' },
-  { key: 'know', label: '知りたい', icon: 'book', color: '#D99A1F', soft: '#FDECC8', darkSoft: 'rgba(217,154,31,0.16)', tint: '#D99A1F', glow: 'rgba(217,154,31,0.35)' },
 ];
 
 // 未設定（保存時のデフォルト。あとで編集で選べる）
@@ -80,12 +77,9 @@ export function getWith(key) {
 export function reminderBody(categoryKey) {
   switch (categoryKey) {
     case 'eat': return 'まだ食べてないね。今週末どう？';
-    case 'cook': return 'あの料理、作ってみない？レシピを見てみる？';
     case 'go': return 'まだ行けてないね。次の休み、行っちゃう？';
     case 'see': return 'まだ観てないね。今夜どう？';
     case 'want': return 'まだ手に入れてないね。ちょっと見てみる？';
-    case 'do': return '少しだけやってみない？一歩で前に進むよ。';
-    case 'know': return '気になってたこと、調べてみる？';
     default: return 'これ、まだ楽しみにしてるよね？';
   }
 }

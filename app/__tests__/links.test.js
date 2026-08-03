@@ -8,13 +8,6 @@ describe('actionLinks', () => {
     expect(links[1].url).toContain('%E9%A3%9F%E3%81%B9%E3%83%AD%E3%82%B0');
   });
 
-  test('cook：クックパッド・楽天レシピ・ネット検索の3件を返す', () => {
-    const links = actionLinks('cook', 'カレー');
-    expect(links).toHaveLength(3);
-    expect(links[0].url).toBe('https://cookpad.com/search/%E3%82%AB%E3%83%AC%E3%83%BC');
-    expect(links[1].url).toBe('https://recipe.rakuten.co.jp/search/%E3%82%AB%E3%83%AC%E3%83%BC/');
-  });
-
   test('go：地図とネット検索の2件を返す', () => {
     const links = actionLinks('go', '京都');
     expect(links).toHaveLength(2);

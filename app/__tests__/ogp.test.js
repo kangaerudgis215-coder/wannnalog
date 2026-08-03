@@ -15,8 +15,7 @@ describe('guessCategoryFromUrl', () => {
     expect(guessCategoryFromUrl('https://zozo.jp/shop/x')).toBe('want');
     expect(guessCategoryFromUrl('https://item.rakuten.co.jp/x')).toBe('want');
   });
-  test('レシピ/動画/グルメ/地図', () => {
-    expect(guessCategoryFromUrl('https://cookpad.com/recipe/1')).toBe('cook');
+  test('動画/グルメ/地図', () => {
     expect(guessCategoryFromUrl('https://youtu.be/x')).toBe('see');
     expect(guessCategoryFromUrl('https://tabelog.com/x')).toBe('eat');
     expect(guessCategoryFromUrl('https://maps.google.com/x')).toBe('go');

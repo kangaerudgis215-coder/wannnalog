@@ -64,9 +64,11 @@ export async function fetchOgp(url) {
     });
     const html = await res.text();
     const ogp = parseOgp(html);
-    return { ...ogp, image: resolveImage(ogp.image, url) };
+    // res.url はリダイレクト後の最終URL。短縮マップURL（maps.app.goo.gl）でも店名を拾える。
+    const finalUrl = res.url || url;
+    return { ...ogp, image: resolveImage(ogp.image, finalUrl), finalUrl };
   } catch (e) {
-    return { title: null, image: null, description: null };
+    return { title: null, image: null, description: null, finalUrl: url };
   }
 }
 
@@ -79,7 +81,6 @@ export function isMapsUrl(url) {
 export function guessCategoryFromUrl(url) {
   const u = (url || '').toLowerCase();
   if (/amazon\.|amzn\.|rakuten\.|zozo\.jp|zozotown|mercari\.|paypaymall|shopping\.yahoo|uniqlo|gu-global|shein\.|qoo10|buyma/.test(u)) return 'want';
-  if (/cookpad\.|recipe\.rakuten|kurashiru|delishkitchen|macaro-ni/.test(u)) return 'cook';
   if (/youtube\.|youtu\.be|netflix\.|hulu\.|disneyplus|primevideo|eiga\.|filmarks/.test(u)) return 'see';
   if (/tabelog\.|gurunavi\.|hotpepper|retty\.|foodie/.test(u)) return 'eat';
   if (isMapsUrl(u)) return 'go';
