@@ -26,6 +26,7 @@ import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
+import { parseGps, geoActionLink } from './geo';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -312,9 +313,9 @@ export default function App() {
   }
 
   async function addItem(data, opts = {}) {
-    const { title, category, due, imageUri, heat, reminder, link, withWho } = data;
+    const { title, category, due, imageUri, heat, reminder, link, withWho, geo } = data;
     const rem = reminder || { remind: '3days' };
-    const item = { id: String(Date.now()), title, category: category || null, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, withWho: withWho || null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
+    const item = { id: String(Date.now()), title, category: category || null, dueTag: due || 'none', imageUri: imageUri || null, geo: geo || null, heat: heat || 2, withWho: withWho || null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
     item.notifId = await scheduleReminder(item);
     await persist([item, ...items]);
     if (!opts.silent) { // クイック保存は独自アニメがあるのでAlert抑制
@@ -1475,7 +1476,7 @@ const SCAN_ICONS = ['scan-outline', 'sparkles-outline', 'image-outline', 'text-o
 function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
   const t = useTheme(); const s = useStyles();
   const [phase, setPhase] = useState('pick'); // pick | processing | reveal | saving
-  const [draft, setDraft] = useState({ title: '', category: null, imageUri: null, link: '' });
+  const [draft, setDraft] = useState({ title: '', category: null, imageUri: null, geo: null, link: '' });
   const [linkInput, setLinkInput] = useState('');
   const [iconIdx, setIconIdx] = useState(0);
   const scan = useRef(new Animated.Value(0)).current;
@@ -1485,7 +1486,7 @@ function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
   const settle = useRef(new Animated.Value(0)).current;
   const draftRef = useRef(draft); draftRef.current = draft;
 
-  useEffect(() => { if (visible) { setPhase('pick'); setDraft({ title: '', category: null, imageUri: null, link: '' }); setLinkInput(''); settle.setValue(0); } }, [visible]);
+  useEffect(() => { if (visible) { setPhase('pick'); setDraft({ title: '', category: null, imageUri: null, geo: null, link: '' }); setLinkInput(''); settle.setValue(0); } }, [visible]);
   useEffect(() => {
     if (phase !== 'processing') return;
     scan.setValue(0);
@@ -1498,9 +1499,9 @@ function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
   async function startFromImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, exif: true });
     if (res.canceled) return;
-    setDraft({ title: '', category: null, imageUri: res.assets[0].uri, link: '' });
+    setDraft({ title: '', category: null, imageUri: res.assets[0].uri, geo: parseGps(res.assets[0].exif), link: '' });
     setPhase('processing');
     setTimeout(runReveal, 1700); // ExpoGoでは画像OCR不可→演出のみ（タイトルは編集で）
   }
@@ -1529,7 +1530,7 @@ function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
   }
   function buildDraft() {
     const d = draftRef.current;
-    return { title: (d.title || '').trim() || '（無題）', category: d.category || null, imageUri: d.imageUri || null, heat: 2, due: 'none', withWho: null, reminder: { remind: '3days' }, link: d.link ? { url: d.link, platform: null } : null };
+    return { title: (d.title || '').trim() || '（無題）', category: d.category || null, imageUri: d.imageUri || null, geo: d.geo || null, heat: 2, due: 'none', withWho: null, reminder: { remind: '3days' }, link: d.link ? { url: d.link, platform: null } : null };
   }
   function doSave() {
     setPhase('saving');
@@ -1631,6 +1632,7 @@ function SaveModal({ visible, onClose, onSave }) {
   const [category, setCategory] = useState(null); // 既定は未設定（あとで編集で選べる）
   const [due, setDue] = useState('none');
   const [image, setImage] = useState(null);
+  const [geo, setGeo] = useState(null); // 写真のGPS（あれば）
   const [withWho, setWithWho] = useState(null); // 誰と
   const [link, setLink] = useState('');
   const [heat, setHeat] = useState(2);
@@ -1646,8 +1648,8 @@ function SaveModal({ visible, onClose, onSave }) {
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
-    if (!res.canceled) setImage(res.assets[0].uri);
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6, exif: true });
+    if (!res.canceled) { setImage(res.assets[0].uri); setGeo(parseGps(res.assets[0].exif)); }
   }
   // リンク先のOGP（タイトル・画像）を読み取り、空欄なら自動で埋める
   async function loadFromLink() {
@@ -1665,14 +1667,14 @@ function SaveModal({ visible, onClose, onSave }) {
     if (guess) { setCategory(guess); got = true; }
     if (!got) Alert.alert('自動で読み取れませんでした', 'このサイトは自動読み込みに対応していない場合があります（Amazon・Instagram・X などは制限が強めです）。写真は「写真を選ぶ」から手動で追加できます。');
   }
-  function resetForm() { setTitle(''); setCategory(null); setDue('none'); setImage(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
+  function resetForm() { setTitle(''); setCategory(null); setDue('none'); setImage(null); setGeo(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
     const finalImage = image || (sns ? sns.thumbnail : null);
     const linkInfo = sns
       ? { url: sns.url, platform: sns.platform }
       : (link.trim() ? { url: link.trim(), platform: null } : null);
-    onSave({ title: title.trim(), category, due, imageUri: finalImage, heat, reminder, link: linkInfo, withWho }); resetForm();
+    onSave({ title: title.trim(), category, due, imageUri: finalImage, geo: image ? geo : null, heat, reminder, link: linkInfo, withWho }); resetForm();
   }
 
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
@@ -1718,7 +1720,7 @@ function SaveModal({ visible, onClose, onSave }) {
             </Pressable>
             {image && (
               <View style={s.photoSubRow}>
-                <Pressable style={s.photoSubBtn} onPress={() => setImage(null)}>
+                <Pressable style={s.photoSubBtn} onPress={() => { setImage(null); setGeo(null); }}>
                   <Ionicons name="close" size={15} color="#E5484D" />
                   <Text style={[s.photoSubText, { color: '#E5484D' }]}>写真を外す</Text>
                 </Pressable>
@@ -2072,7 +2074,9 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
   const due = dueLabel(item.dueTag);
   const heat = item.heat || 2;
   const w = getWith(item.withWho);
+  const geoLink = geoActionLink(item.geo);
   const links = [
+    ...(geoLink ? [geoLink] : []),
     ...(item.sourceUrl ? [{ icon: snsMeta(item.sourcePlatform).icon, label: `${snsMeta(item.sourcePlatform).label}で開く`, url: item.sourceUrl }] : []),
     ...actionLinks(item.category, item.title),
   ];
@@ -2091,8 +2095,8 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
   async function changePhoto() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
-    if (!res.canceled) onUpdate({ imageUri: res.assets[0].uri });
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6, exif: true });
+    if (!res.canceled) onUpdate({ imageUri: res.assets[0].uri, geo: parseGps(res.assets[0].exif) });
   }
   const optChip = (selected, color) => [s.catChip, selected && { backgroundColor: color, borderColor: color }];
 
@@ -2124,7 +2128,7 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
         {editMode && item.imageUri && (
           <View style={s.photoActions}>
             <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="crop-outline" size={16} color={t.accent} /><Text style={s.photoActText}>変更・トリミング</Text></Pressable>
-            <Pressable onPress={() => onUpdate({ imageUri: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>
+            <Pressable onPress={() => onUpdate({ imageUri: null, geo: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>
           </View>
         )}
 

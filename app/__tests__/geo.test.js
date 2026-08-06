@@ -1,4 +1,4 @@
-import { parseGps, coordsMapsUrl } from '../geo';
+import { parseGps, coordsMapsUrl, geoActionLink } from '../geo';
 
 describe('parseGps', () => {
   test('N/E のリファレンスで正の緯度経度', () => {
@@ -26,5 +26,18 @@ describe('parseGps', () => {
 describe('coordsMapsUrl', () => {
   test('地図URLを生成', () => {
     expect(coordsMapsUrl(35.6, 139.7)).toBe('https://www.google.com/maps/search/?api=1&query=35.6,139.7');
+  });
+});
+
+describe('geoActionLink', () => {
+  test('geoがあれば地図アクションを返す', () => {
+    expect(geoActionLink({ lat: 35.6, lng: 139.7 })).toEqual({
+      icon: 'map', label: '撮影場所を地図で見る', url: 'https://www.google.com/maps/search/?api=1&query=35.6,139.7',
+    });
+  });
+  test('geoが無ければ null', () => {
+    expect(geoActionLink(null)).toBeNull();
+    expect(geoActionLink({})).toBeNull();
+    expect(geoActionLink({ lat: 35.6 })).toBeNull();
   });
 });
