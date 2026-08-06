@@ -24,3 +24,9 @@ export function parseGps(exif) {
 export function coordsMapsUrl(lat, lng) {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
+
+// 撮影場所（geo）から詳細画面の「アクション」1件を作る（純粋関数）。geoが無ければ null。
+export function geoActionLink(geo) {
+  if (!geo || geo.lat == null || geo.lng == null) return null;
+  return { icon: 'map', label: '撮影場所を地図で見る', url: coordsMapsUrl(geo.lat, geo.lng) };
+}
