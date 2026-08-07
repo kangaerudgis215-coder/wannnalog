@@ -596,26 +596,27 @@ function Celebration({ celeb, onTabBounce, onDone }) {
             ) },
         ],
       }}>
-        {/* 周囲がキラキラ光るグロー */}
-        <Animated.View pointerEvents="none" style={[s.celebGlow, {
-          backgroundColor: t.gold,
-          opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.14, 0.4] }),
-        }]} />
         {/* 周囲で瞬く星 */}
         {confetti && <Sparkles count={18} color={t.gold} />}
-        <View style={[s.celebCard, { shadowColor: cat.tint }]}>
-          <View style={s.celebPhotoWrap}>
-            {item.imageUri
-              ? <Image source={{ uri: item.imageUri }} style={s.celebPhoto} />
-              : <LinearGradient colors={[catSoft(cat, t.mode), '#FFFFFF']} style={[s.celebPhoto, { alignItems: 'center', justifyContent: 'center' }]}>
-                  <VIcon set={cat.iconSet} name={cat.icon} size={54} color={cat.tint} />
-                </LinearGradient>}
-            <View style={s.celebCheck}><Ionicons name="checkmark-circle" size={54} color={cat.tint} /></View>
+        {/* カード＋その後ろに入るグロー（枠はカードに対して中央寄せ） */}
+        <View style={s.celebCardWrap}>
+          <Animated.View pointerEvents="none" style={[s.celebGlow, {
+            backgroundColor: t.gold,
+            opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.14, 0.4] }),
+          }]} />
+          <View style={[s.celebCard, { shadowColor: cat.tint }]}>
+            <View style={s.celebPhotoWrap}>
+              {item.imageUri
+                ? <Image source={{ uri: item.imageUri }} style={s.celebPhoto} />
+                : <LinearGradient colors={[catSoft(cat, t.mode), '#FFFFFF']} style={[s.celebPhoto, { alignItems: 'center', justifyContent: 'center' }]}>
+                    <VIcon set={cat.iconSet} name={cat.icon} size={54} color={cat.tint} />
+                  </LinearGradient>}
+              <View style={s.celebCheck}><Ionicons name="checkmark-circle" size={54} color={cat.tint} /></View>
+            </View>
+            <Text style={s.celebCaption} numberOfLines={1}>{item.title}</Text>
           </View>
-          <Text style={s.celebCaption} numberOfLines={1}>{item.title}</Text>
         </View>
         <Text style={s.celebBig}>{praise.big}</Text>
-        <Text style={s.celebSub}>{praise.sub}</Text>
         {streak > 1 ? <Text style={s.celebStreak}>{streak}-day streak 🔥</Text> : null}
       </Animated.View>
       {confetti && <Confetti colors={colors} count={110} />}
@@ -2114,7 +2115,7 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
           {item.imageUri
             ? <View>
                 <Image source={{ uri: item.imageUri }} style={s.detailPhoto} />
-                <View style={s.photoTapHint}><Ionicons name="crop-outline" size={13} color="#fff" /><Text style={s.photoTapHintText}>タップでトリミング</Text></View>
+                <View style={s.photoTapHint}><Ionicons name="create-outline" size={13} color="#fff" /><Text style={s.photoTapHintText}>写真を編集</Text></View>
               </View>
             : <View style={[s.detailPhoto, { backgroundColor: cat.color, alignItems: 'center', justifyContent: 'center' }]}>
                 <VIcon set={cat.iconSet} name={cat.icon} size={72} color="rgba(255,255,255,0.9)" />
@@ -2123,7 +2124,7 @@ function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, on
         </Pressable>
         {editMode && item.imageUri && (
           <View style={s.photoActions}>
-            <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="crop-outline" size={16} color={t.accent} /><Text style={s.photoActText}>変更・トリミング</Text></Pressable>
+            <Pressable onPress={changePhoto} style={s.photoActBtn}><Ionicons name="create-outline" size={16} color={t.accent} /><Text style={s.photoActText}>写真を編集</Text></Pressable>
             <Pressable onPress={() => onUpdate({ imageUri: null })} style={s.photoActBtn}><Ionicons name="close" size={16} color="#E5484D" /><Text style={[s.photoActText, { color: '#E5484D' }]}>外す</Text></Pressable>
           </View>
         )}
@@ -2568,9 +2569,10 @@ function makeStyles(t) {
     celebPhoto: { width: '100%', height: '100%' },
     celebCheck: { position: 'absolute', backgroundColor: '#fff', borderRadius: 27 },
     celebCaption: { marginTop: 10, fontSize: 15, color: '#2B2622', textAlign: 'center', fontFamily: FONT.bold },
-    celebGlow: { position: 'absolute', width: 320, height: 380, borderRadius: 70, top: -40, left: '50%', marginLeft: -160 },
+    celebCardWrap: { alignItems: 'center', justifyContent: 'center' },
+    // カード(幅220)の後ろに中央でしっかり入るグロー（少し左寄せ）
+    celebGlow: { position: 'absolute', width: 320, height: 380, borderRadius: 70, top: -60, left: -58 },
     celebBig: { marginTop: 18, fontSize: 30, color: t.gold, fontFamily: FONT.bold, letterSpacing: 0.3, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6 },
-    celebSub: { marginTop: 4, fontSize: 14, color: t.text, opacity: 0.85, fontFamily: FONT.bold },
     celebStreak: { marginTop: 8, fontSize: 14, color: t.accent, fontFamily: FONT.num },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
