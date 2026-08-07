@@ -26,6 +26,7 @@ import { moveItem } from './reorder';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
+import { hashCode, cardAspect } from './hash';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -634,11 +635,6 @@ function PressBounce({ onPress, onLongPress, style, children, scaleTo = 0.97 }) 
     </Pressable>
   );
 }
-
-// 画像の縦横比は 1:1 / 4:5 / 3:4 の3種類を、IDから決定論的に割り当て（再描画で変わらない）
-const CARD_ASPECTS = [1, 4 / 5, 3 / 4];
-function hashCode(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return Math.abs(h); }
-function cardAspect(id) { return CARD_ASPECTS[hashCode(String(id)) % CARD_ASPECTS.length]; }
 
 /* ---------- Wishカード（キャンディボックス：画像＋白い情報パネルの2段） ---------- */
 // feature=true は2列幅の大カード（本気を目立たせる／ゆったり表示にも使う）
