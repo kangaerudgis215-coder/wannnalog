@@ -23,6 +23,7 @@ import { reminderPlan, remindSummary, nextRemindAt, notifyBucket, NOTIFY_SECTION
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
 import { moveItem } from './reorder';
+import { homeBlocks } from './layout';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
@@ -681,16 +682,6 @@ function PhotoTile({ item, onPress, onLongPress, feature = false }) {
 
 /* ---------- ホーム ---------- */
 // 熱量「本気」を6枚ごとに1回だけ2列幅のfeatureカードに昇格し、間は2列マソンリー。
-function homeBlocks(visible) {
-  const blocks = []; let buffer = []; let since = 0;
-  const flush = () => { if (buffer.length) { blocks.push({ type: 'masonry', items: buffer }); buffer = []; } };
-  visible.forEach((it) => {
-    if ((it.heat || 2) === 3 && since >= 6) { flush(); blocks.push({ type: 'feature', item: it }); since = 0; }
-    else { buffer.push(it); since++; }
-  });
-  flush();
-  return blocks;
-}
 function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCount, activeCount }) {
   const t = useTheme(); const s = useStyles();
   const [reorderMode, setReorderMode] = useState(false);
