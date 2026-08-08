@@ -21,7 +21,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith,
 import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary, nextRemindAt, notifyBucket, NOTIFY_SECTIONS } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
-import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
+import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
 import { moveItem } from './reorder';
 import { homeBlocks } from './layout';
 import { parseSnsLink, snsMeta } from './sns';
@@ -1141,11 +1141,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
   const total = items.length;
   const rate = achievementRate(doneCount, total);
   // カテゴリ別の達成（そのカテゴリの中で叶えた割合）
-  const byCat = CATEGORIES.map((c) => {
-    const catItems = items.filter((it) => it.category === c.key);
-    const catDone = catItems.filter((it) => it.doneAt).length;
-    return { ...c, total: catItems.length, done: catDone, rate: catItems.length ? catDone / catItems.length : 0 };
-  }).filter((c) => c.total > 0);
+  const byCat = categoryStats(items, CATEGORIES);
   // 直近7日の達成数バー
   const { week, counts } = weeklyDoneCounts(done);
   const max = Math.max(1, ...counts);

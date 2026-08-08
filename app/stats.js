@@ -31,3 +31,15 @@ export function currentStreak(items, now = Date.now()) {
   while (days.has(d)) { streak++; d -= DAY_MS; }
   return streak;
 }
+
+// カテゴリ別の達成状況（マイページの「カテゴリ別の達成」バーで使う）。
+// 1件も保存が無いカテゴリは除外して返す。
+export function categoryStats(items, categories) {
+  return categories
+    .map((c) => {
+      const catItems = items.filter((it) => it.category === c.key);
+      const catDone = catItems.filter((it) => it.doneAt).length;
+      return { ...c, total: catItems.length, done: catDone, rate: catItems.length ? catDone / catItems.length : 0 };
+    })
+    .filter((c) => c.total > 0);
+}
