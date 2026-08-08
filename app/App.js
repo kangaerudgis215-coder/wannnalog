@@ -21,7 +21,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith,
 import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary, nextRemindAt, notifyBucket, NOTIFY_SECTIONS } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
-import { DAY_MS, startOfDay, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, currentStreak } from './stats';
+import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
 import { moveItem } from './reorder';
 import { homeBlocks } from './layout';
 import { parseSnsLink, snsMeta } from './sns';
@@ -174,7 +174,7 @@ export default function App() {
   const [giftOpen, setGiftOpen] = useState(false);
   const [gardenOpen, setGardenOpen] = useState(false);
   const [garden, setGarden] = useState({ points: 0, waterDate: '', waterCount: 0 });
-  const [celeb, setCeleb] = useState(null); // 達成演出：{ item, serious, streak }
+  const [celeb, setCeleb] = useState(null); // 達成演出：{ item }
   const mypageBounce = useRef(new Animated.Value(1)).current; // 達成の締めでマイページアイコンが弾む
   const [fontsLoaded] = useFonts({
     ZenMaruGothic_400Regular, ZenMaruGothic_500Medium, ZenMaruGothic_700Bold, ZenMaruGothic_900Black,
@@ -340,7 +340,7 @@ export default function App() {
     await persist(next);
     await persistGarden({ ...garden, points: (garden.points || 0) + ACHIEVE_GAIN }); // 達成ボーナスで植物が大きく育つ
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (it0) setCeleb({ item: { ...it0, doneAt: Date.now() }, serious: (it0.heat || 2) === 3, streak: currentStreak(next) });
+    if (it0) setCeleb({ item: { ...it0, doneAt: Date.now() } });
   }
   async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
   // 手動並べ替え：未達成カードを指定順に並べ、達成済みは末尾に保持して保存。
@@ -437,18 +437,9 @@ function Masonry({ items, renderTile }) {
   );
 }
 
-/* ---------- 達成演出（ポラロイド現像＋紙吹雪。本気のときだけ特別演出） ---------- */
+/* ---------- 達成演出（ポラロイド現像＋紙吹雪） ---------- */
 // 達成時の英語の称賛メッセージ（数パターンからランダムで1つ選ぶ）
-const PRAISE = [
-  { big: 'Nailed it!', sub: 'One more dream, done.' },
-  { big: 'You did it!', sub: 'Another wish came true.' },
-  { big: 'Bravo!', sub: 'Look at you go.' },
-  { big: 'Wish granted', sub: 'Keep the magic going.' },
-  { big: 'Way to go!', sub: 'Turning dreams into real life.' },
-  { big: 'Amazing!', sub: 'That’s the spirit.' },
-  { big: 'Yes! Done.', sub: 'You made it happen.' },
-  { big: 'So proud of you', sub: 'Another one for the books.' },
-];
+const PRAISE = ['Nailed it!', 'You did it!', 'Bravo!', 'Wish granted', 'Way to go!', 'Amazing!', 'Yes! Done.', 'So proud of you'];
 function pickPraise() { return PRAISE[Math.floor(Math.random() * PRAISE.length)]; }
 
 // カードの周りでキラキラ瞬く星（キラキラ演出）。位置は一度だけ決めて再描画で動かない。
@@ -486,38 +477,35 @@ function Sparkles({ count = 14, color = '#FFFFFF' }) {
   );
 }
 
-// 自然な物理の紙吹雪：上に弾けて重力で落ちる（放物線）＋回転＋フェード。
+// 紙吹雪：画面の上から下へまっすぐ降ってくる（ゆるい横ゆれ＋回転＋フェード）。
 function Confetti({ colors, count }) {
-  const parts = useRef([...Array(count)].map(() => {
-    const angle = (Math.random() - 0.5) * Math.PI * 0.95;      // 上向き中心の広がり
-    const speed = 90 + Math.random() * 210;
-    return {
-      x: Math.sin(angle) * speed,
-      rise: 110 + Math.random() * 170,                         // 上昇のピーク高さ
-      fall: 340 + Math.random() * 300,                         // 落下量
-      delay: Math.random() * 140,
-      dur: 1200 + Math.random() * 1000,
-      size: 6 + Math.random() * 8,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      rot: (Math.random() * 2 - 1) * 900,
-      round: Math.random() > 0.5,
-      a: new Animated.Value(0),
-    };
-  })).current;
+  const { height } = useWindowDimensions();
+  const parts = useRef([...Array(count)].map(() => ({
+    startX: Math.random() * 100,                 // 画面横位置(%)
+    drift: (Math.random() * 2 - 1) * 36,         // 落下中のゆるい横ゆれ(px)
+    delay: Math.random() * 700,                  // ばらけて降り始める
+    dur: 2400 + Math.random() * 1600,            // 落下にかかる時間
+    size: 6 + Math.random() * 8,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    rot: (Math.random() * 2 - 1) * 720,
+    round: Math.random() > 0.5,
+    a: new Animated.Value(0),
+  }))).current;
   useEffect(() => {
-    Animated.parallel(parts.map((p) => Animated.timing(p.a, { toValue: 1, duration: p.dur, delay: p.delay, useNativeDriver: true }))).start();
+    Animated.parallel(parts.map((p) => Animated.timing(p.a, { toValue: 1, duration: p.dur, delay: p.delay, easing: Easing.linear, useNativeDriver: true }))).start();
   }, []);
+  const fallTo = height + 60;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {parts.map((p, i) => (
         <Animated.View key={i} style={{
-          position: 'absolute', left: '50%', top: '46%',
+          position: 'absolute', left: p.startX + '%', top: -40,
           width: p.size, height: p.round ? p.size : p.size * 0.5,
           borderRadius: p.round ? p.size / 2 : 1, backgroundColor: p.color,
-          opacity: p.a.interpolate({ inputRange: [0, 0.15, 0.75, 1], outputRange: [0, 1, 1, 0] }),
+          opacity: p.a.interpolate({ inputRange: [0, 0.06, 0.85, 1], outputRange: [0, 1, 1, 0] }),
           transform: [
-            { translateX: p.a.interpolate({ inputRange: [0, 1], outputRange: [0, p.x] }) },
-            { translateY: p.a.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, -p.rise, p.fall] }) }, // 放物線
+            { translateY: p.a.interpolate({ inputRange: [0, 1], outputRange: [0, fallTo] }) },       // まっすぐ落下
+            { translateX: p.a.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, p.drift, 0] }) }, // ゆるい横ゆれ
             { rotate: p.a.interpolate({ inputRange: [0, 1], outputRange: ['0deg', p.rot + 'deg'] }) },
           ],
         }} />
@@ -530,7 +518,7 @@ function Celebration({ celeb, onTabBounce, onDone }) {
   const t = useTheme(); const s = useStyles();
   const { width, height } = useWindowDimensions();
   // 演出は熱量に関わらず一律で豪華に（本気/気になっただけの区別は無し）。
-  const { item, streak } = celeb;
+  const { item } = celeb;
   const cat = getCategory(item.category);
   const praise = useRef(pickPraise()).current;         // 表示のたびに1パターン選ぶ
   const bg = useRef(new Animated.Value(0)).current;    // 背景のふわっとフェード
@@ -610,8 +598,7 @@ function Celebration({ celeb, onTabBounce, onDone }) {
             <Text style={s.celebCaption} numberOfLines={1}>{item.title}</Text>
           </View>
         </View>
-        <Text style={s.celebBig}>{praise.big}</Text>
-        {streak > 1 ? <Text style={s.celebStreak}>{streak}-day streak 🔥</Text> : null}
+        <Text style={s.celebBig}>{praise}</Text>
       </Animated.View>
       {confetti && <Confetti colors={colors} count={110} />}
     </Animated.View>
@@ -824,8 +811,12 @@ const VISION_SHELVES = [
 function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onUpdateSlot, onReorder }) {
   const t = useTheme(); const s = useStyles();
   const [editId, setEditId] = useState(null);          // 拡大・編集を開いている枠
-  const [sortOpen, setSortOpen] = useState(false);     // 並べ替え画面
+  const [reorderMode, setReorderMode] = useState(false); // 並べ替えモード（ホームと同じ操作）
+  const [dragging, setDragging] = useState(false);     // ドラッグ中は外側スクロールを止める
   const editing = slots.find((sl) => sl.id === editId) || null;
+  const canSort = slots.length > 1;
+  const inReorder = reorderMode && canSort;
+  const byId = Object.fromEntries(slots.map((sl) => [sl.id, sl]));
   const withImg = slots.filter((sl) => sl.imageUri);
   const hero = withImg.find((sl) => sl.status === 'doing') || withImg[0] || null; // 実行中を優先して自動選出
   const rest = slots.filter((sl) => !hero || sl.id !== hero.id);
@@ -834,41 +825,65 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
     <View style={{ flex: 1 }}>
       {/* コルクボード風の背景（あたたかいコルク色） */}
       <LinearGradient colors={t.mode === 'dark' ? ['#33291E', '#3E3222'] : ['#D8BC8E', '#CBA877']} style={StyleSheet.absoluteFill} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false} scrollEnabled={!dragging}>
         <View style={s.topbar}>
           <View style={s.brandRow}>
             <Text style={s.greet}>なりたい自分・叶えたい夢</Text>
-            {slots.length > 1 && (
-              <Pressable style={s.ghostBtn} onPress={() => setSortOpen(true)} accessibilityLabel="並べ替え">
-                <Ionicons name="swap-vertical" size={18} color={t.sub} />
+            {canSort && (
+              <Pressable style={s.ghostBtn} onPress={() => setReorderMode((v) => !v)} accessibilityLabel="並べ替え">
+                <Ionicons name={inReorder ? 'checkmark' : 'swap-vertical'} size={18} color={inReorder ? t.accent : t.sub} />
               </Pressable>
             )}
           </View>
-          <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="2026 VISION" placeholderTextColor={t.sub} maxLength={24} />
+          <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="2026 VISION" placeholderTextColor={t.sub} maxLength={24} editable={!inReorder} />
         </View>
 
-        {hero && <VisionHero slot={hero} onPress={() => setEditId(hero.id)} />}
-
-        {shelves.map((sec) => (
-          <View key={sec.key} style={{ marginTop: 18 }}>
-            <View style={s.shelfHead}>
-              <Text style={s.shelfTitle}>{sec.emoji} {sec.label}</Text>
-              <Text style={s.shelfCount}>{sec.items.length}</Text>
+        {inReorder ? (
+          // ホーム画面と同じ：右端の ≡ をつまんで上下にドラッグ
+          <View>
+            <View style={s.reorderBar}>
+              <Text style={s.reorderBarText}>右端の ≡ をつまんで、上下にドラッグ</Text>
+              <Pressable onPress={() => setReorderMode(false)} style={s.reorderDone}><Text style={s.reorderDoneText}>完了</Text></Pressable>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, gap: 18 }}>
-              {sec.items.map((sl) => <VisionCard key={sl.id} slot={sl} onPress={() => setEditId(sl.id)} />)}
-            </ScrollView>
+            <View style={{ paddingHorizontal: 20 }}>
+              <DragReorderList ids={slots.map((sl) => sl.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging, grip }) => {
+                const sl = byId[id]; if (!sl) return null;
+                return (
+                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }, rowDragging && s.sortRowDrag]}>
+                    {sl.imageUri
+                      ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
+                      : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
+                    <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
+                    {grip}
+                  </View>
+                );
+              }} />
+            </View>
           </View>
-        ))}
+        ) : (
+          <>
+            {hero && <VisionHero slot={hero} onPress={() => setEditId(hero.id)} />}
 
-        {slots.length === 0 && <EmptyState text={'まだ夢がありません。\n憧れの写真を、ピン留めしてみよう。'} />}
+            {shelves.map((sec) => (
+              <View key={sec.key} style={{ marginTop: 18 }}>
+                <View style={s.shelfHead}>
+                  <Text style={s.shelfTitle}>{sec.emoji} {sec.label}</Text>
+                  <Text style={s.shelfCount}>{sec.items.length}</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, gap: 18 }}>
+                  {sec.items.map((sl) => <VisionCard key={sl.id} slot={sl} onPress={() => setEditId(sl.id)} />)}
+                </ScrollView>
+              </View>
+            ))}
 
-        <Pressable style={s.visionAdd} onPress={onAdd}>
-          <Ionicons name="add" size={18} color={t.accent} />
-          <Text style={s.visionAddText}>枠を追加</Text>
-        </Pressable>
+            {slots.length === 0 && <EmptyState text={'まだ夢がありません。\n憧れの写真を、ピン留めしてみよう。'} />}
 
-        <VisionSortModal visible={sortOpen} onClose={() => setSortOpen(false)} slots={slots} onReorder={onReorder} />
+            <Pressable style={s.visionAdd} onPress={onAdd}>
+              <Ionicons name="add" size={18} color={t.accent} />
+              <Text style={s.visionAddText}>枠を追加</Text>
+            </Pressable>
+          </>
+        )}
 
         <VisionEditModal
           slot={editing}
@@ -1019,7 +1034,7 @@ function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate })
             })}
           </View>
 
-          <Text style={s.sectionLabel}>一言コメント（写真の上に表示）</Text>
+          <Text style={s.sectionLabel}>一言コメント</Text>
           <FocusInput value={slot.label || ''} onChangeText={(v) => onUpdate({ label: v })}
             placeholder="例：いつか家族でハワイ" maxLength={40} />
 
@@ -1824,44 +1839,6 @@ function DragReorderList({ ids, renderRow, onChange, onDragActive, rowH = DRAG_R
   );
 }
 
-// ビジョンボードの並べ替え（枠の順番をドラッグで入れ替え）
-function VisionSortModal({ visible, onClose, slots, onReorder }) {
-  const t = useTheme(); const s = useStyles();
-  const [dragging, setDragging] = useState(false);
-  const byId = useMemo(() => Object.fromEntries(slots.map((sl) => [sl.id, sl])), [slots]);
-  const ids = useMemo(() => slots.map((sl) => sl.id), [slots]);
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaView style={s.safe}>
-          <View style={s.detailBar}>
-            <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
-            <Pressable onPress={onClose} style={s.giftShareBtn}><Text style={s.giftShareText}>完了</Text></Pressable>
-          </View>
-          <GHScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false} scrollEnabled={!dragging}>
-            <Text style={s.giftHero}>並べ替え</Text>
-            <Text style={s.giftLead}>枠を長押しでつまんで、上下にドラッグすると順番を入れ替えできます。</Text>
-            <View style={{ marginTop: 16 }}>
-              <DragReorderList ids={ids} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging, grip }) => {
-                const sl = byId[id]; if (!sl) return null;
-                return (
-                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }, rowDragging && s.sortRowDrag]}>
-                    {sl.imageUri
-                      ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
-                      : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
-                    <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
-                    {grip}
-                  </View>
-                );
-              }} />
-            </View>
-          </GHScrollView>
-        </SafeAreaView>
-      </GestureHandlerRootView>
-    </Modal>
-  );
-}
-
 /* ---------- ギフトページ（プレビュー＆共有） ---------- */
 // 「ギフトに公開」した“ほしい”を、友だちに見せる体で表示。共有は端末標準の共有シート。
 // ここはアプリ内なので商品リンクは“ただの検索リンク”（アフィリ化は将来のWebページ側でのみ）。
@@ -2541,10 +2518,9 @@ function makeStyles(t) {
     celebCheck: { position: 'absolute', backgroundColor: '#fff', borderRadius: 27 },
     celebCaption: { marginTop: 10, fontSize: 15, color: '#2B2622', textAlign: 'center', fontFamily: FONT.bold },
     celebCardWrap: { alignItems: 'center', justifyContent: 'center' },
-    // カード(幅220)の後ろに中央でしっかり入るグロー（少し左寄せ）
-    celebGlow: { position: 'absolute', width: 320, height: 380, borderRadius: 70, top: -60, left: -58 },
+    // カード(幅220)の後ろに入るグロー（中心からさらに左へ寄せる）
+    celebGlow: { position: 'absolute', width: 320, height: 380, borderRadius: 70, top: -60, left: -88 },
     celebBig: { marginTop: 18, fontSize: 30, color: t.gold, fontFamily: FONT.bold, letterSpacing: 0.3, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6 },
-    celebStreak: { marginTop: 8, fontSize: 14, color: t.accent, fontFamily: FONT.num },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
   for (const k in styles) {
