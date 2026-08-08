@@ -2518,8 +2518,8 @@ function makeStyles(t) {
     celebCheck: { position: 'absolute', backgroundColor: '#fff', borderRadius: 27 },
     celebCaption: { marginTop: 10, fontSize: 15, color: '#2B2622', textAlign: 'center', fontFamily: FONT.bold },
     celebCardWrap: { alignItems: 'center', justifyContent: 'center' },
-    // カード(幅220)の後ろに入るグロー（中心からさらに左へ寄せる）
-    celebGlow: { position: 'absolute', width: 320, height: 380, borderRadius: 70, top: -60, left: -88 },
+    // カード(幅220)の後ろに入るグロー（中心よりやや左に寄せて後ろへ）
+    celebGlow: { position: 'absolute', width: 320, height: 380, borderRadius: 70, top: -60, left: -73 },
     celebBig: { marginTop: 18, fontSize: 30, color: t.gold, fontFamily: FONT.bold, letterSpacing: 0.3, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6 },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
