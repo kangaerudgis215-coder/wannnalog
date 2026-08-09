@@ -20,10 +20,11 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, dueLabel, browserUrl } from './links';
 import { reminderPlan, remindSummary, nextRemindAt, notifyBucket, NOTIFY_SECTIONS } from './notify';
-import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
+import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS } from './stats';
 import { moveItem } from './reorder';
 import { homeBlocks } from './layout';
+import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
@@ -666,18 +667,13 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
   const [reorderMode, setReorderMode] = useState(false);
   const [dragging, setDragging] = useState(false);   // ドラッグ中は外側スクロールを止める
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
-  const snsPresent = [...new Set(items.filter((it) => !it.doneAt && it.sourcePlatform).map((it) => it.sourcePlatform))];
-  let visible;
-  if (filter === 'done') visible = items.filter((it) => it.doneAt);
-  else if (filter === 'serious') visible = items.filter((it) => !it.doneAt && (it.heat || 2) === 3).slice().sort(byHeatThenNew);
-  else if (filter.startsWith('sns:')) { const p = filter.slice(4); visible = items.filter((it) => !it.doneAt && it.sourcePlatform === p).slice().sort(byHeatThenNew); }
-  else if (filter === 'all') visible = items.filter((it) => !it.doneAt); // 手動並べ替えの順（配列順）をそのまま表示
-  else visible = items.filter((it) => !it.doneAt && it.category === filter).slice().sort(byHeatThenNew);
+  const snsPresent = snsPlatformsPresent(items);
+  const visible = visibleItems(items, filter);
   const canSort = filter === 'all' && visible.length > 1;
   const inReorder = reorderMode && canSort;
   const byId = Object.fromEntries(visible.map((it) => [it.id, it]));
   // 「そろそろ思い出す」：締切が近い（今日/今週）未達成を先出し（0件なら非表示）
-  const upcoming = filter === 'all' && !inReorder ? items.filter((it) => !it.doneAt && (it.dueTag === 'today' || it.dueTag === 'thisWeek')).slice(0, 4) : [];
+  const upcoming = filter === 'all' && !inReorder ? upcomingItems(items) : [];
   const comfy = density === 'comfy' && filter === 'all';
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false} scrollEnabled={!dragging}>
