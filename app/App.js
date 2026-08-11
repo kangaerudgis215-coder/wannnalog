@@ -28,6 +28,7 @@ import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { hashCode, cardAspect } from './hash';
+import { VISION_FONTS, VISION_STATUS, visionFont, visionStatus } from './vision';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -73,21 +74,6 @@ const BACKUP_ENABLED = false;
 const VISION_SEED = [
   { id: 'v1', imageUri: null }, { id: 'v2', imageUri: null }, { id: 'v3', imageUri: null },
 ];
-
-// ビジョンカードの字体（3パターン）。登録時に1枚ずつ選べる。
-const VISION_FONTS = [
-  { key: 'mincho', label: '明朝', family: FONT.oldMincho, spacing: 2 },   // Zen Old Mincho
-  { key: 'round', label: '丸ゴ', family: FONT.bold, spacing: 0.5 },        // Zen Maru Gothic
-  { key: 'pop', label: 'ポップ', family: FONT.pop, spacing: 1 },          // Mochiy Pop One
-];
-function visionFont(key) { return VISION_FONTS.find((f) => f.key === key) || VISION_FONTS[0]; }
-
-// 進み具合タグ（実行中／計画中）。スタイリッシュに色＋アイコンで表示。
-const VISION_STATUS = [
-  { key: 'planning', label: '計画中', color: '#3A8DDE', icon: 'bulb' },
-  { key: 'doing', label: '実行中', color: '#43A047', icon: 'walk' },
-];
-function visionStatus(key) { return VISION_STATUS.find((x) => x.key === key) || null; }
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
