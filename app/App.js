@@ -18,7 +18,7 @@ import * as Sharing from 'expo-sharing';
 import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
-import { actionLinks, dueLabel, browserUrl } from './links';
+import { actionLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary, nextRemindAt, notifyBucket, NOTIFY_SECTIONS } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat, byHeatThenNew } from './heat';
 import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
@@ -28,6 +28,8 @@ import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { hashCode, cardAspect } from './hash';
+import { VISION_FONTS, VISION_STATUS, visionFont, visionStatus } from './vision';
+import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -45,19 +47,10 @@ const FONT = {
   num: 'Fredoka_700Bold', numSb: 'Fredoka_600SemiBold', numMed: 'Fredoka_500Medium',
   mincho: 'ShipporiMincho_400Regular', oldMincho: 'ZenOldMincho_700Bold', pop: 'MochiyPopOne_400Regular',
 };
-function baseFamily(weight) {
-  const w = parseInt(weight, 10) || 400;
-  if (w >= 800) return FONT.xbold;
-  if (w >= 700) return FONT.bold;
-  if (w >= 500) return FONT.med;
-  return FONT.base;
-}
-
 const STORAGE_KEY = 'wannalog_items_v1';
 const THEME_KEY = 'wannalog_theme';
 const PROFILE_KEY = 'wannalog_profile';
 const PROFILE_PHOTO_KEY = 'wannalog_profile_photo';
-const BROWSER_KEY = 'wannalog_browser'; // 'safari'（既定）/ 'chrome'
 const DENSITY_KEY = 'wannalog_density'; // 'compact'（既定）/ 'comfy'（ゆったり）
 const VISION_KEY = 'wannalog_vision_v1';
 const VISION_TITLE_KEY = 'wannalog_vision_title';
@@ -74,21 +67,6 @@ const BACKUP_ENABLED = false;
 const VISION_SEED = [
   { id: 'v1', imageUri: null }, { id: 'v2', imageUri: null }, { id: 'v3', imageUri: null },
 ];
-
-// ビジョンカードの字体（3パターン）。登録時に1枚ずつ選べる。
-const VISION_FONTS = [
-  { key: 'mincho', label: '明朝', family: FONT.oldMincho, spacing: 2 },   // Zen Old Mincho
-  { key: 'round', label: '丸ゴ', family: FONT.bold, spacing: 0.5 },        // Zen Maru Gothic
-  { key: 'pop', label: 'ポップ', family: FONT.pop, spacing: 1 },          // Mochiy Pop One
-];
-function visionFont(key) { return VISION_FONTS.find((f) => f.key === key) || VISION_FONTS[0]; }
-
-// 進み具合タグ（実行中／計画中）。スタイリッシュに色＋アイコンで表示。
-const VISION_STATUS = [
-  { key: 'planning', label: '計画中', color: '#3A8DDE', icon: 'bulb' },
-  { key: 'doing', label: '実行中', color: '#43A047', icon: 'walk' },
-];
-function visionStatus(key) { return VISION_STATUS.find((x) => x.key === key) || null; }
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -160,7 +138,6 @@ export default function App() {
   const [mode, setMode] = useState('light'); // キャンディボックス配色は明るいクリームが主役
   const [profileName, setProfileName] = useState('あなた');
   const [profilePhoto, setProfilePhoto] = useState(null);
-  const [browser, setBrowser] = useState('safari');
   const [density, setDensity] = useState('compact');
   const [items, setItems] = useState([]);
   const [visionSlots, setVisionSlots] = useState(VISION_SEED);
@@ -191,7 +168,6 @@ export default function App() {
       const m = await AsyncStorage.getItem(THEME_KEY); if (m) setMode(m);
       const p = await AsyncStorage.getItem(PROFILE_KEY); if (p) setProfileName(p);
       const pp = await AsyncStorage.getItem(PROFILE_PHOTO_KEY); if (pp) setProfilePhoto(pp);
-      const br = await AsyncStorage.getItem(BROWSER_KEY); if (br) setBrowser(br);
       const dn = await AsyncStorage.getItem(DENSITY_KEY); if (dn) setDensity(dn);
       const vs = await AsyncStorage.getItem(VISION_KEY);
       if (vs) setVisionSlots(JSON.parse(vs)); else AsyncStorage.setItem(VISION_KEY, JSON.stringify(VISION_SEED));
@@ -222,7 +198,6 @@ export default function App() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.6 });
     if (!res.canceled) { setProfilePhoto(res.assets[0].uri); await AsyncStorage.setItem(PROFILE_PHOTO_KEY, res.assets[0].uri); Haptics.selectionAsync(); }
   }
-  async function setBrowserPref(b) { setBrowser(b); await AsyncStorage.setItem(BROWSER_KEY, b); Haptics.selectionAsync(); }
   async function setDensityPref(d) { setDensity(d); await AsyncStorage.setItem(DENSITY_KEY, d); Haptics.selectionAsync(); }
 
   // バックアップ書き出し：全データをJSONファイルにして共有（保存/AirDrop/iCloud）。
@@ -232,7 +207,7 @@ export default function App() {
         app: 'WannaLog', version: 1, exportedAt: new Date().toISOString(),
         items, vision: { slots: visionSlots, title: visionTitle },
         profile: { name: profileName }, garden,
-        prefs: { theme: mode, browser, density },
+        prefs: { theme: mode, density },
       };
       const json = JSON.stringify(payload, null, 2);
       const uri = FileSystem.documentDirectory + `wannalog-backup-${Date.now()}.json`;
@@ -264,21 +239,16 @@ export default function App() {
           if (data.profile?.name) await saveName(data.profile.name);
           if (data.garden) await persistGarden(data.garden);
           if (data.prefs?.theme) { setMode(data.prefs.theme); await AsyncStorage.setItem(THEME_KEY, data.prefs.theme); }
-          if (data.prefs?.browser) await setBrowserPref(data.prefs.browser);
           if (data.prefs?.density) await setDensityPref(data.prefs.density);
           Alert.alert('復元しました', 'バックアップからデータを読み込みました。');
         } },
       ]);
     } catch (e) { Alert.alert('読み込みに失敗しました', String(e?.message || e)); }
   }
-  // リンクを開く：選んだブラウザ（Chrome/Safari）で開く。Chrome未導入なら元URLにフォールバック。
+  // リンクを開く：端末の既定ブラウザで開く（ブラウザ選択はなし）。
   function openInBrowser(url) {
     if (!url) return;
-    const target = browserUrl(url, browser);
-    Linking.openURL(target).catch(() => {
-      if (target !== url) Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした'));
-      else Alert.alert('リンクを開けませんでした');
-    });
+    Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした'));
   }
 
   // ビジョンボード操作（「したい」とは別データ）
@@ -381,7 +351,7 @@ export default function App() {
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         {selected ? (
           <DetailScreen
-            key={selected.id} item={selected} browser={browser} startInEdit={detailStartEdit}
+            key={selected.id} item={selected} startInEdit={detailStartEdit}
             onBack={() => { setSelectedId(null); setDetailStartEdit(false); }}
             onDone={() => { markDone(selected.id); setSelectedId(null); }}
             onUpdate={(patch) => updateItem(selected.id, patch)}
@@ -394,7 +364,7 @@ export default function App() {
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onReorder={reorderItems} density={density} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} onSnooze={(id) => applyReminder(id, { remind: 'at', remindAt: Date.now() + DAY_MS })} onStop={(id) => applyReminder(id, { remind: 'none' })} />}
-            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} browser={browser} onBrowser={setBrowserPref} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
+            {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setQuickOpen(true)} mypageBounce={mypageBounce} />
           </>
         )}
@@ -438,8 +408,8 @@ function Masonry({ items, renderTile }) {
 }
 
 /* ---------- 達成演出（ポラロイド現像＋紙吹雪） ---------- */
-// 達成時の英語の称賛メッセージ（数パターンからランダムで1つ選ぶ）
-const PRAISE = ['Nailed it!', 'You did it!', 'Bravo!', 'Wish granted', 'Way to go!', 'Amazing!', 'Yes! Done.', 'So proud of you'];
+// 達成時の英語の称賛メッセージ（短い一言。数パターンからランダムで1つ選ぶ）
+const PRAISE = ['GREAT!', 'EXCELLENT!', 'BRAVO!', 'SUPER!', 'GOOD!', 'AMAZING!', 'PERFECT!', 'NICE!', 'WELL DONE!', 'YES!'];
 function pickPraise() { return PRAISE[Math.floor(Math.random() * PRAISE.length)]; }
 
 // カードの周りでキラキラ瞬く星（キラキラ演出）。位置は一度だけ決めて再描画で動かない。
@@ -523,7 +493,6 @@ function Celebration({ celeb, onTabBounce, onDone }) {
   const praise = useRef(pickPraise()).current;         // 表示のたびに1パターン選ぶ
   const bg = useRef(new Animated.Value(0)).current;    // 背景のふわっとフェード
   const pop = useRef(new Animated.Value(0)).current;   // カード＆チェックのやわらかいポップ
-  const glow = useRef(new Animated.Value(0)).current;  // 周囲のグロー（ゆっくり呼吸）
   const fly = useRef(new Animated.Value(0)).current;   // 最後にマイページタブへ飛ぶ
   const [confetti, setConfetti] = useState(false);
   const done = useRef(false);
@@ -535,11 +504,6 @@ function Celebration({ celeb, onTabBounce, onDone }) {
       Animated.timing(bg, { toValue: 1, duration: 320, useNativeDriver: true }),
       Animated.spring(pop, { toValue: 1, friction: 6, tension: 60, useNativeDriver: true }),
     ]).start(() => setConfetti(true));
-    // グローは常時ゆっくり呼吸
-    Animated.loop(Animated.sequence([
-      Animated.timing(glow, { toValue: 1, duration: 1100, useNativeDriver: true }),
-      Animated.timing(glow, { toValue: 0, duration: 1100, useNativeDriver: true }),
-    ])).start();
     // ゆっくり見せてから、カードをマイページタブへ吸い込ませる
     const timer = setTimeout(() => {
       onTabBounce && onTabBounce();
@@ -580,12 +544,7 @@ function Celebration({ celeb, onTabBounce, onDone }) {
       }}>
         {/* 周囲で瞬く星 */}
         {confetti && <Sparkles count={18} color={t.gold} />}
-        {/* カード＋その後ろに入るグロー（枠はカードに対して中央寄せ） */}
         <View style={s.celebCardWrap}>
-          <Animated.View pointerEvents="none" style={[s.celebGlow, {
-            backgroundColor: t.gold,
-            opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.14, 0.4] }),
-          }]} />
           <View style={[s.celebCard, { shadowColor: cat.tint }]}>
             <View style={s.celebPhotoWrap}>
               {item.imageUri
@@ -1133,7 +1092,7 @@ function CatStatBar({ c }) {
     </View>
   );
 }
-function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, browser, onBrowser, density, onDensity, onExport, onImport, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
+function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, density, onDensity, onExport, onImport, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
   const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
@@ -1172,21 +1131,6 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
           <Text style={s.settingText}>ダークモード</Text>
         </View>
         <Switch value={mode === 'dark'} onValueChange={onToggleMode} trackColor={{ true: t.accent }} />
-      </View>
-
-      {/* リンクを開くブラウザ（Chrome / Safari） */}
-      <View style={s.settingRow}>
-        <View style={s.settingLeft}>
-          <Ionicons name="globe-outline" size={20} color={t.accent} />
-          <Text style={s.settingText}>リンクを開く</Text>
-        </View>
-        <View style={s.segment}>
-          {[{ k: 'safari', l: 'Safari' }, { k: 'chrome', l: 'Chrome' }].map((b) => (
-            <Pressable key={b.k} onPress={() => onBrowser(b.k)} style={[s.segBtn, browser === b.k && s.segBtnOn]}>
-              <Text style={[s.segText, browser === b.k && s.segTextOn]}>{b.l}</Text>
-            </Pressable>
-          ))}
-        </View>
       </View>
 
       {/* 表示密度（コンパクト / ゆったり） */}
@@ -1539,12 +1483,12 @@ function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
               <Text style={s.qcSub}>スクショ、リンクからワンタップで保存できます。</Text>
               <PressBounce onPress={startFromImage} style={{ borderRadius: 18, overflow: 'hidden', marginTop: 16 }}>
                 <LinearGradient colors={[t.accent, t.accent2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.qcBigBtn}>
-                  <Ionicons name="image" size={22} color="#fff" /><Text style={s.qcBigBtnText}>スクショ・写真から</Text>
+                  <Ionicons name="image" size={22} color="#fff" /><Text style={s.qcBigBtnText}>写真から</Text>
                 </LinearGradient>
               </PressBounce>
               <View style={s.qcLinkRow}>
                 <Ionicons name="link" size={16} color={t.sub} />
-                <TextInput style={s.qcLinkInput} value={linkInput} onChangeText={setLinkInput} placeholder="リンクを貼る（楽天・YouTube・地図…）" placeholderTextColor={t.sub} autoCapitalize="none" autoCorrect={false} keyboardType="url" onSubmitEditing={startFromLink} returnKeyType="go" />
+                <TextInput style={s.qcLinkInput} value={linkInput} onChangeText={setLinkInput} placeholder="リンクから" placeholderTextColor={t.sub} autoCapitalize="none" autoCorrect={false} keyboardType="url" onSubmitEditing={startFromLink} returnKeyType="go" />
                 <Pressable onPress={startFromLink} style={s.qcLinkGo}><Ionicons name="arrow-forward" size={18} color="#fff" /></Pressable>
               </View>
               <Pressable onPress={onManual} style={s.qcManual}><Text style={s.qcManualText}>自分で書いて残す</Text></Pressable>
@@ -2010,7 +1954,7 @@ function GardenModal({ visible, onClose, garden, doneCount, onWater }) {
 }
 
 /* ---------- 詳細 ---------- */
-function DetailScreen({ item, browser, startInEdit, onBack, onDone, onUpdate, onReminder, onOpenLink, onDelete }) {
+function DetailScreen({ item, startInEdit, onBack, onDone, onUpdate, onReminder, onOpenLink, onDelete }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
@@ -2514,8 +2458,6 @@ function makeStyles(t) {
     celebCheck: { position: 'absolute', backgroundColor: '#fff', borderRadius: 27 },
     celebCaption: { marginTop: 10, fontSize: 15, color: '#2B2622', textAlign: 'center', fontFamily: FONT.bold },
     celebCardWrap: { alignItems: 'center', justifyContent: 'center' },
-    // カード(幅220)の後ろに入るグロー（中心よりやや左に寄せて後ろへ）
-    celebGlow: { position: 'absolute', width: 320, height: 380, borderRadius: 70, top: -60, left: -73 },
     celebBig: { marginTop: 18, fontSize: 30, color: t.gold, fontFamily: FONT.bold, letterSpacing: 0.3, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6 },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
