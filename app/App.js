@@ -29,6 +29,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { hashCode, cardAspect } from './hash';
 import { VISION_FONTS, VISION_STATUS, visionFont, visionStatus } from './vision';
+import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -46,14 +47,6 @@ const FONT = {
   num: 'Fredoka_700Bold', numSb: 'Fredoka_600SemiBold', numMed: 'Fredoka_500Medium',
   mincho: 'ShipporiMincho_400Regular', oldMincho: 'ZenOldMincho_700Bold', pop: 'MochiyPopOne_400Regular',
 };
-function baseFamily(weight) {
-  const w = parseInt(weight, 10) || 400;
-  if (w >= 800) return FONT.xbold;
-  if (w >= 700) return FONT.bold;
-  if (w >= 500) return FONT.med;
-  return FONT.base;
-}
-
 const STORAGE_KEY = 'wannalog_items_v1';
 const THEME_KEY = 'wannalog_theme';
 const PROFILE_KEY = 'wannalog_profile';
