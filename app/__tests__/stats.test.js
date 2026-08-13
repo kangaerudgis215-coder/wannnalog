@@ -1,4 +1,4 @@
-import { DAY_MS, WEEKDAY_LABELS, startOfDay, achievementRate, weeklyDoneCounts, currentStreak } from '../stats';
+import { DAY_MS, WEEKDAY_LABELS, startOfDay, achievementRate, weeklyDoneCounts, currentStreak, categoryStats } from '../stats';
 
 describe('startOfDay', () => {
   test('時刻を00:00:00に揃える', () => {
@@ -79,6 +79,39 @@ describe('currentStreak', () => {
       { doneAt: new Date(2026, 5, 20, 9, 0, 0).getTime() }, // 昨日
     ];
     expect(currentStreak(items, now)).toBe(0);
+  });
+});
+
+describe('categoryStats', () => {
+  const categories = [
+    { key: 'eat', label: '食べたい' },
+    { key: 'go', label: '行きたい' },
+    { key: 'see', label: '見たい' },
+  ];
+
+  test('保存が1件も無いカテゴリは結果から除外する', () => {
+    const items = [{ category: 'eat', doneAt: null }];
+    const result = categoryStats(items, categories);
+    expect(result.map((c) => c.key)).toEqual(['eat']);
+  });
+
+  test('カテゴリごとの件数・達成数・達成率を計算する', () => {
+    const items = [
+      { category: 'eat', doneAt: 1 },
+      { category: 'eat', doneAt: null },
+      { category: 'go', doneAt: 1 },
+    ];
+    const result = categoryStats(items, categories);
+    expect(result).toEqual([
+      { key: 'eat', label: '食べたい', total: 2, done: 1, rate: 0.5 },
+      { key: 'go', label: '行きたい', total: 1, done: 1, rate: 1 },
+    ]);
+  });
+
+  test('元のカテゴリ定義のプロパティを保持する', () => {
+    const items = [{ category: 'see', doneAt: null }];
+    const result = categoryStats(items, categories);
+    expect(result[0].label).toBe('見たい');
   });
 });
 
