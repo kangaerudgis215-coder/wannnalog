@@ -66,4 +66,11 @@ describe('remindSummary', () => {
     expect(remindSummary({ remind: 'daily', remindHour: 8, remindMinute: 5 })).toBe('毎日 08:05');
     expect(remindSummary({ remind: 'weekly', remindWeekday: 1, remindHour: 9, remindMinute: 0 })).toBe('毎週日 09:00');
   });
+  test('日時指定は M/D HH:MM の表示', () => {
+    const remindAt = new Date(2026, 6, 15, 8, 5, 0).getTime();
+    expect(remindSummary({ remind: 'at', remindAt })).toBe('7/15 08:05');
+  });
+  test('日時指定でも予約時刻が未設定なら通常ラベルにフォールバック', () => {
+    expect(remindSummary({ remind: 'at' })).toBe(remindLabel('at'));
+  });
 });
