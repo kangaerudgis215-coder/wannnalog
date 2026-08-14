@@ -40,6 +40,10 @@ describe('parseSnsLink', () => {
     expect(parseSnsLink('')).toBeNull();
     expect(parseSnsLink(undefined)).toBeNull();
   });
+  test('ホスト名が「youtube.com」で終わるだけの別サイトは誤判定しない', () => {
+    expect(parseSnsLink('https://notyoutube.com/watch?v=dQw4w9WgXcQ')).toBeNull();
+    expect(parseSnsLink('https://fakeyoutube.com.evil.com/watch?v=dQw4w9WgXcQ')).toBeNull();
+  });
   test('前後の空白は無視', () => {
     expect(parseSnsLink('  https://youtu.be/dQw4w9WgXcQ  ').platform).toBe('youtube');
   });
