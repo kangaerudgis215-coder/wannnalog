@@ -32,4 +32,26 @@ describe('nextRemindAt', () => {
     expect(d.getDate()).toBe(1);
     expect(d.getHours()).toBe(22);
   });
+
+  // now は 2026-07-01（水曜）。remindWeekday は 1=日〜7=土。
+  test('weekly は今週のまだ来ていない曜日ならその日', () => {
+    const at = nextRemindAt({ remind: 'weekly', remindWeekday: 6, remindHour: 9, remindMinute: 0 }, now); // 6=金
+    const d = new Date(at);
+    expect(d.getDate()).toBe(3); // 7/3（金）
+    expect(d.getDay()).toBe(5);
+  });
+
+  test('weekly は今日の曜日で時刻が過ぎていれば来週', () => {
+    const at = nextRemindAt({ remind: 'weekly', remindWeekday: 4, remindHour: 9, remindMinute: 0 }, now); // 4=水＝今日、9時は過ぎている
+    const d = new Date(at);
+    expect(d.getDate()).toBe(8); // 翌週の水曜
+    expect(d.getDay()).toBe(3);
+  });
+
+  test('weekly は今日の曜日で時刻が未来なら今日', () => {
+    const at = nextRemindAt({ remind: 'weekly', remindWeekday: 4, remindHour: 22, remindMinute: 0 }, now);
+    const d = new Date(at);
+    expect(d.getDate()).toBe(1);
+    expect(d.getHours()).toBe(22);
+  });
 });
