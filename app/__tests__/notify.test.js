@@ -55,6 +55,15 @@ describe('reminderPlan', () => {
   test('毎日の既定は 9:00', () => {
     expect(reminderPlan({ remind: 'daily' }, now)).toEqual({ kind: 'daily', hour: 9, minute: 0 });
   });
+  test('毎週の既定は 日曜 9:00', () => {
+    expect(reminderPlan({ remind: 'weekly' }, now)).toEqual({ kind: 'weekly', weekday: 1, hour: 9, minute: 0 });
+  });
+  test('remindが無いアイテムは none 扱いで null', () => {
+    expect(reminderPlan({}, now)).toBeNull();
+  });
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(reminderPlan({ remind: 'none' })).toBeNull();
+  });
 });
 
 describe('remindSummary', () => {
@@ -72,5 +81,12 @@ describe('remindSummary', () => {
   });
   test('日時指定でも予約時刻が未設定なら通常ラベルにフォールバック', () => {
     expect(remindSummary({ remind: 'at' })).toBe(remindLabel('at'));
+  });
+  test('毎日・毎週の既定値（時刻未設定）', () => {
+    expect(remindSummary({ remind: 'daily' })).toBe('毎日 09:00');
+    expect(remindSummary({ remind: 'weekly' })).toBe('毎週日 09:00');
+  });
+  test('remindが無いアイテムは「なし」', () => {
+    expect(remindSummary({})).toBe('なし');
   });
 });

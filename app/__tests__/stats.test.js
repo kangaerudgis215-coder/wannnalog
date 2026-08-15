@@ -21,6 +21,12 @@ describe('achievementRate', () => {
 });
 
 describe('weeklyDoneCounts', () => {
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    const { week, counts } = weeklyDoneCounts([]);
+    expect(week).toHaveLength(7);
+    expect(counts).toHaveLength(7);
+  });
+
   test('直近7日分（古い→新しい）の配列を返す', () => {
     const now = new Date(2026, 5, 21, 10, 0, 0).getTime();
     const { week, counts } = weeklyDoneCounts([], now);
@@ -49,6 +55,10 @@ describe('weeklyDoneCounts', () => {
 });
 
 describe('currentStreak', () => {
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(currentStreak([])).toBe(0);
+  });
+
   test('達成が1件もなければ0', () => {
     const now = new Date(2026, 5, 21, 10, 0, 0).getTime();
     expect(currentStreak([], now)).toBe(0);
