@@ -54,4 +54,39 @@ describe('nextRemindAt', () => {
     expect(d.getDate()).toBe(1);
     expect(d.getHours()).toBe(22);
   });
+
+  test('remindが無いアイテムは none 扱いで null', () => {
+    expect(nextRemindAt({}, now)).toBe(null);
+  });
+
+  test('at は remindAt が未設定なら null', () => {
+    expect(nextRemindAt({ remind: 'at' }, now)).toBe(null);
+  });
+
+  test('daily は時刻未指定なら既定の9:00を使う', () => {
+    const at = nextRemindAt({ remind: 'daily' }, now); // 9時は過ぎている→翌日
+    const d = new Date(at);
+    expect(d.getDate()).toBe(2);
+    expect(d.getHours()).toBe(9);
+    expect(d.getMinutes()).toBe(0);
+  });
+
+  test('weekly は曜日・時刻未指定なら既定の日曜9:00を使う', () => {
+    const at = nextRemindAt({ remind: 'weekly' }, now);
+    const d = new Date(at);
+    expect(d.getDay()).toBe(0); // 日曜
+    expect(d.getHours()).toBe(9);
+  });
+
+  test('interval は createdAt 未設定なら now を基準にする', () => {
+    expect(nextRemindAt({ remind: 'tomorrow' }, now)).toBe(now + DAY);
+  });
+
+  test('未知のremindで秒数が求まらない場合は null', () => {
+    expect(nextRemindAt({ remind: '???', createdAt: now }, now)).toBe(null);
+  });
+
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(nextRemindAt({ remind: 'none' })).toBe(null);
+  });
 });

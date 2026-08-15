@@ -24,6 +24,10 @@ describe('notifyBucket', () => {
     const weekLater = new Date('2026-07-01T00:00:00').getTime() + 7 * DAY;
     expect(notifyBucket(weekLater, now)).toBe('later');
   });
+
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(notifyBucket(null)).toBe('later');
+  });
 });
 
 describe('NOTIFY_SECTIONS', () => {
