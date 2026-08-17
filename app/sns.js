@@ -43,7 +43,7 @@ export function parseSnsLink(raw) {
   const host = hostOf(url);
   if (!host) return null;
 
-  if (host === 'youtu.be' || host.endsWith('youtube.com')) {
+  if (host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com')) {
     const id = youtubeId(url);
     return { platform: 'youtube', url, thumbnail: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null };
   }
