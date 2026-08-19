@@ -26,4 +26,7 @@ describe('shopSearchUrl', () => {
     expect(shopSearchUrl('amazon', 'コーヒー')).toBe('https://www.amazon.co.jp/s?k=' + encodeURIComponent('コーヒー'));
     expect(shopSearchUrl('rakuten', 'コーヒー')).toBe('https://search.rakuten.co.jp/search/mall/' + encodeURIComponent('コーヒー') + '/');
   });
+  test('query未指定は空文字扱い', () => {
+    expect(shopSearchUrl('amazon')).toBe('https://www.amazon.co.jp/s?k=');
+  });
 });

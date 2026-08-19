@@ -19,4 +19,8 @@ describe('moveItem', () => {
     moveItem(src, 0, 2);
     expect(src).toEqual(['a', 'b', 'c']);
   });
+  test('範囲外の from は何もせずコピーを返す', () => {
+    expect(moveItem(['a', 'b', 'c'], -1, 0)).toEqual(['a', 'b', 'c']);
+    expect(moveItem(['a', 'b', 'c'], 3, 0)).toEqual(['a', 'b', 'c']);
+  });
 });

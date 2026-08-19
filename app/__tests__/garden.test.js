@@ -72,6 +72,10 @@ describe('dayPeriod', () => {
     expect(dayPeriod(23).key).toBe('night');
     expect(dayPeriod(2).key).toBe('night');
   });
+  test('引数省略時は現在時刻を使う', () => {
+    const keys = ['night', 'morning', 'day', 'evening'];
+    expect(keys).toContain(dayPeriod().key);
+  });
 });
 
 describe('PLANT', () => {
