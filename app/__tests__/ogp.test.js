@@ -7,6 +7,10 @@ describe('isMapsUrl', () => {
     expect(isMapsUrl('https://maps.app.goo.gl/abc')).toBe(true);
     expect(isMapsUrl('https://example.com')).toBe(false);
   });
+  test('URLが無くても例外を投げず false', () => {
+    expect(isMapsUrl(undefined)).toBe(false);
+    expect(isMapsUrl(null)).toBe(false);
+  });
 });
 
 describe('guessCategoryFromUrl', () => {
@@ -22,6 +26,9 @@ describe('guessCategoryFromUrl', () => {
   });
   test('不明は null', () => {
     expect(guessCategoryFromUrl('https://example.com')).toBe(null);
+  });
+  test('URLが無くても例外を投げず null', () => {
+    expect(guessCategoryFromUrl(undefined)).toBe(null);
   });
 });
 
@@ -87,9 +94,16 @@ describe('resolveImage', () => {
   test('パス相対をベースパスで解決', () => {
     expect(resolveImage('x.jpg', 'https://a.com/page/1')).toBe('https://a.com/page/x.jpg');
   });
+  test('パスの無いbaseUrl（末尾スラッシュ無し）でも解決できる', () => {
+    expect(resolveImage('x.jpg', 'https://a.com')).toBe('https://a.com/x.jpg');
+  });
   test('絶対URLはそのまま / null は null', () => {
     expect(resolveImage('https://a/b.jpg', 'https://a.com')).toBe('https://a/b.jpg');
     expect(resolveImage(null, 'https://a.com')).toBeNull();
+  });
+  test('baseUrlが無い/形式が違う場合は画像をそのまま返す', () => {
+    expect(resolveImage('x.jpg', undefined)).toBe('x.jpg');
+    expect(resolveImage('x.jpg', '鎌倉のカフェ')).toBe('x.jpg');
   });
 });
 
@@ -108,6 +122,9 @@ describe('extractPlaceFromUrl', () => {
     expect(extractPlaceFromUrl('https://www.google.com/maps/place/%E0%A4%A+cafe/@35.3,139.5'))
       .toBe('%E0%A4%A cafe');
   });
+  test('店名部分が「+」だけなど空白扱いになる場合は null', () => {
+    expect(extractPlaceFromUrl('https://www.google.com/maps/place/+++/@35.3,139.5')).toBeNull();
+  });
 });
 
 describe('cleanTitle', () => {
@@ -125,6 +142,13 @@ describe('cleanTitle', () => {
   test('汎用かつ手掛かり無しは fallback、それも無ければ null', () => {
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '手入力')).toBe('手入力');
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '')).toBeNull();
+  });
+  test('「 - 」区切りの前半も汎用語な場合はタイトルをそのまま使う', () => {
+    expect(cleanTitle('Google マップ - 詳細情報', 'https://maps.google.com/x', ''))
+      .toBe('Google マップ - 詳細情報');
+  });
+  test('タイトル未取得（rawTitleが無い）でも例外を投げず fallback を使う', () => {
+    expect(cleanTitle(undefined, 'https://example.com/x', 'てすと')).toBe('てすと');
   });
 });
 
@@ -156,5 +180,11 @@ describe('fetchOgp', () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('network down'));
     const o = await fetchOgp('https://example.com/x');
     expect(o).toEqual({ title: null, image: null, description: null, finalUrl: 'https://example.com/x' });
+  });
+
+  test('res.url が無い場合は元のURLをfinalUrlに使う', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ url: '', text: async () => '<title>t</title>' });
+    const o = await fetchOgp('https://example.com/x');
+    expect(o.finalUrl).toBe('https://example.com/x');
   });
 });
