@@ -47,7 +47,7 @@ export function parseSnsLink(raw) {
     const id = youtubeId(url);
     return { platform: 'youtube', url, thumbnail: id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null };
   }
-  if (host === 'x.com' || host === 'twitter.com' || host.endsWith('.twitter.com')) {
+  if (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com')) {
     return { platform: 'x', url, thumbnail: null };
   }
   if (host === 'instagram.com' || host.endsWith('.instagram.com')) {

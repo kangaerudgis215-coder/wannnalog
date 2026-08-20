@@ -29,6 +29,9 @@ describe('parseSnsLink', () => {
     expect(parseSnsLink('https://twitter.com/user/status/123').platform).toBe('x');
     expect(parseSnsLink('https://x.com/user/status/123').thumbnail).toBeNull();
   });
+  test('X のサブドメイン（mobile.x.com 等）も判定する', () => {
+    expect(parseSnsLink('https://mobile.x.com/user/status/123').platform).toBe('x');
+  });
   test('Instagram / TikTok', () => {
     expect(parseSnsLink('https://www.instagram.com/p/abc/').platform).toBe('instagram');
     expect(parseSnsLink('https://www.tiktok.com/@user/video/123').platform).toBe('tiktok');
