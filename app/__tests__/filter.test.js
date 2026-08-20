@@ -19,6 +19,10 @@ describe('visibleItems', () => {
   test('serious は本気(heat=3)の未達成を、新しい順で', () => {
     expect(visibleItems(items, 'serious').map((it) => it.id)).toEqual(['b', 'c']);
   });
+  test('serious 判定時、heat未設定は中(2)扱いで対象外', () => {
+    const withUnset = [...items, { id: 'g', category: 'eat', dueTag: 'none', doneAt: null, createdAt: 7 }];
+    expect(visibleItems(withUnset, 'serious').map((it) => it.id)).toEqual(['b', 'c']);
+  });
   test('カテゴリ指定は未達成のうち一致するものを熱量順で', () => {
     expect(visibleItems(items, 'go').map((it) => it.id)).toEqual(['c', 'd']);
   });

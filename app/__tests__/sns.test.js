@@ -24,6 +24,11 @@ describe('parseSnsLink', () => {
     expect(parseSnsLink('https://www.youtube.com/watch?v=dQw4w9WgXcQ').thumbnail)
       .toBe('https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg');
   });
+  test('YouTubeでも動画IDが取れなければサムネはnull', () => {
+    expect(parseSnsLink('https://www.youtube.com/')).toEqual({
+      platform: 'youtube', url: 'https://www.youtube.com/', thumbnail: null,
+    });
+  });
   test('X / Twitter', () => {
     expect(parseSnsLink('https://x.com/user/status/123').platform).toBe('x');
     expect(parseSnsLink('https://twitter.com/user/status/123').platform).toBe('x');

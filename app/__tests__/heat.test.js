@@ -29,4 +29,11 @@ describe('byHeatThenNew', () => {
     const sorted = [...items].sort(byHeatThenNew).map((x) => x.id);
     expect(sorted).toEqual(['c', 'b', 'd', 'a']);
   });
+  test('heat未設定はどちら側でも中(2)扱い', () => {
+    expect(byHeatThenNew({ heat: undefined, createdAt: 1 }, { heat: 2, createdAt: 1 })).toBe(0);
+    expect(byHeatThenNew({ heat: 2, createdAt: 1 }, { heat: undefined, createdAt: 1 })).toBe(0);
+  });
+  test('createdAt未設定はどちら側でも0扱い（同熱量の同点判定）', () => {
+    expect(byHeatThenNew({ heat: 2, createdAt: undefined }, { heat: 2, createdAt: undefined })).toBe(0);
+  });
 });
