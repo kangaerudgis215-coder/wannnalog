@@ -1,4 +1,4 @@
-import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl } from '../ogp';
+import { isUrl, parseOgp, resolveImage, extractPlaceFromUrl, cleanTitle, isMapsUrl, guessCategoryFromUrl, fetchOgp } from '../ogp';
 
 describe('isMapsUrl', () => {
   test('Googleマップのリンクを判定', () => {
@@ -104,6 +104,10 @@ describe('extractPlaceFromUrl', () => {
     expect(extractPlaceFromUrl('https://example.com/x')).toBeNull();
     expect(extractPlaceFromUrl(undefined)).toBeNull();
   });
+  test('壊れたパーセントエンコードでも例外を投げずに復元', () => {
+    expect(extractPlaceFromUrl('https://www.google.com/maps/place/%E0%A4%A+cafe/@35.3,139.5'))
+      .toBe('%E0%A4%A cafe');
+  });
 });
 
 describe('cleanTitle', () => {
@@ -121,5 +125,36 @@ describe('cleanTitle', () => {
   test('汎用かつ手掛かり無しは fallback、それも無ければ null', () => {
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '手入力')).toBe('手入力');
     expect(cleanTitle('Google マップ', 'https://maps.google.com/x', '')).toBeNull();
+  });
+});
+
+describe('fetchOgp', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => { global.fetch = originalFetch; });
+
+  test('取得成功：OGPを抽出し、画像はリダイレクト後のURLで絶対URL化', async () => {
+    const html = `
+      <meta property="og:title" content="すてきなカフェ" />
+      <meta property="og:image" content="/img/x.jpg" />
+      <meta property="og:description" content="海が見える" />
+    `;
+    global.fetch = jest.fn().mockResolvedValue({
+      url: 'https://redirected.example.com/page',
+      text: async () => html,
+    });
+    const o = await fetchOgp('https://example.com/x');
+    expect(global.fetch).toHaveBeenCalledWith('https://example.com/x', expect.any(Object));
+    expect(o).toEqual({
+      title: 'すてきなカフェ',
+      image: 'https://redirected.example.com/img/x.jpg',
+      description: '海が見える',
+      finalUrl: 'https://redirected.example.com/page',
+    });
+  });
+
+  test('取得失敗（ネットワークエラー等）は落ちずに空の結果を返す', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('network down'));
+    const o = await fetchOgp('https://example.com/x');
+    expect(o).toEqual({ title: null, image: null, description: null, finalUrl: 'https://example.com/x' });
   });
 });
