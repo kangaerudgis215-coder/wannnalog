@@ -38,16 +38,6 @@ export function actionLinks(categoryKey, title) {
   }
 }
 
-// 開くブラウザを選ぶ：'safari'（既定）はそのまま、'chrome' は Chrome のURLスキームに変換。
-// iOSの Google Chrome は https→googlechromes:// / http→googlechrome:// で開ける。
-// Chrome 未インストールのときは呼び出し側で元URLにフォールバックする。
-export function browserUrl(url, browser) {
-  if (browser !== 'chrome' || typeof url !== 'string') return url;
-  if (url.startsWith('https://')) return 'googlechromes://' + url.slice('https://'.length);
-  if (url.startsWith('http://')) return 'googlechrome://' + url.slice('http://'.length);
-  return url;
-}
-
 // 期限タグの表示名（純粋関数）
 export function dueLabel(dueTag) {
   switch (dueTag) {
