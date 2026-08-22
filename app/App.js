@@ -25,6 +25,7 @@ import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStat
 import { moveItem } from './reorder';
 import { homeBlocks } from './layout';
 import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
+import { filterByQuery } from './search';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
@@ -625,14 +626,15 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
   const t = useTheme(); const s = useStyles();
   const [reorderMode, setReorderMode] = useState(false);
   const [dragging, setDragging] = useState(false);   // ドラッグ中は外側スクロールを止める
+  const [query, setQuery] = useState('');
   // 保存元SNS（重複なし）。サービス別の絞り込みチップに使う。
   const snsPresent = snsPlatformsPresent(items);
-  const visible = visibleItems(items, filter);
-  const canSort = filter === 'all' && visible.length > 1;
+  const visible = filterByQuery(visibleItems(items, filter), query);
+  const canSort = filter === 'all' && visible.length > 1 && !query.trim();
   const inReorder = reorderMode && canSort;
   const byId = Object.fromEntries(visible.map((it) => [it.id, it]));
-  // 「そろそろ思い出す」：締切が近い（今日/今週）未達成を先出し（0件なら非表示）
-  const upcoming = filter === 'all' && !inReorder ? upcomingItems(items) : [];
+  // 「そろそろ思い出す」：締切が近い（今日/今週）未達成を先出し（0件なら非表示）。検索中は出さない。
+  const upcoming = filter === 'all' && !inReorder && !query.trim() ? upcomingItems(items) : [];
   const comfy = density === 'comfy' && filter === 'all';
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false} scrollEnabled={!dragging}>
@@ -674,6 +676,16 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
         </View>
       ) : (
         <>
+          <View style={s.searchBar}>
+            <Ionicons name="search" size={17} color={t.sub} />
+            <TextInput style={s.searchInput} placeholder="キーワードで検索" placeholderTextColor={t.sub}
+              value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false} returnKeyType="search" />
+            {query.length > 0 && (
+              <Pressable onPress={() => setQuery('')} accessibilityLabel="検索をクリア">
+                <Ionicons name="close-circle" size={17} color={t.sub} />
+              </Pressable>
+            )}
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
             <Chip label="すべて" active={filter === 'all'} onPress={() => setFilter('all')} />
             <Chip icon="flame" label="本気" active={filter === 'serious'} onPress={() => setFilter('serious')} />
@@ -690,7 +702,7 @@ function HomeTab({ items, filter, setFilter, onOpen, onReorder, density, doneCou
           {canSort && <Text style={s.reorderHintHome}>右上の ⇅ を押すと、並べ替えできます</Text>}
 
           {visible.length === 0 ? (
-            <EmptyState text={filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。'} />
+            <EmptyState text={query.trim() ? '一致するものが見つかりませんでした。' : (filter === 'done' ? 'まだ叶えたものはありません。\n小さな一歩から。' : 'まだ何もありません。\n気になったことを、逃さないうちに。')} />
           ) : comfy ? (
             <View style={{ paddingHorizontal: 20, gap: 16, paddingTop: 2 }}>
               {visible.map((it, i) => (
@@ -2140,6 +2152,9 @@ function makeStyles(t) {
     brand: { fontSize: 24, fontWeight: '700', color: t.text, letterSpacing: 0.3, fontFamily: FONT.bold },
     screenTitle: { fontSize: 24, fontWeight: '900', color: t.text, letterSpacing: 0.3 },
     greet: { fontSize: 12.5, color: t.sub, marginTop: 4 },
+
+    searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: t.surface, borderRadius: 14, paddingHorizontal: 14, height: 44, marginHorizontal: 20, marginTop: 4, marginBottom: 12 },
+    searchInput: { flex: 1, fontSize: 15, color: t.text, height: '100%' },
 
     chips: { gap: 8, paddingHorizontal: 20, paddingBottom: 16 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
