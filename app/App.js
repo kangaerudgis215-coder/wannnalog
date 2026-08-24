@@ -29,7 +29,7 @@ import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { hashCode, cardAspect } from './hash';
-import { VISION_FONTS, VISION_STATUS, visionFont, visionStatus } from './vision';
+import { VISION_FONTS, VISION_STATUS, visionFont, visionStatus, buildVisionBoard } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -758,11 +758,6 @@ function EmptyState({ text }) {
 }
 
 /* ---------- ビジョンボード（ピン留めされた夢：淡い空の背景＋ワシテープ＋微回転） ---------- */
-const VISION_SHELVES = [
-  { key: 'doing', emoji: '🔥', label: '実行中の夢', match: (sl) => sl.status === 'doing' },
-  { key: 'planning', emoji: '💡', label: '計画中の夢', match: (sl) => sl.status === 'planning' },
-  { key: 'other', emoji: '✨', label: 'そのほかの夢', match: (sl) => !sl.status },
-];
 function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onUpdateSlot, onReorder }) {
   const t = useTheme(); const s = useStyles();
   const [editId, setEditId] = useState(null);          // 拡大・編集を開いている枠
@@ -772,10 +767,7 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
   const canSort = slots.length > 1;
   const inReorder = reorderMode && canSort;
   const byId = Object.fromEntries(slots.map((sl) => [sl.id, sl]));
-  const withImg = slots.filter((sl) => sl.imageUri);
-  const hero = withImg.find((sl) => sl.status === 'doing') || withImg[0] || null; // 実行中を優先して自動選出
-  const rest = slots.filter((sl) => !hero || sl.id !== hero.id);
-  const shelves = VISION_SHELVES.map((sec) => ({ ...sec, items: rest.filter(sec.match) })).filter((sec) => sec.items.length > 0);
+  const { hero, shelves } = buildVisionBoard(slots);
   return (
     <View style={{ flex: 1 }}>
       {/* コルクボード風の背景（あたたかいコルク色） */}
