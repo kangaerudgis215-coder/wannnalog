@@ -18,7 +18,7 @@ import * as Sharing from 'expo-sharing';
 import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
-import { actionLinks, dueLabel } from './links';
+import { actionLinks, detailLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary, nextRemindAt, notifyBucket, NOTIFY_SECTIONS } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
@@ -1949,10 +1949,7 @@ function DetailScreen({ item, startInEdit, onBack, onDone, onUpdate, onReminder,
   const due = dueLabel(item.dueTag);
   const heat = item.heat || 2;
   const w = getWith(item.withWho);
-  const links = [
-    ...(item.sourceUrl ? [{ icon: snsMeta(item.sourcePlatform).icon, label: `${snsMeta(item.sourcePlatform).label}で開く`, url: item.sourceUrl }] : []),
-    ...actionLinks(item.category, item.title),
-  ];
+  const links = detailLinks(item);
   const [title, setTitle] = useState(item.title);
   const [memo, setMemo] = useState(item.memo || '');
   const [editMode, setEditMode] = useState(!!startInEdit);
