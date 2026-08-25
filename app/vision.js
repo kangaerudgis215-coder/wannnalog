@@ -19,3 +19,20 @@ export const VISION_STATUS = [
 export function visionStatus(key) {
   return VISION_STATUS.find((x) => x.key === key) || null;
 }
+
+// ビジョンボードの棚（実行中／計画中／そのほか）。表紙(hero)は棚には出さない。
+export const VISION_SHELVES = [
+  { key: 'doing', emoji: '🔥', label: '実行中の夢', match: (sl) => sl.status === 'doing' },
+  { key: 'planning', emoji: '💡', label: '計画中の夢', match: (sl) => sl.status === 'planning' },
+  { key: 'other', emoji: '✨', label: 'そのほかの夢', match: (sl) => !sl.status },
+];
+
+// 枠の一覧から、表紙に選ぶ1枚(hero)と、棚ごとに分けた残りを組み立てる。
+// hero は「実行中」を優先し、無ければ写真つきの先頭。空の棚は結果から除く。
+export function buildVisionBoard(slots) {
+  const withImg = slots.filter((sl) => sl.imageUri);
+  const hero = withImg.find((sl) => sl.status === 'doing') || withImg[0] || null;
+  const rest = slots.filter((sl) => !hero || sl.id !== hero.id);
+  const shelves = VISION_SHELVES.map((sec) => ({ ...sec, items: rest.filter(sec.match) })).filter((sec) => sec.items.length > 0);
+  return { hero, shelves };
+}
