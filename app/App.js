@@ -27,6 +27,7 @@ import { homeBlocks } from './layout';
 import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
+import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { hashCode, cardAspect } from './hash';
 import { VISION_FONTS, VISION_STATUS, visionFont, visionStatus, buildVisionBoard } from './vision';
@@ -1443,8 +1444,7 @@ function QuickCaptureModal({ visible, onClose, onSave, onEdit, onManual }) {
     ]).start(() => Haptics.selectionAsync());
   }
   function buildDraft() {
-    const d = draftRef.current;
-    return { title: (d.title || '').trim() || '（無題）', category: d.category || null, imageUri: d.imageUri || null, heat: 2, due: 'none', withWho: null, reminder: { remind: '3days' }, link: d.link ? { url: d.link, platform: null } : null };
+    return buildQuickCaptureItem(draftRef.current);
   }
   function doSave() {
     setPhase('saving');
@@ -1583,10 +1583,7 @@ function SaveModal({ visible, onClose, onSave }) {
   function resetForm() { setTitle(''); setCategory(null); setDue('none'); setImage(null); setWithWho(null); setLink(''); setHeat(2); setReminder({ remind: '3days' }); }
   function handleSave() {
     if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
-    const finalImage = image || (sns ? sns.thumbnail : null);
-    const linkInfo = sns
-      ? { url: sns.url, platform: sns.platform }
-      : (link.trim() ? { url: link.trim(), platform: null } : null);
+    const { imageUri: finalImage, linkInfo } = resolveSaveImageAndLink({ image, sns, link });
     onSave({ title: title.trim(), category, due, imageUri: finalImage, heat, reminder, link: linkInfo, withWho }); resetForm();
   }
 
