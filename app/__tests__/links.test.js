@@ -1,4 +1,4 @@
-import { actionLinks, dueLabel } from '../links';
+import { actionLinks, detailLinks, dueLabel } from '../links';
 
 describe('actionLinks', () => {
   test('eat：地図と食べログのリンクを返す', () => {
@@ -36,6 +36,26 @@ describe('actionLinks', () => {
   test('タイトルが空でも前後の空白を除いて落ちない', () => {
     expect(() => actionLinks('eat', '  ')).not.toThrow();
     expect(() => actionLinks('eat', undefined)).not.toThrow();
+  });
+});
+
+describe('detailLinks', () => {
+  test('保存元リンクが無ければカテゴリ別のアクションリンクのみ', () => {
+    const links = detailLinks({ category: 'eat', title: '寿司' });
+    expect(links).toEqual(actionLinks('eat', '寿司'));
+  });
+
+  test('保存元リンクがあれば先頭に「〇〇で開く」を追加する', () => {
+    const item = { category: 'see', title: '映画A', sourceUrl: 'https://youtu.be/abc123', sourcePlatform: 'youtube' };
+    const links = detailLinks(item);
+    expect(links).toHaveLength(1 + actionLinks('see', '映画A').length);
+    expect(links[0]).toEqual({ icon: 'logo-youtube', label: 'YouTubeで開く', url: 'https://youtu.be/abc123' });
+  });
+
+  test('保存元プラットフォームが不明でも汎用の「リンクで開く」になる', () => {
+    const item = { category: 'do', title: 'メモ', sourceUrl: 'https://example.com/x', sourcePlatform: undefined };
+    const links = detailLinks(item);
+    expect(links[0]).toEqual({ icon: 'link', label: 'リンクで開く', url: 'https://example.com/x' });
   });
 });
 

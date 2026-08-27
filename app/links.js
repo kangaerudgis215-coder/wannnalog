@@ -2,6 +2,8 @@
 // 方針：日本語クエリでも確実に動く経路（Googleマップ／Google検索／楽天／Amazon）を使う。
 // 文字化けやトップページ止まりを避けるため、ブランド固有の不安定な検索URLは使わない。
 
+import { snsMeta } from './sns';
+
 const enc = encodeURIComponent;
 const google = (q) => `https://www.google.com/search?q=${enc(q)}`;
 const maps = (q) => `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
@@ -36,6 +38,15 @@ export function actionLinks(categoryKey, title) {
         { icon: 'search', label: 'ネットで調べる', url: google(t) },
       ];
   }
+}
+
+// 詳細画面のアクション導線一覧（純粋関数）。
+// 保存元リンク（あれば）を先頭に、カテゴリ別の行動リンクを続ける。
+export function detailLinks(item) {
+  return [
+    ...(item.sourceUrl ? [{ icon: snsMeta(item.sourcePlatform).icon, label: `${snsMeta(item.sourcePlatform).label}で開く`, url: item.sourceUrl }] : []),
+    ...actionLinks(item.category, item.title),
+  ];
 }
 
 // 期限タグの表示名（純粋関数）
