@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
-import { reminderPlan, remindSummary, nextRemindAt, notifyBucket, NOTIFY_SECTIONS } from './notify';
+import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
 import { moveItem } from './reorder';
@@ -1025,19 +1025,15 @@ function NotifyRow({ item, onOpen, onSnooze, onStop }) {
 function NotifyTab({ items, onOpen, onSnooze, onStop }) {
   const t = useTheme(); const s = useStyles();
   const now = Date.now();
-  const reminders = items
-    .filter((it) => !it.doneAt && it.remind && it.remind !== 'none')
-    .map((it) => ({ it, at: nextRemindAt(it, now) }))
-    .sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
-  const groups = { today: [], week: [], later: [] };
-  reminders.forEach((r) => groups[notifyBucket(r.at, now)].push(r.it));
+  const groups = groupNotifyItems(items, now);
+  const total = groups.today.length + groups.week.length + groups.later.length;
   return (
     <View style={{ flex: 1 }}>
       <View style={s.topbar}>
         <Text style={s.screenTitle}>通知</Text>
         <Text style={s.greet}>今のこの気持ちを、いつでもそっと思い出せます</Text>
       </View>
-      {reminders.length === 0 ? (
+      {total === 0 ? (
         <EmptyState text={'まだ思い出す予定はありません。\n保存時に「思い出す」を選ぶと、ここに並びます。'} />
       ) : (
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
