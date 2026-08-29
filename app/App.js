@@ -29,8 +29,8 @@ import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
-import { hashCode, cardAspect } from './hash';
-import { VISION_FONTS, VISION_STATUS, visionFont, visionStatus, buildVisionBoard } from './vision';
+import { cardAspect } from './hash';
+import { VISION_FONTS, VISION_STATUS, visionFont, buildVisionBoard } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -771,8 +771,8 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
   const { hero, shelves } = buildVisionBoard(slots);
   return (
     <View style={{ flex: 1 }}>
-      {/* コルクボード風の背景（あたたかいコルク色） */}
-      <LinearGradient colors={t.mode === 'dark' ? ['#33291E', '#3E3222'] : ['#D8BC8E', '#CBA877']} style={StyleSheet.absoluteFill} />
+      {/* 写真が主役になる、温かいオフホワイトのキャンバス */}
+      <LinearGradient colors={t.mode === 'dark' ? ['#1C1A17', '#211E1A'] : ['#FAF7F2', '#F3EFE7']} style={StyleSheet.absoluteFill} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false} scrollEnabled={!dragging}>
         <View style={s.topbar}>
           <View style={s.brandRow}>
@@ -813,22 +813,25 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
             {hero && <VisionHero slot={hero} onPress={() => setEditId(hero.id)} />}
 
             {shelves.map((sec) => (
-              <View key={sec.key} style={{ marginTop: 18 }}>
+              <View key={sec.key} style={{ marginTop: 22 }}>
                 <View style={s.shelfHead}>
                   <Text style={s.shelfTitle}>{sec.emoji} {sec.label}</Text>
-                  <Text style={s.shelfCount}>{sec.items.length}</Text>
+                  <View style={s.shelfBadge}><Text style={s.shelfBadgeText}>{sec.items.length}</Text></View>
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, gap: 18 }}>
-                  {sec.items.map((sl) => <VisionCard key={sl.id} slot={sl} onPress={() => setEditId(sl.id)} />)}
-                </ScrollView>
+                <Masonry items={sec.items} renderTile={(sl) => <VisionCard key={sl.id} slot={sl} onPress={() => setEditId(sl.id)} />} />
               </View>
             ))}
 
-            {slots.length === 0 && <EmptyState text={'まだ夢がありません。\n憧れの写真を、ピン留めしてみよう。'} />}
+            {slots.length === 0 && (
+              <View style={s.vEmpty}>
+                <Text style={s.vEmptyTitle}>叶えたい夢を、ここに。</Text>
+                <Text style={s.vEmptyText}>憧れの写真を1枚、貼るところから。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
+              </View>
+            )}
 
             <Pressable style={s.visionAdd} onPress={onAdd}>
               <Ionicons name="add" size={18} color={t.accent} />
-              <Text style={s.visionAddText}>枠を追加</Text>
+              <Text style={s.visionAddText}>夢を追加</Text>
             </Pressable>
           </>
         )}
@@ -845,64 +848,52 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
     </View>
   );
 }
-// コルクボードに刺さった画鋲（プッシュピン）。IDで色を決めて再描画で変わらない。
-const PIN_COLORS = ['#E5484D', '#3E9DF0', '#F5A524', '#30A46C', '#8E4EC6'];
-function Pushpin({ id }) {
-  const s = useStyles();
-  const color = PIN_COLORS[hashCode(String(id)) % PIN_COLORS.length];
-  return (
-    <View style={s.pinWrap} pointerEvents="none">
-      <View style={[s.pinHead, { backgroundColor: color }]}>
-        <View style={s.pinShine} />
-      </View>
-    </View>
-  );
+// ステータスのアクセント（実行中＝炎グラデ／計画中＝青紫）。文字ラベルは持たず、色とアイコンだけで示す。
+function visionAccent(status) {
+  if (status === 'doing') return { grad: ['#FF7A45', '#FFB648'], icon: 'flame' };
+  if (status === 'planning') return { grad: ['#6E7FE0', '#93A6FF'], icon: 'bulb' };
+  return null;
 }
-// ヒーロー：最上部に1枚だけ大きく。白フチの写真プリント＋画鋲でコルクに留めた見た目。
+// ヒーロー：今週のフォーカスを大きく1枚。写真に黒グラデ＋白の明朝タイトルを重ねる。
 function VisionHero({ slot, onPress }) {
   const t = useTheme(); const s = useStyles();
-  const f = visionFont(slot.font); const st = visionStatus(slot.status);
+  const f = visionFont(slot.font); const acc = visionAccent(slot.status);
   return (
     <PressBounce onPress={onPress} style={s.heroWrap}>
-      <View style={{ transform: [{ rotate: '-1.2deg' }] }}>
-        <View style={s.heroFrame}>
-          <View style={s.heroPhoto}>
-            <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
-            <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={s.heroShade} />
-            <View style={s.heroTextWrap}>
-              {st ? <View style={s.heroStatus}><View style={[s.statusDot, { backgroundColor: st.color }]} /><Text style={s.heroStatusText}>{st.label}</Text></View> : null}
-              {slot.label ? <Text style={[s.heroTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label}</Text> : null}
-            </View>
-          </View>
+      <View style={s.heroCard}>
+        <Image source={{ uri: slot.imageUri }} style={s.heroImg} />
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.72)']} style={StyleSheet.absoluteFill} />
+        {acc && <View style={[s.vBadge, s.heroBadge]}><LinearGradient colors={acc.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.vBadgeGrad}><Ionicons name={acc.icon} size={13} color="#fff" /></LinearGradient></View>}
+        <View style={s.heroTextWrap}>
+          <Text style={s.heroKicker}>今週のフォーカス</Text>
+          {slot.label ? <Text style={[s.heroTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label}</Text> : null}
         </View>
-        <Pushpin id={slot.id} />
       </View>
     </PressBounce>
   );
 }
-// 棚のカード：白フチの写真プリント（四角め）＋下に手書き風キャプション、上に画鋲。IDで微回転を固定。
+// マソンリーのカード：角丸＋写真オーバーレイに白文字。フチのグラデ色がステータスを表す。高さはIDで不揃い。
 function VisionCard({ slot, onPress }) {
   const t = useTheme(); const s = useStyles();
-  const { width } = useWindowDimensions();
-  const w = Math.round(width * 0.56);
-  const f = visionFont(slot.font); const st = visionStatus(slot.status);
-  const rot = (hashCode(slot.id) % 7) - 3; // -3〜3度
-  return (
-    <PressBounce onPress={onPress} style={{ width: w }}>
-      <View style={{ transform: [{ rotate: rot + 'deg' }] }}>
-        <View style={s.visionFrame}>
-          <View style={s.visionPhoto}>
-            {slot.imageUri
-              ? <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
-              : <View style={[s.cardImg, s.cardCenter, { backgroundColor: '#EFE7DA' }]}><Ionicons name="image-outline" size={30} color={t.sub} /></View>}
-          </View>
-          <View style={s.visionCaption}>
-            <Text style={[s.visionCaptionText, { fontFamily: f.family }]} numberOfLines={2}>{slot.label || '（コメントなし）'}</Text>
-            {st ? <View style={s.visionStatusRow}><View style={[s.statusDot, { backgroundColor: st.color }]} /><Text style={s.visionStatusLabel}>{st.label}</Text></View> : null}
-          </View>
-        </View>
-        <Pushpin id={slot.id} />
+  const f = visionFont(slot.font); const acc = visionAccent(slot.status);
+  const ar = cardAspect(slot.id);
+  const inner = (
+    <View style={s.vCardInner}>
+      <View style={{ width: '100%', aspectRatio: ar }}>
+        {slot.imageUri
+          ? <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
+          : <LinearGradient colors={[catSoft(null, t.mode), t.surface]} style={[s.cardImg, s.cardCenter]}><Ionicons name="sparkles-outline" size={28} color={t.sub} /></LinearGradient>}
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.04)', 'rgba(0,0,0,0.66)']} style={StyleSheet.absoluteFill} />
+        {acc && <View style={s.vBadge}><LinearGradient colors={acc.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.vBadgeGrad}><Ionicons name={acc.icon} size={11} color="#fff" /></LinearGradient></View>}
+        {slot.label ? <Text style={[s.vCardTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label}</Text> : null}
       </View>
+    </View>
+  );
+  return (
+    <PressBounce onPress={onPress} style={{ width: '100%' }}>
+      {acc
+        ? <LinearGradient colors={acc.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.vCardBorder}>{inner}</LinearGradient>
+        : <View style={[s.vCardBorder, { backgroundColor: t.line }]}>{inner}</View>}
     </PressBounce>
   );
 }
@@ -2141,34 +2132,35 @@ function makeStyles(t) {
     visionAdd: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 6, marginTop: 18, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999, backgroundColor: t.surface },
     visionAddText: { color: t.accent, fontSize: 14, fontWeight: '800' },
     visionLabelWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 12, backgroundColor: 'rgba(0,0,0,0.22)' },
-    // ビジョンボード（ピン留めされた夢）
-    heroWrap: { paddingHorizontal: 24, marginTop: 18 },
-    // 白フチの写真プリント（四角め）＋コルクに刺した画鋲
-    heroFrame: { backgroundColor: '#FBF8F1', borderRadius: 6, padding: 9, paddingBottom: 9, shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 10 }, elevation: 9 },
-    heroPhoto: { width: '100%', aspectRatio: 4 / 3, borderRadius: 3, overflow: 'hidden' },
-    heroShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '40%' },
-    heroTextWrap: { position: 'absolute', left: 14, right: 14, bottom: 12, gap: 6 },
-    heroStatus: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    heroStatusText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-    heroTitle: { color: '#fff', fontSize: 24, lineHeight: 30, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 8 },
-    visionFrame: { backgroundColor: '#FBF8F1', borderRadius: 5, padding: 7, paddingBottom: 6, shadowColor: '#000', shadowOpacity: 0.24, shadowRadius: 10, shadowOffset: { width: 0, height: 7 }, elevation: 6 },
-    visionPhoto: { width: '100%', aspectRatio: 1, borderRadius: 2, overflow: 'hidden' },
-    visionCaption: { paddingTop: 8, paddingHorizontal: 3, paddingBottom: 3, gap: 4 },
-    visionCaptionText: { fontSize: 13.5, lineHeight: 19, color: '#3A322A', fontFamily: FONT.bold },
-    // 画鋲（プッシュピン）
-    pinWrap: { position: 'absolute', top: -11, left: 0, right: 0, alignItems: 'center', zIndex: 6 },
-    pinHead: { width: 18, height: 18, borderRadius: 9, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 3, shadowOffset: { width: 0, height: 3 }, elevation: 7 },
-    pinShine: { position: 'absolute', top: 3, left: 4, width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.75)' },
-    visionStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
-    visionStatusLabel: { fontSize: 12, color: t.sub, fontWeight: '700' },
-    statusDot: { width: 8, height: 8, borderRadius: 4 },
-    shelfHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20 },
-    shelfTitle: { fontSize: 15, color: t.text, fontFamily: FONT.bold },
-    shelfCount: { fontSize: 13, color: t.sub, fontWeight: '800', fontFamily: FONT.num },
+    // ビジョンボード（マニフェスト・エディトリアル）
+    heroWrap: { paddingHorizontal: 20, marginTop: 14 },
+    heroCard: { borderRadius: 20, overflow: 'hidden', aspectRatio: 4 / 3, backgroundColor: t.surface, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 9 },
+    heroImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+    heroTextWrap: { position: 'absolute', left: 18, right: 18, bottom: 16, gap: 4 },
+    heroKicker: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '800', letterSpacing: 2, fontFamily: FONT.bold },
+    heroTitle: { color: '#fff', fontSize: 26, lineHeight: 33, textShadowColor: 'rgba(0,0,0,0.45)', textShadowRadius: 10 },
+    // ステータスのアクセント丸バッジ（アイコンのみ・文字ラベルなし）
+    vBadge: { position: 'absolute', top: 8, left: 8, borderRadius: 999, overflow: 'hidden' },
+    heroBadge: { top: 14, left: 14 },
+    vBadgeGrad: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    // マソンリーのカード（グラデのフチ＋写真オーバーレイに白文字）
+    vCardBorder: { borderRadius: 16, padding: 1.5 },
+    vCardInner: { borderRadius: 14.5, overflow: 'hidden', backgroundColor: t.surface },
+    vCardTitle: { position: 'absolute', left: 11, right: 11, bottom: 10, color: '#fff', fontSize: 15, lineHeight: 20, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 8 },
+    // セクション見出し＋件数バッジ
+    shelfHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, marginBottom: 6 },
+    shelfTitle: { fontSize: 16, color: t.text, fontFamily: FONT.bold },
+    shelfBadge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: t.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(28,26,23,0.06)' },
+    shelfBadgeText: { fontSize: 12, color: t.sub, fontWeight: '800', fontFamily: FONT.num },
+    // 空状態（夢への招待）
+    vEmpty: { alignItems: 'center', paddingHorizontal: 40, paddingTop: 40, gap: 8 },
+    vEmptyTitle: { fontSize: 20, color: t.text, fontFamily: FONT.mincho, letterSpacing: 1 },
+    vEmptyText: { fontSize: 13, color: t.sub, textAlign: 'center', lineHeight: 21 },
     visionBigPhotoWrap: { borderRadius: 22, overflow: 'hidden' },
     visionBigPhoto: { width: '100%', height: 300, borderRadius: 22 },
     visionBigEmpty: { backgroundColor: t.surface, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 8 },
     visionBigLabel: { color: '#fff', fontSize: 28, textAlign: 'center', letterSpacing: 2, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 10, fontFamily: FONT.mincho, paddingHorizontal: 16 },
+    statusDot: { width: 8, height: 8, borderRadius: 4 },
 
     masonryRow: { flexDirection: 'row', gap: 14, paddingHorizontal: 20, paddingTop: 2 },
     masonryCol: { flex: 1, gap: 14 },
