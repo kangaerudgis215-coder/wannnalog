@@ -25,6 +25,7 @@ import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStat
 import { moveItem } from './reorder';
 import { homeBlocks } from './layout';
 import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
+import { giftableItems, giftShareMessage } from './gift';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
@@ -1760,11 +1761,10 @@ function DragReorderList({ ids, renderRow, onChange, onDragActive, rowH = DRAG_R
 // ここはアプリ内なので商品リンクは“ただの検索リンク”（アフィリ化は将来のWebページ側でのみ）。
 function GiftModal({ visible, onClose, items, name, onOpenLink, onOpen }) {
   const t = useTheme(); const s = useStyles();
-  const list = items.filter((it) => it.isPublic && !it.doneAt);
+  const list = giftableItems(items);
   async function share() {
     if (list.length === 0) { Alert.alert('まだ公開中の「ほしい」がありません', '詳細画面で「ギフトページに公開」をオンにしてください。'); return; }
-    const body = list.map((it) => `・${it.title}`).join('\n');
-    try { await Share.share({ message: `${name}のほしいものリスト\n\n${body}\n\n— WannaLog で作成` }); } catch (e) {}
+    try { await Share.share({ message: giftShareMessage(name, list) }); } catch (e) {}
   }
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
