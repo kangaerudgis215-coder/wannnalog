@@ -106,3 +106,15 @@ export function notifyBucket(at, now = Date.now()) {
   if (at < startOfDay(now) + 7 * DAY_MS) return 'week';
   return 'later';
 }
+
+// 通知画面のアイテムを「今日/今週/それ以降」に振り分ける（純粋関数）。
+// 未達成かつ通知ONのアイテムだけを対象にし、次に思い出す時刻が早い順に並べる。
+export function groupNotifyItems(items, now = Date.now()) {
+  const reminders = items
+    .filter((it) => !it.doneAt && it.remind && it.remind !== 'none')
+    .map((it) => ({ it, at: nextRemindAt(it, now) }))
+    .sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
+  const groups = { today: [], week: [], later: [] };
+  reminders.forEach((r) => groups[notifyBucket(r.at, now)].push(r.it));
+  return groups;
+}
