@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -302,11 +302,12 @@ export default function App() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) { await updateVision(id, { imageUri: res.assets[0].uri }); Haptics.selectionAsync(); }
   }
-  // 「叶った」に変更：達成日を記録して達成演出（ホームと同じ演出を流用）。
+  // 「叶った」に変更：達成日を記録し、日本語「〇〇を叶えました」＋願ってからの日数で祝う。
   async function markVisionAchieved(id) {
     const v = visionSlots.find((x) => x.id === id); if (!v) return;
-    await persistVision(visionSlots.map((x) => (x.id === id ? { ...x, status: 'done', achievedAt: Date.now() } : x)));
-    setCeleb({ item: { imageUri: v.imageUri, title: v.title, category: null } });
+    const achievedAt = Date.now();
+    await persistVision(visionSlots.map((x) => (x.id === id ? { ...x, status: 'done', achievedAt } : x)));
+    setCeleb({ item: { imageUri: v.imageUri, title: v.title, category: null }, jp: true, days: daysToAchieve({ createdAt: v.createdAt, achievedAt }) });
   }
   // 「叶った」から戻す（達成日を消す）。
   async function revertVision(id, status) { await updateVision(id, { status, achievedAt: null }); }
@@ -555,8 +556,8 @@ function Confetti({ colors, count }) {
 function Celebration({ celeb, onTabBounce, onDone }) {
   const t = useTheme(); const s = useStyles();
   const { width, height } = useWindowDimensions();
-  // 演出は熱量に関わらず一律で豪華に（本気/気になっただけの区別は無し）。
-  const { item } = celeb;
+  // jp=true はビジョン達成（日本語「〇〇を叶えました」＋願ってからの日数）、それ以外は英語の一言。
+  const { item, jp, days } = celeb;
   const cat = getCategory(item.category);
   const praise = useRef(pickPraise()).current;         // 表示のたびに1パターン選ぶ
   const bg = useRef(new Animated.Value(0)).current;    // 背景のふわっとフェード
@@ -579,7 +580,7 @@ function Celebration({ celeb, onTabBounce, onDone }) {
         Animated.timing(fly, { toValue: 1, duration: 620, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
         Animated.timing(bg, { toValue: 0, duration: 620, delay: 160, useNativeDriver: true }),
       ]).start(() => finish());
-    }, 2900);
+    }, jp ? 3400 : 2900);
     return () => clearTimeout(timer);
   }, []);
 
@@ -625,7 +626,8 @@ function Celebration({ celeb, onTabBounce, onDone }) {
             <Text style={s.celebCaption} numberOfLines={1}>{item.title}</Text>
           </View>
         </View>
-        <Text style={s.celebBig}>{praise}</Text>
+        <Text style={s.celebBig}>{jp ? '叶えました' : praise}</Text>
+        {jp && days != null ? <Text style={s.celebDays}>願ってから {days}日</Text> : null}
       </Animated.View>
       {confetti && <Confetti colors={colors} count={110} />}
     </Animated.View>
@@ -928,6 +930,32 @@ function FullscreenVisualizer({ visible, items, index, onClose, catName, catColo
     </Modal>
   );
 }
+// 汎用のボトムシート（絞り込み・並べ替えに使う）
+function ChoiceSheet({ visible, onClose, title, options, value, onSelect, footer }) {
+  const t = useTheme(); const s = useStyles();
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <Pressable style={s.sheetBackdrop} onPress={onClose}>
+        <Pressable style={s.choiceSheet} onPress={() => {}}>
+          <View style={s.choiceHandle} />
+          <Text style={s.choiceTitle}>{title}</Text>
+          {options.map((op) => {
+            const on = value === op.id;
+            return (
+              <Pressable key={op.id} onPress={() => { onSelect(op.id); onClose(); }} style={s.choiceRow}>
+                {op.color ? <View style={[s.catDot, { backgroundColor: op.color, width: 10, height: 10, borderRadius: 5 }]} /> : null}
+                <Text style={[s.choiceRowText, on && { color: t.accent, fontWeight: '800' }]}>{op.name}</Text>
+                {op.count != null ? <Text style={s.choiceCount}>{op.count}</Text> : null}
+                {on ? <Ionicons name="checkmark" size={18} color={t.accent} /> : null}
+              </Pressable>
+            );
+          })}
+          {footer}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, onSetTitle, onAdd, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onReorder, onAddCategory, onUpdateCategory, onRemoveCategory }) {
   const t = useTheme(); const s = useStyles();
   const [editId, setEditId] = useState(null);
@@ -935,81 +963,83 @@ function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, on
   const [manageOpen, setManageOpen] = useState(false);
   const [fullOpen, setFullOpen] = useState(false);
   const [fullIndex, setFullIndex] = useState(0);
-  const [reorderMode, setReorderMode] = useState(false);
-  const [dragging, setDragging] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);   // タグ→カテゴリで絞り込み
+  const [sortOpen, setSortOpen] = useState(false);       // 並べ替え→ソート
+  const [filter, setFilter] = useState('all');           // 'all' | categoryId | '__none'
+  const [sortMode, setSortMode] = useState('newest');    // 'newest' | 'oldest'（作成日）
 
   const editing = visions.find((v) => v.id === editId) || null;
-  const byId = Object.fromEntries(visions.map((v) => [v.id, v]));
-  const active = visions.filter((v) => v.status !== 'done').slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const known = new Set(cats.map((c) => c.id));
   const catOf = (v) => (v.categoryId && known.has(v.categoryId)) ? v.categoryId : '__none';
-  const canSort = active.length > 1;
-  const inReorder = reorderMode && canSort;
+  const cmp = sortMode === 'oldest'
+    ? (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
+    : (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
+  const active = visions.filter((v) => v.status !== 'done').slice().sort(cmp);
+  const shown = filter === 'all' ? active : active.filter((v) => catOf(v) === filter);
 
   const catColor = (id) => (getCategoryById(cats, id)?.color) || '#9A938A';
   const catNameOf = (id) => (getCategoryById(cats, id)?.name) || '未分類';
 
-  // タグ（カテゴリ）ごとの段。「すべて」は作らない。空の段は出さない。
+  // カテゴリ別セクション（絞り込み中はその1つだけ）。空の段は出さない。
   const sections = [];
-  cats.forEach((c) => { const items = active.filter((v) => v.categoryId === c.id); if (items.length) sections.push({ id: c.id, name: c.name, color: c.color, items }); });
-  const unc = active.filter((v) => catOf(v) === '__none'); if (unc.length) sections.push({ id: '__none', name: '未分類', color: '#9A938A', items: unc });
+  cats.forEach((c) => { const items = shown.filter((v) => v.categoryId === c.id); if (items.length) sections.push({ id: c.id, name: c.name, color: c.color, items }); });
+  const unc = shown.filter((v) => catOf(v) === '__none'); if (unc.length) sections.push({ id: '__none', name: '未分類', color: '#9A938A', items: unc });
+
+  // 絞り込みシートのカテゴリ候補（件数つき）
+  const filterOptions = [{ id: 'all', name: 'すべて', count: active.length }];
+  cats.forEach((c) => { const n = active.filter((v) => v.categoryId === c.id).length; if (n) filterOptions.push({ id: c.id, name: c.name, count: n, color: c.color }); });
+  const noneN = active.filter((v) => catOf(v) === '__none').length; if (noneN) filterOptions.push({ id: '__none', name: '未分類', count: noneN });
 
   // カードを触ると確認画面（フルスクリーン）へ。編集はその中の鉛筆ボタンからのみ。
-  const openDetail = (v) => { const i = active.findIndex((x) => x.id === v.id); setFullIndex(Math.max(0, i)); setFullOpen(true); };
+  const openDetail = (v) => { const i = shown.findIndex((x) => x.id === v.id); setFullIndex(Math.max(0, i)); setFullOpen(true); };
 
   return (
     <View style={{ flex: 1 }}>
       <LinearGradient colors={t.mode === 'dark' ? ['#1C1A17', '#211E1A'] : ['#FAF7F2', '#F3EFE7']} style={StyleSheet.absoluteFill} />
       <View style={s.vHeader}>
-        <TextInput style={s.vHeaderTitle} value={title} onChangeText={onSetTitle} placeholder="MY VISION" placeholderTextColor={t.sub} maxLength={20} editable={!inReorder} />
+        <TextInput style={s.vHeaderTitle} value={title} onChangeText={onSetTitle} placeholder="MY VISION" placeholderTextColor={t.sub} maxLength={20} />
         <View style={s.vHeadBtns}>
-          <Pressable style={s.vActionIcon} onPress={() => setManageOpen(true)} accessibilityLabel="カテゴリ"><Ionicons name="pricetags-outline" size={17} color={t.sub} /></Pressable>
+          <Pressable style={[s.vActionIcon, filter !== 'all' && s.vActionIconOn]} onPress={() => setFilterOpen(true)} accessibilityLabel="絞り込み"><Ionicons name="pricetags-outline" size={17} color={filter !== 'all' ? '#fff' : t.sub} /></Pressable>
           <Pressable style={s.vActionIcon} onPress={() => setAchievedOpen(true)} accessibilityLabel="叶った夢"><Ionicons name="trophy-outline" size={17} color={t.gold} /></Pressable>
-          {canSort && <Pressable style={s.vActionIcon} onPress={() => setReorderMode((v) => !v)} accessibilityLabel="並べ替え"><Ionicons name={inReorder ? 'checkmark' : 'swap-vertical'} size={17} color={inReorder ? t.accent : t.sub} /></Pressable>}
+          <Pressable style={s.vActionIcon} onPress={() => setSortOpen(true)} accessibilityLabel="並べ替え"><Ionicons name="swap-vertical" size={17} color={t.sub} /></Pressable>
         </View>
       </View>
 
-      {inReorder ? (
-        <View style={{ flex: 1 }}>
-          <View style={s.reorderBar}><Text style={s.reorderBarText}>右端の ≡ をつまんで、上下にドラッグ</Text><Pressable onPress={() => setReorderMode(false)} style={s.reorderDone}><Text style={s.reorderDoneText}>完了</Text></Pressable></View>
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }} scrollEnabled={!dragging} showsVerticalScrollIndicator={false}>
-            <DragReorderList ids={active.map((v) => v.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rd, grip }) => {
-              const v = byId[id]; if (!v) return null;
-              return (
-                <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: catColor(v.categoryId) }, rd && s.sortRowDrag]}>
-                  {v.imageUri
-                    ? <Image source={{ uri: v.imageUri }} style={s.sortThumb} />
-                    : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="sparkles-outline" size={18} color={t.sub} /></View>}
-                  <Text style={s.sortTitle} numberOfLines={1}>{v.title || '（無題）'}</Text>{grip}
-                </View>
-              );
-            }} />
-          </ScrollView>
-        </View>
-      ) : (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 6, paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
-          {sections.length === 0 ? (
-            <View style={s.vEmpty}>
-              <Text style={s.vEmptyTitle}>叶えたい夢を、ここに。</Text>
-              <Text style={s.vEmptyText}>下の ＋ から、ひとつ願ってみましょう。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 6, paddingBottom: 110 }} showsVerticalScrollIndicator={false}>
+        {filter !== 'all' && (
+          <View style={s.filterChipRow}>
+            <View style={s.filterChip}>
+              <Ionicons name="pricetag" size={12} color={t.accent} />
+              <Text style={s.filterChipText}>{filter === '__none' ? '未分類' : catNameOf(filter)}</Text>
+              <Pressable onPress={() => setFilter('all')} hitSlop={8}><Ionicons name="close" size={13} color={t.sub} /></Pressable>
             </View>
-          ) : sections.map((sec) => (
-            <View key={sec.id} style={{ marginBottom: 10, marginTop: 6 }}>
-              <View style={s.shelfHead}>
-                <View style={[s.catDot, { backgroundColor: sec.color, width: 10, height: 10, borderRadius: 5 }]} />
-                <Text style={s.shelfTitle}>{sec.name}</Text>
-                <View style={s.shelfBadge}><Text style={s.shelfBadgeText}>{sec.items.length}</Text></View>
-              </View>
-              <Masonry items={sec.items} renderTile={(v) => <VisionCard key={v.id} slot={v} onPress={() => openDetail(v)} />} />
+          </View>
+        )}
+        {sections.length === 0 ? (
+          <View style={s.vEmpty}>
+            <Text style={s.vEmptyTitle}>叶えたい夢を、ここに。</Text>
+            <Text style={s.vEmptyText}>下の ＋ から、ひとつ願ってみましょう。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
+          </View>
+        ) : sections.map((sec) => (
+          <View key={sec.id} style={{ marginBottom: 10, marginTop: 6 }}>
+            <View style={s.shelfHead}>
+              <View style={[s.catDot, { backgroundColor: sec.color, width: 10, height: 10, borderRadius: 5 }]} />
+              <Text style={s.shelfTitle}>{sec.name}</Text>
+              <View style={s.shelfBadge}><Text style={s.shelfBadgeText}>{sec.items.length}</Text></View>
             </View>
-          ))}
-        </ScrollView>
-      )}
+            <Masonry items={sec.items} renderTile={(v) => <VisionCard key={v.id} slot={v} onPress={() => openDetail(v)} />} />
+          </View>
+        ))}
+      </ScrollView>
+
+      <ChoiceSheet visible={filterOpen} onClose={() => setFilterOpen(false)} title="カテゴリで絞り込み" options={filterOptions} value={filter} onSelect={setFilter}
+        footer={<Pressable style={s.choiceManage} onPress={() => { setFilterOpen(false); setManageOpen(true); }}><Ionicons name="create-outline" size={16} color={t.accent} /><Text style={s.choiceManageText}>カテゴリを編集</Text></Pressable>} />
+      <ChoiceSheet visible={sortOpen} onClose={() => setSortOpen(false)} title="並べ替え" options={[{ id: 'newest', name: '作成日が新しい順' }, { id: 'oldest', name: '作成日が古い順' }]} value={sortMode} onSelect={setSortMode} />
 
       <VisionAddModal visible={addOpen} onClose={onCloseAdd} onSave={onAdd} cats={cats} timingLabels={timingLabels} onAddCategory={onAddCategory} />
       <AchievedModal visible={achievedOpen} onClose={() => setAchievedOpen(false)} visions={visions} cats={cats} onOpen={(v) => { setAchievedOpen(false); setEditId(v.id); }} />
       <CategoryManageModal visible={manageOpen} onClose={() => setManageOpen(false)} cats={cats} onAdd={onAddCategory} onUpdate={onUpdateCategory} onRemove={onRemoveCategory} />
-      <FullscreenVisualizer visible={fullOpen} items={active} index={fullIndex} onClose={() => setFullOpen(false)} catName={catNameOf} catColor={catColor}
+      <FullscreenVisualizer visible={fullOpen} items={shown} index={fullIndex} onClose={() => setFullOpen(false)} catName={catNameOf} catColor={catColor}
         onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })} onHold={(v) => { setFullOpen(false); onAchieve(v.id); }} onEdit={(v) => { setFullOpen(false); setEditId(v.id); }} />
       <VisionEditModal
         vision={editing} cats={cats} timingLabels={timingLabels}
@@ -2559,6 +2589,21 @@ function makeStyles(t) {
     vActionPrimary: { backgroundColor: t.accent },
     vActionText: { fontSize: 13, fontWeight: '800', color: t.text },
     vActionIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: t.surface },
+    vActionIconOn: { backgroundColor: t.accent },
+    // 絞り込み中インジケーター
+    filterChipRow: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 2 },
+    filterChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: t.capsule, borderRadius: 999, paddingLeft: 12, paddingRight: 10, paddingVertical: 6 },
+    filterChipText: { fontSize: 12.5, fontWeight: '800', color: t.text },
+    // ボトムシート（絞り込み・並べ替え）
+    sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    choiceSheet: { backgroundColor: t.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 34 },
+    choiceHandle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: t.line, marginBottom: 12 },
+    choiceTitle: { fontSize: 15, fontWeight: '800', color: t.text, marginBottom: 8 },
+    choiceRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.line },
+    choiceRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: t.text },
+    choiceCount: { fontSize: 13, color: t.sub, fontWeight: '800', fontFamily: FONT.num },
+    choiceManage: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14, paddingVertical: 12, borderRadius: 12, backgroundColor: t.surface2 },
+    choiceManageText: { color: t.accent, fontSize: 14, fontWeight: '800' },
     // カテゴリ選択・作成
     catDot: { width: 8, height: 8, borderRadius: 4 },
     catChipDashed: { borderStyle: 'dashed', borderColor: t.accent, backgroundColor: 'transparent' },
@@ -2848,6 +2893,7 @@ function makeStyles(t) {
     celebCaption: { marginTop: 10, fontSize: 15, color: '#2B2622', textAlign: 'center', fontFamily: FONT.bold },
     celebCardWrap: { alignItems: 'center', justifyContent: 'center' },
     celebBig: { marginTop: 18, fontSize: 30, color: t.gold, fontFamily: FONT.bold, letterSpacing: 0.3, textShadowColor: 'rgba(0,0,0,0.15)', textShadowRadius: 6 },
+    celebDays: { marginTop: 8, fontSize: 14, color: t.text, opacity: 0.85, fontFamily: FONT.bold },
   };
   // 文字スタイルには weight に応じたフォントを自動割り当て（fontFamily 指定済みは尊重）
   for (const k in styles) {
