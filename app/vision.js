@@ -87,6 +87,7 @@ export function migrateVision(slot, now = Date.now()) {
     status,
     imageUri: slot.imageUri ?? null,
     memo: slot.memo ?? slot.detail ?? '',
+    favorite: slot.favorite ?? false,
     font: slot.font ?? 'mincho',
     createdAt: slot.createdAt ?? now,
     achievedAt: slot.achievedAt ?? (status === 'done' ? now : null),

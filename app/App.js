@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, buildVisionBoard, achievedGallery, getCategoryById, daysToAchieve } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -822,129 +822,225 @@ function EmptyState({ text }) {
   );
 }
 
-/* ---------- ビジョン（欲求のストック：エディトリアルなギャラリー） ---------- */
+/* ---------- ビジョン（上＝全リスト / 下＝画像ありのビジュアライザー） ---------- */
+function fmtYMD(ms) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+// 下半分：写真ありの夢を大きくスワイプ閲覧。お気に入り・叶えた・フルスクリーンへ。
+function Visualizer({ items, catName, onOpenFull, onToggleFav, onAchieve }) {
+  const t = useTheme(); const s = useStyles();
+  const { width } = useWindowDimensions();
+  const [idx, setIdx] = useState(0);
+  if (!items.length) {
+    return (
+      <View style={s.vizEmpty}>
+        <Ionicons name="images-outline" size={30} color={t.sub} />
+        <Text style={s.vizEmptyText}>写真をつけた夢が、ここに大きく並びます。</Text>
+      </View>
+    );
+  }
+  const cur = Math.min(idx, items.length - 1);
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => setIdx(Math.round(e.nativeEvent.contentOffset.x / width))}>
+        {items.map((v, i) => {
+          const f = visionFont(v.font);
+          return (
+            <Pressable key={v.id} style={{ width, paddingHorizontal: 20, paddingBottom: 10 }} onPress={() => onOpenFull(i)}>
+              <View style={s.vizCard}>
+                <Image source={{ uri: v.imageUri }} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={['rgba(0,0,0,0.18)', 'transparent', 'rgba(0,0,0,0.74)']} style={StyleSheet.absoluteFill} />
+                <View style={s.vizTop}>
+                  <View style={s.vizChip}><Text style={s.vizChipText}>{catName(v.categoryId)}</Text></View>
+                  <Pressable onPress={() => onToggleFav(v)} hitSlop={10} style={s.vizIconBtn}><Ionicons name={v.favorite ? 'heart' : 'heart-outline'} size={20} color={v.favorite ? '#FF6F91' : '#fff'} /></Pressable>
+                </View>
+                <View style={s.vizBottom}>
+                  <Text style={[s.vizTitle, { fontFamily: f.family }]} numberOfLines={2}>{v.title}</Text>
+                  {v.memo ? <Text style={s.vizSub} numberOfLines={2}>{v.memo}</Text> : null}
+                </View>
+                <Pressable onPress={() => onAchieve(v)} hitSlop={6} style={s.vizDone}><Ionicons name="checkmark" size={14} color="#fff" /><Text style={s.vizDoneText}>叶えた</Text></Pressable>
+                <Text style={s.vizCounter}>{i + 1} / {items.length}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      {items.length > 1 && <View style={s.vizDots}>{items.map((_, i) => <View key={i} style={[s.vizDot, i === cur && s.vizDotOn]} />)}</View>}
+    </View>
+  );
+}
+// フルスクリーンのビジュアライザー（没入・スワイプ・お気に入り・叶えた・編集）
+function FullscreenVisualizer({ visible, items, index, onClose, catName, onToggleFav, onAchieve, onEdit }) {
+  const s = useStyles(); const { width } = useWindowDimensions();
+  const [idx, setIdx] = useState(index || 0);
+  useEffect(() => { setIdx(index || 0); }, [index, visible]);
+  if (!visible || !items.length) return null;
+  const cur = items[Math.min(idx, items.length - 1)];
+  return (
+    <Modal visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={s.fsWrap}>
+        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+          contentOffset={{ x: (index || 0) * width, y: 0 }}
+          onMomentumScrollEnd={(e) => setIdx(Math.round(e.nativeEvent.contentOffset.x / width))}>
+          {items.map((v) => {
+            const f = visionFont(v.font);
+            return (
+              <View key={v.id} style={{ width }}>
+                <Image source={{ uri: v.imageUri }} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={['rgba(0,0,0,0.45)', 'transparent', 'rgba(0,0,0,0.82)']} style={StyleSheet.absoluteFill} />
+                <SafeAreaView style={s.fsBottom}>
+                  <View style={s.vizChip}><Text style={s.vizChipText}>{catName(v.categoryId)}</Text></View>
+                  <Text style={[s.fsTitle, { fontFamily: f.family }]} numberOfLines={3}>{v.title}</Text>
+                  {v.memo ? <Text style={s.fsSub} numberOfLines={3}>{v.memo}</Text> : null}
+                </SafeAreaView>
+              </View>
+            );
+          })}
+        </ScrollView>
+        <SafeAreaView style={s.fsTopBar} pointerEvents="box-none">
+          <Pressable onPress={onClose} style={s.fsBtn}><Ionicons name="close" size={24} color="#fff" /></Pressable>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable onPress={() => onToggleFav(cur)} style={s.fsBtn}><Ionicons name={cur.favorite ? 'heart' : 'heart-outline'} size={22} color={cur.favorite ? '#FF6F91' : '#fff'} /></Pressable>
+            <Pressable onPress={() => onEdit(cur)} style={s.fsBtn}><Ionicons name="create-outline" size={22} color="#fff" /></Pressable>
+          </View>
+        </SafeAreaView>
+        <SafeAreaView style={s.fsDoneWrap} pointerEvents="box-none">
+          <Pressable onPress={() => onAchieve(cur)} style={s.fsDoneBtn}><Ionicons name="checkmark-circle" size={20} color="#fff" /><Text style={s.fsDoneText}>叶えた！</Text></Pressable>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
 function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onReorder, onAddCategory, onUpdateCategory, onRemoveCategory }) {
   const t = useTheme(); const s = useStyles();
+  const { height } = useWindowDimensions();
   const [editId, setEditId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [achievedOpen, setAchievedOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [fullOpen, setFullOpen] = useState(false);
+  const [fullIndex, setFullIndex] = useState(0);
   const [reorderMode, setReorderMode] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [filter, setFilter] = useState('all');
+
   const editing = visions.find((v) => v.id === editId) || null;
   const byId = Object.fromEntries(visions.map((v) => [v.id, v]));
-  const { hero, sections, done } = buildVisionBoard(visions, cats);
   const active = visions.filter((v) => v.status !== 'done').slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const doneCount = visions.filter((v) => v.status === 'done').length;
+  const known = new Set(cats.map((c) => c.id));
+  const catOf = (v) => (v.categoryId && known.has(v.categoryId)) ? v.categoryId : '__none';
+  const match = (v) => filter === 'all' || catOf(v) === filter;
+  const listItems = active.filter(match);
+  const vizItems = active.filter((v) => v.imageUri && match(v)).slice().sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
   const canSort = active.length > 1;
   const inReorder = reorderMode && canSort;
+  const VH = Math.max(300, Math.round(height * 0.42));
+
+  const tabs = [{ id: 'all', name: 'すべて', count: active.length }];
+  cats.forEach((c) => { const n = active.filter((v) => v.categoryId === c.id).length; if (n) tabs.push({ id: c.id, name: c.name, count: n }); });
+  const noneN = active.filter((v) => catOf(v) === '__none').length; if (noneN) tabs.push({ id: '__none', name: '未分類', count: noneN });
+
   const catColor = (id) => (getCategoryById(cats, id)?.color) || '#9A938A';
+  const catNameOf = (id) => (getCategoryById(cats, id)?.name) || '未分類';
+  const metaText = (v) => `${catNameOf(v.categoryId)}　${timingLabel(v.timing) || fmtYMD(v.createdAt)}`;
+  const confirmAchieve = (v) => Alert.alert('叶えましたか？', `『${v.title || 'この夢'}』を「叶った」にします。`, [
+    { text: 'まだ', style: 'cancel' },
+    { text: '叶えた！', onPress: () => { setFullOpen(false); onAchieve(v.id); } },
+  ]);
+
   return (
     <View style={{ flex: 1 }}>
-      {/* 写真が主役になる、温かいオフホワイトのキャンバス */}
       <LinearGradient colors={t.mode === 'dark' ? ['#1C1A17', '#211E1A'] : ['#FAF7F2', '#F3EFE7']} style={StyleSheet.absoluteFill} />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }} showsVerticalScrollIndicator={false} scrollEnabled={!dragging}>
-        <View style={s.topbar}>
-          <View style={s.brandRow}>
-            <Text style={s.greet}>なりたい自分・叶えたい夢</Text>
-            {canSort && (
-              <Pressable style={s.ghostBtn} onPress={() => setReorderMode((v) => !v)} accessibilityLabel="並べ替え">
-                <Ionicons name={inReorder ? 'checkmark' : 'swap-vertical'} size={18} color={inReorder ? t.accent : t.sub} />
-              </Pressable>
-            )}
-          </View>
-          <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="MY VISION" placeholderTextColor={t.sub} maxLength={24} editable={!inReorder} />
-        </View>
-
-        {inReorder ? (
-          <View>
-            <View style={s.reorderBar}>
-              <Text style={s.reorderBarText}>右端の ≡ をつまんで、上下にドラッグ</Text>
-              <Pressable onPress={() => setReorderMode(false)} style={s.reorderDone}><Text style={s.reorderDoneText}>完了</Text></Pressable>
-            </View>
-            <View style={{ paddingHorizontal: 20 }}>
-              <DragReorderList ids={active.map((v) => v.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging, grip }) => {
-                const v = byId[id]; if (!v) return null;
-                return (
-                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: catColor(v.categoryId) }, rowDragging && s.sortRowDrag]}>
-                    {v.imageUri
-                      ? <Image source={{ uri: v.imageUri }} style={s.sortThumb} />
-                      : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="sparkles-outline" size={18} color={t.sub} /></View>}
-                    <Text style={s.sortTitle} numberOfLines={1}>{v.title || '（無題）'}</Text>
-                    {grip}
-                  </View>
-                );
-              }} />
-            </View>
-          </View>
-        ) : (
-          <>
-            {/* 操作の行：追加・叶った夢・カテゴリ */}
-            <View style={s.vActionRow}>
-              <Pressable style={[s.vActionPill, s.vActionPrimary]} onPress={() => setAddOpen(true)}>
-                <Ionicons name="add" size={17} color="#fff" /><Text style={[s.vActionText, { color: '#fff' }]}>夢を追加</Text>
-              </Pressable>
-              <Pressable style={s.vActionPill} onPress={() => setAchievedOpen(true)}>
-                <Ionicons name="trophy-outline" size={15} color={t.gold} /><Text style={s.vActionText}>叶った夢 {done.length}</Text>
-              </Pressable>
-              <Pressable style={s.vActionIcon} onPress={() => setManageOpen(true)} accessibilityLabel="カテゴリを編集">
-                <Ionicons name="pricetags-outline" size={17} color={t.sub} />
-              </Pressable>
-            </View>
-
-            {hero && <VisionHero slot={hero} onPress={() => setEditId(hero.id)} />}
-
-            {sections.map((sec) => (
-              <View key={sec.id} style={{ marginTop: 22 }}>
-                <View style={s.shelfHead}>
-                  <View style={[s.catDot, { backgroundColor: sec.color, width: 10, height: 10, borderRadius: 5 }]} />
-                  <Text style={s.shelfTitle}>{sec.name}</Text>
-                  <View style={s.shelfBadge}><Text style={s.shelfBadgeText}>{sec.items.length}</Text></View>
-                </View>
-                <Masonry items={sec.items} renderTile={(v) => <VisionCard key={v.id} slot={v} onPress={() => setEditId(v.id)} />} />
-              </View>
-            ))}
-
-            {active.length === 0 && (
-              <View style={s.vEmpty}>
-                <Text style={s.vEmptyTitle}>叶えたい夢を、ここに。</Text>
-                <Text style={s.vEmptyText}>「＋ 夢を追加」から、ひとつ願ってみましょう。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
-              </View>
-            )}
-          </>
-        )}
-
-        <VisionAddModal visible={addOpen} onClose={() => setAddOpen(false)} onSave={onAdd} cats={cats} timingLabels={timingLabels} onAddCategory={onAddCategory} />
-        <AchievedModal visible={achievedOpen} onClose={() => setAchievedOpen(false)} visions={visions} cats={cats} onOpen={(v) => { setAchievedOpen(false); setEditId(v.id); }} />
-        <CategoryManageModal visible={manageOpen} onClose={() => setManageOpen(false)} cats={cats} onAdd={onAddCategory} onUpdate={onUpdateCategory} onRemove={onRemoveCategory} />
-        <VisionEditModal
-          vision={editing} cats={cats} timingLabels={timingLabels}
-          onClose={() => setEditId(null)}
-          onUpdate={(patch) => editing && onUpdate(editing.id, patch)}
-          onRemove={() => { if (editing) { onRemove(editing.id); setEditId(null); } }}
-          onPickPhoto={onPickPhoto} onAchieve={onAchieve} onRevert={onRevert} onAddCategory={onAddCategory}
-        />
-      </ScrollView>
-    </View>
-  );
-}
-// ヒーロー：今週のフォーカスを大きく1枚。写真に黒グラデ＋白の明朝タイトルを重ねる。
-function VisionHero({ slot, onPress }) {
-  const s = useStyles();
-  const f = visionFont(slot.font); const acc = stageAccent(slot.status);
-  return (
-    <PressBounce onPress={onPress} style={s.heroWrap}>
-      <View style={s.heroCard}>
-        {slot.imageUri
-          ? <Image source={{ uri: slot.imageUri }} style={s.heroImg} />
-          : <LinearGradient colors={acc ? acc.grad : ['#9A938A', '#B7AEA2']} style={s.heroImg} />}
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.72)']} style={StyleSheet.absoluteFill} />
-        {acc && <View style={[s.vBadge, s.heroBadge]}><LinearGradient colors={acc.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.vBadgeGrad}><Ionicons name={acc.icon} size={13} color="#fff" /></LinearGradient></View>}
-        <View style={s.heroTextWrap}>
-          <Text style={s.heroKicker}>今週のフォーカス</Text>
-          {slot.title ? <Text style={[s.heroTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.title}</Text> : null}
+      <View style={s.vHeader}>
+        <TextInput style={s.vHeaderTitle} value={title} onChangeText={onSetTitle} placeholder="MY VISION" placeholderTextColor={t.sub} maxLength={20} editable={!inReorder} />
+        <View style={s.vHeadBtns}>
+          <Pressable style={s.vActionIcon} onPress={() => setManageOpen(true)} accessibilityLabel="カテゴリ"><Ionicons name="pricetags-outline" size={17} color={t.sub} /></Pressable>
+          <Pressable style={s.vActionIcon} onPress={() => setAchievedOpen(true)} accessibilityLabel="叶った夢"><Ionicons name="trophy-outline" size={17} color={t.gold} /></Pressable>
+          {canSort && <Pressable style={s.vActionIcon} onPress={() => setReorderMode((v) => !v)} accessibilityLabel="並べ替え"><Ionicons name={inReorder ? 'checkmark' : 'swap-vertical'} size={17} color={inReorder ? t.accent : t.sub} /></Pressable>}
+          <Pressable style={[s.vActionIcon, s.vAddIcon]} onPress={() => setAddOpen(true)} accessibilityLabel="追加"><Ionicons name="add" size={22} color="#fff" /></Pressable>
         </View>
       </View>
-    </PressBounce>
+
+      {inReorder ? (
+        <View style={{ flex: 1 }}>
+          <View style={s.reorderBar}><Text style={s.reorderBarText}>右端の ≡ をつまんで、上下にドラッグ</Text><Pressable onPress={() => setReorderMode(false)} style={s.reorderDone}><Text style={s.reorderDoneText}>完了</Text></Pressable></View>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }} scrollEnabled={!dragging} showsVerticalScrollIndicator={false}>
+            <DragReorderList ids={active.map((v) => v.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rd, grip }) => {
+              const v = byId[id]; if (!v) return null;
+              return (
+                <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: catColor(v.categoryId) }, rd && s.sortRowDrag]}>
+                  {v.imageUri
+                    ? <Image source={{ uri: v.imageUri }} style={s.sortThumb} />
+                    : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="sparkles-outline" size={18} color={t.sub} /></View>}
+                  <Text style={s.sortTitle} numberOfLines={1}>{v.title || '（無題）'}</Text>{grip}
+                </View>
+              );
+            }} />
+          </ScrollView>
+        </View>
+      ) : (
+        <>
+          <View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.vTabRow}>
+              {tabs.map((tb) => {
+                const on = filter === tb.id;
+                return (
+                  <Pressable key={tb.id} onPress={() => setFilter(tb.id)} style={[s.vTab, on && s.vTabOn]}>
+                    <Text style={[s.vTabText, on && s.vTabTextOn]}>{tb.name}</Text>
+                    <Text style={[s.vTabCount, on && s.vTabTextOn]}>{tb.count}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+            {listItems.length === 0 ? (
+              <View style={s.vEmpty}>
+                <Text style={s.vEmptyTitle}>叶えたい夢を、ここに。</Text>
+                <Text style={s.vEmptyText}>右上の ＋ から、ひとつ願ってみましょう。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
+              </View>
+            ) : listItems.map((v) => (
+              <Pressable key={v.id} style={s.vRow} onPress={() => setEditId(v.id)} onLongPress={() => canSort && setReorderMode(true)}>
+                <View style={[s.vRowDot, { borderColor: stageAccent(v.status)?.grad[0] || t.line }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.vRowTitle} numberOfLines={1}>{v.title || '（無題）'}</Text>
+                  <View style={s.vRowMeta}>
+                    <View style={[s.catDot, { backgroundColor: catColor(v.categoryId) }]} />
+                    <Text style={s.vRowMetaText} numberOfLines={1}>{metaText(v)}</Text>
+                  </View>
+                </View>
+                {v.imageUri ? <Image source={{ uri: v.imageUri }} style={s.vRowThumb} /> : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <View style={{ height: VH }}>
+            <Visualizer items={vizItems} catName={catNameOf}
+              onOpenFull={(i) => { setFullIndex(i); setFullOpen(true); }}
+              onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })}
+              onAchieve={confirmAchieve} />
+          </View>
+        </>
+      )}
+
+      <VisionAddModal visible={addOpen} onClose={() => setAddOpen(false)} onSave={onAdd} cats={cats} timingLabels={timingLabels} onAddCategory={onAddCategory} />
+      <AchievedModal visible={achievedOpen} onClose={() => setAchievedOpen(false)} visions={visions} cats={cats} onOpen={(v) => { setAchievedOpen(false); setEditId(v.id); }} />
+      <CategoryManageModal visible={manageOpen} onClose={() => setManageOpen(false)} cats={cats} onAdd={onAddCategory} onUpdate={onUpdateCategory} onRemove={onRemoveCategory} />
+      <FullscreenVisualizer visible={fullOpen} items={vizItems} index={fullIndex} onClose={() => setFullOpen(false)} catName={catNameOf}
+        onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })} onAchieve={confirmAchieve} onEdit={(v) => { setFullOpen(false); setEditId(v.id); }} />
+      <VisionEditModal
+        vision={editing} cats={cats} timingLabels={timingLabels}
+        onClose={() => setEditId(null)}
+        onUpdate={(patch) => editing && onUpdate(editing.id, patch)}
+        onRemove={() => { if (editing) { onRemove(editing.id); setEditId(null); } }}
+        onPickPhoto={onPickPhoto} onAchieve={onAchieve} onRevert={onRevert} onAddCategory={onAddCategory}
+      />
+    </View>
   );
 }
 // マソンリーのカード：角丸＋写真オーバーレイに白文字。フチのグラデ色がステータス（叶えたい/最中/叶った）。
@@ -2407,6 +2503,48 @@ function makeStyles(t) {
     vEmpty: { alignItems: 'center', paddingHorizontal: 40, paddingTop: 40, gap: 8 },
     vEmptyTitle: { fontSize: 20, color: t.text, fontFamily: FONT.mincho, letterSpacing: 1 },
     vEmptyText: { fontSize: 13, color: t.sub, textAlign: 'center', lineHeight: 21 },
+    // ビジョン v3：ヘッダー・カテゴリタブ・リスト行・ビジュアライザー・フルスクリーン
+    vHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 },
+    vHeaderTitle: { flex: 1, fontSize: 22, color: t.text, letterSpacing: 3, fontFamily: FONT.mincho, padding: 0 },
+    vHeadBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    vAddIcon: { backgroundColor: t.accent },
+    vTabRow: { gap: 8, paddingHorizontal: 20, paddingBottom: 8 },
+    vTab: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 13, paddingVertical: 7, borderRadius: 999 },
+    vTabOn: { backgroundColor: t.text },
+    vTabText: { fontSize: 13, fontWeight: '700', color: t.text },
+    vTabTextOn: { color: t.bg },
+    vTabCount: { fontSize: 12, fontWeight: '800', color: t.sub, fontFamily: FONT.num },
+    vRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.line },
+    vRowDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2 },
+    vRowTitle: { fontSize: 15.5, fontWeight: '700', color: t.text },
+    vRowMeta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
+    vRowMetaText: { fontSize: 11.5, color: t.sub, fontWeight: '600' },
+    vRowThumb: { width: 46, height: 46, borderRadius: 10 },
+    vizCard: { flex: 1, borderRadius: 20, overflow: 'hidden', backgroundColor: t.surface2 },
+    vizTop: { position: 'absolute', top: 12, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    vizChip: { backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' },
+    vizChipText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+    vizIconBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.32)' },
+    vizBottom: { position: 'absolute', left: 16, right: 16, bottom: 16, gap: 4 },
+    vizTitle: { color: '#fff', fontSize: 22, lineHeight: 28, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 8 },
+    vizSub: { color: 'rgba(255,255,255,0.9)', fontSize: 12.5, lineHeight: 18 },
+    vizDone: { position: 'absolute', right: 12, bottom: 14, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.42)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+    vizDoneText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+    vizCounter: { position: 'absolute', right: 14, top: 54, color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '700', fontFamily: FONT.num },
+    vizDots: { flexDirection: 'row', justifyContent: 'center', gap: 5, paddingTop: 8 },
+    vizDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: t.line },
+    vizDotOn: { backgroundColor: t.accent, width: 16 },
+    vizEmpty: { flex: 1, marginHorizontal: 20, marginBottom: 10, borderRadius: 20, backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed' },
+    vizEmptyText: { color: t.sub, fontSize: 12.5, fontWeight: '600', paddingHorizontal: 30, textAlign: 'center' },
+    fsWrap: { flex: 1, backgroundColor: '#000' },
+    fsTopBar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 8 },
+    fsBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' },
+    fsBottom: { position: 'absolute', left: 20, right: 20, bottom: 30, gap: 8 },
+    fsTitle: { color: '#fff', fontSize: 30, lineHeight: 38, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 10 },
+    fsSub: { color: 'rgba(255,255,255,0.92)', fontSize: 14, lineHeight: 21 },
+    fsDoneWrap: { position: 'absolute', right: 20, bottom: 0, alignItems: 'flex-end', justifyContent: 'flex-end', top: 0 },
+    fsDoneBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.accent, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, position: 'absolute', bottom: 110, right: 0 },
+    fsDoneText: { color: '#fff', fontSize: 15, fontWeight: '900' },
     // ビジョンの操作行（追加・叶った夢・カテゴリ）
     vActionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginTop: 4 },
     vActionPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 },
