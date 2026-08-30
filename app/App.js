@@ -829,10 +829,66 @@ function fmtYMD(ms) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 // 下半分：写真ありの夢を大きくスワイプ閲覧。お気に入り・叶えた・フルスクリーンへ。
-function Visualizer({ items, catName, onOpenFull, onToggleFav, onAchieve }) {
+// ホールドして完了：長押しでゲージが満ちると完了（誤タップ防止＋達成の“重み”を演出）。
+function HoldToComplete({ onComplete, label = 'ホールドして完了', compact = false, duration = 1150 }) {
+  const t = useTheme(); const s = useStyles();
+  const progress = useRef(new Animated.Value(0)).current;
+  const glow = useRef(new Animated.Value(0)).current;
+  const holding = useRef(false);
+  const anim = useRef(null);
+  const [w, setW] = useState(0);
+  const start = () => {
+    holding.current = true;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.timing(glow, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    anim.current = Animated.timing(progress, { toValue: 1, duration, easing: Easing.linear, useNativeDriver: false });
+    anim.current.start(({ finished }) => {
+      if (finished && holding.current) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); holding.current = false; progress.setValue(0); glow.setValue(0); onComplete(); }
+    });
+  };
+  const cancel = () => {
+    if (!holding.current) return;
+    holding.current = false; anim.current && anim.current.stop();
+    Animated.parallel([
+      Animated.timing(progress, { toValue: 0, duration: 220, useNativeDriver: false }),
+      Animated.timing(glow, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]).start();
+  };
+  const fillW = progress.interpolate({ inputRange: [0, 1], outputRange: [0, w] });
+  return (
+    <Pressable onPressIn={start} onPressOut={cancel} onLayout={(e) => setW(e.nativeEvent.layout.width)} style={[s.holdBtn, compact && s.holdBtnSm]}>
+      <Animated.View pointerEvents="none" style={[s.holdGlow, { opacity: glow }]} />
+      <Animated.View pointerEvents="none" style={[s.holdFill, { width: fillW }]} />
+      <View style={s.holdRow} pointerEvents="none">
+        <Text style={[s.holdText, compact && { fontSize: 13 }]}>{label}</Text>
+        <Ionicons name="chevron-forward" size={15} color="#fff" />
+        <Ionicons name="chevron-forward" size={15} color="rgba(255,255,255,0.55)" style={{ marginLeft: -8 }} />
+        <Ionicons name="chevron-forward" size={15} color="rgba(255,255,255,0.28)" style={{ marginLeft: -8 }} />
+      </View>
+    </Pressable>
+  );
+}
+// 開いた瞬間・スワイプするたびに、文字が下から順に浮かび上がるための補間ヘルパー。
+function useReveal(dep) {
+  const reveal = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    reveal.setValue(0);
+    Animated.timing(reveal, { toValue: 1, duration: 850, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [dep]);
+  const line = (a, b) => ({
+    opacity: reveal.interpolate({ inputRange: [a, b], outputRange: [0, 1], extrapolate: 'clamp' }),
+    transform: [{ translateY: reveal.interpolate({ inputRange: [a, b], outputRange: [16, 0], extrapolate: 'clamp' }) }],
+  });
+  return line;
+}
+// 下半分：写真ありの夢を大きくスワイプ閲覧。文字は写真に重ね、開くたびに浮かび上がる。
+function Visualizer({ items, catName, onOpenFull, onToggleFav, onHold }) {
   const t = useTheme(); const s = useStyles();
   const { width } = useWindowDimensions();
+  const cardW = width - 40;
   const [idx, setIdx] = useState(0);
+  const cur = items.length ? items[Math.min(idx, items.length - 1)] : null;
+  const line = useReveal(cur ? cur.id : 'none');
   if (!items.length) {
     return (
       <View style={s.vizEmpty}>
@@ -841,74 +897,69 @@ function Visualizer({ items, catName, onOpenFull, onToggleFav, onAchieve }) {
       </View>
     );
   }
-  const cur = Math.min(idx, items.length - 1);
+  const f = visionFont(cur.font);
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => setIdx(Math.round(e.nativeEvent.contentOffset.x / width))}>
-        {items.map((v, i) => {
-          const f = visionFont(v.font);
-          return (
-            <Pressable key={v.id} style={{ width, paddingHorizontal: 20, paddingBottom: 10 }} onPress={() => onOpenFull(i)}>
-              <View style={s.vizCard}>
-                <Image source={{ uri: v.imageUri }} style={StyleSheet.absoluteFill} />
-                <LinearGradient colors={['rgba(0,0,0,0.18)', 'transparent', 'rgba(0,0,0,0.74)']} style={StyleSheet.absoluteFill} />
-                <View style={s.vizTop}>
-                  <View style={s.vizChip}><Text style={s.vizChipText}>{catName(v.categoryId)}</Text></View>
-                  <Pressable onPress={() => onToggleFav(v)} hitSlop={10} style={s.vizIconBtn}><Ionicons name={v.favorite ? 'heart' : 'heart-outline'} size={20} color={v.favorite ? '#FF6F91' : '#fff'} /></Pressable>
-                </View>
-                <View style={s.vizBottom}>
-                  <Text style={[s.vizTitle, { fontFamily: f.family }]} numberOfLines={2}>{v.title}</Text>
-                  {v.memo ? <Text style={s.vizSub} numberOfLines={2}>{v.memo}</Text> : null}
-                </View>
-                <Pressable onPress={() => onAchieve(v)} hitSlop={6} style={s.vizDone}><Ionicons name="checkmark" size={14} color="#fff" /><Text style={s.vizDoneText}>叶えた</Text></Pressable>
-                <Text style={s.vizCounter}>{i + 1} / {items.length}</Text>
-              </View>
+      <View style={s.vizFrame}>
+        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={StyleSheet.absoluteFill}
+          onMomentumScrollEnd={(e) => setIdx(Math.round(e.nativeEvent.contentOffset.x / cardW))}>
+          {items.map((v, i) => (
+            <Pressable key={v.id} style={{ width: cardW, height: '100%' }} onPress={() => onOpenFull(i)}>
+              <Image source={{ uri: v.imageUri }} style={StyleSheet.absoluteFill} />
             </Pressable>
-          );
-        })}
-      </ScrollView>
-      {items.length > 1 && <View style={s.vizDots}>{items.map((_, i) => <View key={i} style={[s.vizDot, i === cur && s.vizDotOn]} />)}</View>}
+          ))}
+        </ScrollView>
+        <LinearGradient colors={['rgba(0,0,0,0.20)', 'transparent', 'rgba(0,0,0,0.80)']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <View style={s.vizTop} pointerEvents="box-none">
+          <Animated.View style={line(0, 0.4)}><View style={s.vizChip}><Text style={s.vizChipText}>{catName(cur.categoryId)}</Text></View></Animated.View>
+          <Pressable onPress={() => onToggleFav(cur)} hitSlop={10} style={s.vizIconBtn}><Ionicons name={cur.favorite ? 'heart' : 'heart-outline'} size={20} color={cur.favorite ? '#FF6F91' : '#fff'} /></Pressable>
+        </View>
+        <View style={s.vizBottom} pointerEvents="box-none">
+          <Animated.Text style={[s.vizTitle, { fontFamily: f.family }, line(0.12, 0.55)]} numberOfLines={2}>{cur.title}</Animated.Text>
+          {cur.memo ? <Animated.Text style={[s.vizSub, line(0.28, 0.72)]} numberOfLines={2}>{cur.memo}</Animated.Text> : null}
+          <Animated.View style={[{ marginTop: 12 }, line(0.5, 0.95)]}><HoldToComplete compact onComplete={() => onHold(cur)} /></Animated.View>
+        </View>
+        <Text style={s.vizCounter}>{Math.min(idx, items.length - 1) + 1} / {items.length}</Text>
+      </View>
+      {items.length > 1 && <View style={s.vizDots}>{items.map((_, i) => <View key={i} style={[s.vizDot, i === Math.min(idx, items.length - 1) && s.vizDotOn]} />)}</View>}
     </View>
   );
 }
-// フルスクリーンのビジュアライザー（没入・スワイプ・お気に入り・叶えた・編集）
-function FullscreenVisualizer({ visible, items, index, onClose, catName, onToggleFav, onAchieve, onEdit }) {
+// フルスクリーンのビジュアライザー（没入・スワイプ・浮かび上がる文字・ホールドで完了）
+function FullscreenVisualizer({ visible, items, index, onClose, catName, onToggleFav, onHold, onEdit }) {
   const s = useStyles(); const { width } = useWindowDimensions();
   const [idx, setIdx] = useState(index || 0);
   useEffect(() => { setIdx(index || 0); }, [index, visible]);
-  if (!visible || !items.length) return null;
-  const cur = items[Math.min(idx, items.length - 1)];
+  const cur = (visible && items.length) ? items[Math.min(idx, items.length - 1)] : null;
+  const line = useReveal(cur ? cur.id : 'none');
+  if (!visible || !items.length || !cur) return null;
+  const f = visionFont(cur.font); const timing = timingLabel(cur.timing);
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={s.fsWrap}>
         <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
           contentOffset={{ x: (index || 0) * width, y: 0 }}
           onMomentumScrollEnd={(e) => setIdx(Math.round(e.nativeEvent.contentOffset.x / width))}>
-          {items.map((v) => {
-            const f = visionFont(v.font);
-            return (
-              <View key={v.id} style={{ width }}>
-                <Image source={{ uri: v.imageUri }} style={StyleSheet.absoluteFill} />
-                <LinearGradient colors={['rgba(0,0,0,0.45)', 'transparent', 'rgba(0,0,0,0.82)']} style={StyleSheet.absoluteFill} />
-                <SafeAreaView style={s.fsBottom}>
-                  <View style={s.vizChip}><Text style={s.vizChipText}>{catName(v.categoryId)}</Text></View>
-                  <Text style={[s.fsTitle, { fontFamily: f.family }]} numberOfLines={3}>{v.title}</Text>
-                  {v.memo ? <Text style={s.fsSub} numberOfLines={3}>{v.memo}</Text> : null}
-                </SafeAreaView>
-              </View>
-            );
-          })}
+          {items.map((v) => (
+            <View key={v.id} style={{ width }}>
+              <Image source={{ uri: v.imageUri }} style={StyleSheet.absoluteFill} />
+              <LinearGradient colors={['rgba(0,0,0,0.5)', 'transparent', 'rgba(0,0,0,0.86)']} style={StyleSheet.absoluteFill} />
+            </View>
+          ))}
         </ScrollView>
+        <SafeAreaView style={s.fsBottom} pointerEvents="box-none">
+          <Animated.View style={line(0, 0.35)}><View style={s.vizChip}><Text style={s.vizChipText}>{catName(cur.categoryId)}</Text></View></Animated.View>
+          <Animated.Text style={[s.fsTitle, { fontFamily: f.family }, line(0.12, 0.5)]} numberOfLines={3}>{cur.title}</Animated.Text>
+          {cur.memo ? <Animated.Text style={[s.fsSub, line(0.28, 0.68)]} numberOfLines={4}>{cur.memo}</Animated.Text> : null}
+          {timing ? <Animated.View style={[s.fsTimingRow, line(0.4, 0.78)]}><Text style={s.fsTimingLabel}>期限</Text><Text style={s.fsTimingText}>{timing}</Text></Animated.View> : null}
+          <Animated.View style={[{ marginTop: 16 }, line(0.55, 0.98)]}><HoldToComplete onComplete={() => onHold(cur)} /></Animated.View>
+        </SafeAreaView>
         <SafeAreaView style={s.fsTopBar} pointerEvents="box-none">
           <Pressable onPress={onClose} style={s.fsBtn}><Ionicons name="close" size={24} color="#fff" /></Pressable>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Pressable onPress={() => onToggleFav(cur)} style={s.fsBtn}><Ionicons name={cur.favorite ? 'heart' : 'heart-outline'} size={22} color={cur.favorite ? '#FF6F91' : '#fff'} /></Pressable>
             <Pressable onPress={() => onEdit(cur)} style={s.fsBtn}><Ionicons name="create-outline" size={22} color="#fff" /></Pressable>
           </View>
-        </SafeAreaView>
-        <SafeAreaView style={s.fsDoneWrap} pointerEvents="box-none">
-          <Pressable onPress={() => onAchieve(cur)} style={s.fsDoneBtn}><Ionicons name="checkmark-circle" size={20} color="#fff" /><Text style={s.fsDoneText}>叶えた！</Text></Pressable>
         </SafeAreaView>
       </View>
     </Modal>
@@ -947,10 +998,6 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
   const catColor = (id) => (getCategoryById(cats, id)?.color) || '#9A938A';
   const catNameOf = (id) => (getCategoryById(cats, id)?.name) || '未分類';
   const metaText = (v) => `${catNameOf(v.categoryId)}　${timingLabel(v.timing) || fmtYMD(v.createdAt)}`;
-  const confirmAchieve = (v) => Alert.alert('叶えましたか？', `『${v.title || 'この夢'}』を「叶った」にします。`, [
-    { text: 'まだ', style: 'cancel' },
-    { text: '叶えた！', onPress: () => { setFullOpen(false); onAchieve(v.id); } },
-  ]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -1023,7 +1070,7 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
             <Visualizer items={vizItems} catName={catNameOf}
               onOpenFull={(i) => { setFullIndex(i); setFullOpen(true); }}
               onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })}
-              onAchieve={confirmAchieve} />
+              onHold={(v) => onAchieve(v.id)} />
           </View>
         </>
       )}
@@ -1032,7 +1079,7 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
       <AchievedModal visible={achievedOpen} onClose={() => setAchievedOpen(false)} visions={visions} cats={cats} onOpen={(v) => { setAchievedOpen(false); setEditId(v.id); }} />
       <CategoryManageModal visible={manageOpen} onClose={() => setManageOpen(false)} cats={cats} onAdd={onAddCategory} onUpdate={onUpdateCategory} onRemove={onRemoveCategory} />
       <FullscreenVisualizer visible={fullOpen} items={vizItems} index={fullIndex} onClose={() => setFullOpen(false)} catName={catNameOf}
-        onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })} onAchieve={confirmAchieve} onEdit={(v) => { setFullOpen(false); setEditId(v.id); }} />
+        onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })} onHold={(v) => { setFullOpen(false); onAchieve(v.id); }} onEdit={(v) => { setFullOpen(false); setEditId(v.id); }} />
       <VisionEditModal
         vision={editing} cats={cats} timingLabels={timingLabels}
         onClose={() => setEditId(null)}
@@ -1203,16 +1250,9 @@ function VisionEditModal({ vision, cats, timingLabels, onClose, onUpdate, onRemo
     { text: 'キャンセル', style: 'cancel' },
     { text: '削除', style: 'destructive', onPress: onRemove },
   ]);
-  function chooseStage(key) {
+  function setStage(key) {
     if (key === vision.status) return;
-    if (key === 'done') {
-      Alert.alert('叶えましたか？', `『${vision.title || 'この夢'}』を「叶った」にします。`, [
-        { text: 'まだ', style: 'cancel' },
-        { text: '叶えた！', onPress: () => { onAchieve(vision.id); onClose(); } },
-      ]);
-    } else {
-      onUpdate({ status: key, ...(isDone ? { achievedAt: null } : {}) });
-    }
+    onUpdate({ status: key, ...(isDone ? { achievedAt: null } : {}) });
   }
   return (
     <Modal visible={!!vision} animationType="slide" onRequestClose={onClose}>
@@ -1243,17 +1283,27 @@ function VisionEditModal({ vision, cats, timingLabels, onClose, onUpdate, onRemo
 
           <Text style={s.sectionLabel}>いまの状態</Text>
           <View style={s.catWrap}>
-            {VISION_STAGES.map((st) => {
+            {VISION_STAGES.filter((st) => st.key !== 'done').map((st) => {
               const on = vision.status === st.key;
               const acc = stageAccent(st.key);
               return (
-                <Pressable key={st.key} onPress={() => chooseStage(st.key)} style={[s.catChip, on && { backgroundColor: acc.grad[0], borderColor: acc.grad[0] }]}>
+                <Pressable key={st.key} onPress={() => setStage(st.key)} style={[s.catChip, on && { backgroundColor: acc.grad[0], borderColor: acc.grad[0] }]}>
                   <Ionicons name={st.icon} size={13} color={on ? '#fff' : t.sub} />
                   <Text style={[s.catChipText, on && { color: '#fff' }]}>{st.label}</Text>
                 </Pressable>
               );
             })}
           </View>
+          {isDone ? (
+            <View style={{ marginTop: 12 }}>
+              <View style={s.doneNote}><Ionicons name="checkmark-circle" size={16} color={t.gold} /><Text style={s.doneNoteText}>この夢は叶いました</Text></View>
+              <Pressable style={[s.undoneBtn, { marginTop: 10 }]} onPress={() => onRevert(vision.id, 'doing')}><Text style={s.undoneText}>「叶えている最中」に戻す</Text></Pressable>
+            </View>
+          ) : (
+            <View style={{ marginTop: 16 }}>
+              <HoldToComplete onComplete={() => { onAchieve(vision.id); onClose(); }} />
+            </View>
+          )}
 
           <Text style={s.sectionLabel}>メモ（任意）</Text>
           <FocusInput value={vision.memo || ''} onChangeText={(v) => onUpdate({ memo: v })} placeholder="一言そえる（任意）" multiline />
@@ -2542,9 +2592,20 @@ function makeStyles(t) {
     fsBottom: { position: 'absolute', left: 20, right: 20, bottom: 30, gap: 8 },
     fsTitle: { color: '#fff', fontSize: 30, lineHeight: 38, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 10 },
     fsSub: { color: 'rgba(255,255,255,0.92)', fontSize: 14, lineHeight: 21 },
-    fsDoneWrap: { position: 'absolute', right: 20, bottom: 0, alignItems: 'flex-end', justifyContent: 'flex-end', top: 0 },
-    fsDoneBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.accent, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, position: 'absolute', bottom: 110, right: 0 },
-    fsDoneText: { color: '#fff', fontSize: 15, fontWeight: '900' },
+    fsTimingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
+    fsTimingLabel: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '700' },
+    fsTimingText: { color: '#fff', fontSize: 13, fontWeight: '800', fontFamily: FONT.num },
+    // ビジュアライザーの枠（下半分のカード）
+    vizFrame: { flex: 1, marginHorizontal: 20, marginBottom: 10, borderRadius: 20, overflow: 'hidden', backgroundColor: t.surface2 },
+    // ホールドして完了ボタン（ゲージが満ちると発火・ネオングロー）
+    holdBtn: { height: 54, borderRadius: 27, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+    holdBtnSm: { height: 46, borderRadius: 23 },
+    holdGlow: { ...StyleSheet.absoluteFillObject, borderRadius: 27, backgroundColor: t.accent, opacity: 0 },
+    holdFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: t.accent },
+    holdRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    holdText: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.5, marginRight: 2 },
+    doneNote: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.surface2, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, alignSelf: 'flex-start' },
+    doneNoteText: { color: t.text, fontSize: 13, fontWeight: '800' },
     // ビジョンの操作行（追加・叶った夢・カテゴリ）
     vActionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginTop: 4 },
     vActionPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 },
