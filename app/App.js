@@ -151,6 +151,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false); // スクショ/リンクからのクイック保存
+  const [visionAddOpen, setVisionAddOpen] = useState(false); // ビジョン追加（下の＋から）
   const [detailStartEdit, setDetailStartEdit] = useState(false);
   const [giftOpen, setGiftOpen] = useState(false);
   const [gardenOpen, setGardenOpen] = useState(false);
@@ -426,12 +427,13 @@ export default function App() {
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onReorder={reorderItems} density={density} doneCount={doneCount} activeCount={activeCount} />}
             {tab === 'vision' && <VisionTab
               visions={visionSlots} cats={visionCats} title={visionTitle} timingLabels={timingLabels}
+              addOpen={visionAddOpen} onCloseAdd={() => setVisionAddOpen(false)}
               onSetTitle={saveVisionTitle} onAdd={addVision} onUpdate={updateVision} onRemove={removeVision}
               onPickPhoto={pickVisionPhoto} onAchieve={markVisionAchieved} onRevert={revertVision} onReorder={reorderVision}
               onAddCategory={addCategory} onUpdateCategory={updateCategory} onRemoveCategory={removeCategory} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} onSnooze={(id) => applyReminder(id, { remind: 'at', remindAt: Date.now() + DAY_MS })} onStop={(id) => applyReminder(id, { remind: 'none' })} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
-            <TabBar tab={tab} onTab={setTab} onAdd={() => setQuickOpen(true)} mypageBounce={mypageBounce} />
+            <TabBar tab={tab} onTab={setTab} onAdd={() => { if (tab === 'vision') setVisionAddOpen(true); else setQuickOpen(true); }} mypageBounce={mypageBounce} />
           </>
         )}
 
@@ -925,8 +927,9 @@ function Visualizer({ items, catName, onOpenFull, onToggleFav, onHold }) {
     </View>
   );
 }
-// フルスクリーンのビジュアライザー（没入・スワイプ・浮かび上がる文字・ホールドで完了）
-function FullscreenVisualizer({ visible, items, index, onClose, catName, onToggleFav, onHold, onEdit }) {
+// カード確認画面（全カード共通・没入・スワイプ・浮かび上がる文字・ホールドで完了）。
+// 写真がある夢は写真を主役に、無い夢はカテゴリ色のグラデを背景にして同じ見た目にする。
+function FullscreenVisualizer({ visible, items, index, onClose, catName, catColor, onToggleFav, onHold, onEdit }) {
   const s = useStyles(); const { width } = useWindowDimensions();
   const [idx, setIdx] = useState(index || 0);
   useEffect(() => { setIdx(index || 0); }, [index, visible]);
@@ -942,7 +945,9 @@ function FullscreenVisualizer({ visible, items, index, onClose, catName, onToggl
           onMomentumScrollEnd={(e) => setIdx(Math.round(e.nativeEvent.contentOffset.x / width))}>
           {items.map((v) => (
             <View key={v.id} style={{ width }}>
-              <Image source={{ uri: v.imageUri }} style={StyleSheet.absoluteFill} />
+              {v.imageUri
+                ? <Image source={{ uri: v.imageUri }} style={StyleSheet.absoluteFill} />
+                : <LinearGradient colors={[catColor(v.categoryId), '#26221D']} style={StyleSheet.absoluteFill} />}
               <LinearGradient colors={['rgba(0,0,0,0.5)', 'transparent', 'rgba(0,0,0,0.86)']} style={StyleSheet.absoluteFill} />
             </View>
           ))}
@@ -965,11 +970,10 @@ function FullscreenVisualizer({ visible, items, index, onClose, catName, onToggl
     </Modal>
   );
 }
-function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onReorder, onAddCategory, onUpdateCategory, onRemoveCategory }) {
+function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, onSetTitle, onAdd, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onReorder, onAddCategory, onUpdateCategory, onRemoveCategory }) {
   const t = useTheme(); const s = useStyles();
   const { height } = useWindowDimensions();
   const [editId, setEditId] = useState(null);
-  const [addOpen, setAddOpen] = useState(false);
   const [achievedOpen, setAchievedOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [fullOpen, setFullOpen] = useState(false);
@@ -981,7 +985,6 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
   const editing = visions.find((v) => v.id === editId) || null;
   const byId = Object.fromEntries(visions.map((v) => [v.id, v]));
   const active = visions.filter((v) => v.status !== 'done').slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const doneCount = visions.filter((v) => v.status === 'done').length;
   const known = new Set(cats.map((c) => c.id));
   const catOf = (v) => (v.categoryId && known.has(v.categoryId)) ? v.categoryId : '__none';
   const match = (v) => filter === 'all' || catOf(v) === filter;
@@ -989,7 +992,7 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
   const vizItems = active.filter((v) => v.imageUri && match(v)).slice().sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
   const canSort = active.length > 1;
   const inReorder = reorderMode && canSort;
-  const VH = Math.max(300, Math.round(height * 0.42));
+  const VH = Math.max(300, Math.round(height * 0.46));   // 上半分：画像をめいっぱい
 
   const tabs = [{ id: 'all', name: 'すべて', count: active.length }];
   cats.forEach((c) => { const n = active.filter((v) => v.categoryId === c.id).length; if (n) tabs.push({ id: c.id, name: c.name, count: n }); });
@@ -998,6 +1001,8 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
   const catColor = (id) => (getCategoryById(cats, id)?.color) || '#9A938A';
   const catNameOf = (id) => (getCategoryById(cats, id)?.name) || '未分類';
   const metaText = (v) => `${catNameOf(v.categoryId)}　${timingLabel(v.timing) || fmtYMD(v.createdAt)}`;
+  // カードを触ると確認画面（フルスクリーン）へ。編集はその中の鉛筆ボタンからのみ。
+  const openDetail = (v) => { const i = listItems.findIndex((x) => x.id === v.id); setFullIndex(Math.max(0, i)); setFullOpen(true); };
 
   return (
     <View style={{ flex: 1 }}>
@@ -1008,7 +1013,6 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
           <Pressable style={s.vActionIcon} onPress={() => setManageOpen(true)} accessibilityLabel="カテゴリ"><Ionicons name="pricetags-outline" size={17} color={t.sub} /></Pressable>
           <Pressable style={s.vActionIcon} onPress={() => setAchievedOpen(true)} accessibilityLabel="叶った夢"><Ionicons name="trophy-outline" size={17} color={t.gold} /></Pressable>
           {canSort && <Pressable style={s.vActionIcon} onPress={() => setReorderMode((v) => !v)} accessibilityLabel="並べ替え"><Ionicons name={inReorder ? 'checkmark' : 'swap-vertical'} size={17} color={inReorder ? t.accent : t.sub} /></Pressable>}
-          <Pressable style={[s.vActionIcon, s.vAddIcon]} onPress={() => setAddOpen(true)} accessibilityLabel="追加"><Ionicons name="add" size={22} color="#fff" /></Pressable>
         </View>
       </View>
 
@@ -1031,6 +1035,15 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
         </View>
       ) : (
         <>
+          {/* 上半分：画像のビジュアライザー（めいっぱい） */}
+          <View style={{ height: VH }}>
+            <Visualizer items={vizItems} catName={catNameOf}
+              onOpenFull={(i) => openDetail(vizItems[i])}
+              onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })}
+              onHold={(v) => onAchieve(v.id)} />
+          </View>
+
+          {/* カテゴリタブ */}
           <View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.vTabRow}>
               {tabs.map((tb) => {
@@ -1045,15 +1058,15 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
             </ScrollView>
           </View>
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+          {/* 下半分：一覧 */}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
             {listItems.length === 0 ? (
               <View style={s.vEmpty}>
                 <Text style={s.vEmptyTitle}>叶えたい夢を、ここに。</Text>
-                <Text style={s.vEmptyText}>右上の ＋ から、ひとつ願ってみましょう。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
+                <Text style={s.vEmptyText}>下の ＋ から、ひとつ願ってみましょう。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
               </View>
             ) : listItems.map((v) => (
-              <Pressable key={v.id} style={s.vRow} onPress={() => setEditId(v.id)} onLongPress={() => canSort && setReorderMode(true)}>
-                <View style={[s.vRowDot, { borderColor: stageAccent(v.status)?.grad[0] || t.line }]} />
+              <Pressable key={v.id} style={s.vRow} onPress={() => openDetail(v)} onLongPress={() => canSort && setReorderMode(true)}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.vRowTitle} numberOfLines={1}>{v.title || '（無題）'}</Text>
                   <View style={s.vRowMeta}>
@@ -1065,20 +1078,13 @@ function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUp
               </Pressable>
             ))}
           </ScrollView>
-
-          <View style={{ height: VH }}>
-            <Visualizer items={vizItems} catName={catNameOf}
-              onOpenFull={(i) => { setFullIndex(i); setFullOpen(true); }}
-              onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })}
-              onHold={(v) => onAchieve(v.id)} />
-          </View>
         </>
       )}
 
-      <VisionAddModal visible={addOpen} onClose={() => setAddOpen(false)} onSave={onAdd} cats={cats} timingLabels={timingLabels} onAddCategory={onAddCategory} />
+      <VisionAddModal visible={addOpen} onClose={onCloseAdd} onSave={onAdd} cats={cats} timingLabels={timingLabels} onAddCategory={onAddCategory} />
       <AchievedModal visible={achievedOpen} onClose={() => setAchievedOpen(false)} visions={visions} cats={cats} onOpen={(v) => { setAchievedOpen(false); setEditId(v.id); }} />
       <CategoryManageModal visible={manageOpen} onClose={() => setManageOpen(false)} cats={cats} onAdd={onAddCategory} onUpdate={onUpdateCategory} onRemove={onRemoveCategory} />
-      <FullscreenVisualizer visible={fullOpen} items={vizItems} index={fullIndex} onClose={() => setFullOpen(false)} catName={catNameOf}
+      <FullscreenVisualizer visible={fullOpen} items={listItems} index={fullIndex} onClose={() => setFullOpen(false)} catName={catNameOf} catColor={catColor}
         onToggleFav={(v) => onUpdate(v.id, { favorite: !v.favorite })} onHold={(v) => { setFullOpen(false); onAchieve(v.id); }} onEdit={(v) => { setFullOpen(false); setEditId(v.id); }} />
       <VisionEditModal
         vision={editing} cats={cats} timingLabels={timingLabels}
