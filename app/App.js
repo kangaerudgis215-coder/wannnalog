@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, VISION_STATUS, visionFont, buildVisionBoard } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, buildVisionBoard, achievedGallery, getCategoryById, daysToAchieve } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -55,8 +55,10 @@ const THEME_KEY = 'wannalog_theme';
 const PROFILE_KEY = 'wannalog_profile';
 const PROFILE_PHOTO_KEY = 'wannalog_profile_photo';
 const DENSITY_KEY = 'wannalog_density'; // 'compact'（既定）/ 'comfy'（ゆったり）
-const VISION_KEY = 'wannalog_vision_v1';
+const VISION_KEY = 'wannalog_vision_v1';       // ビジョン（欲求）の配列。読み込み時にv2へ移行
 const VISION_TITLE_KEY = 'wannalog_vision_title';
+const VISION_CAT_KEY = 'wannalog_vision_categories'; // カテゴリ（種別）の配列
+const TIMING_LABELS_KEY = 'wannalog_timing_labels';  // 「時期」の独自ラベル（再利用用）
 const GARDEN_KEY = 'wannalog_garden_v1';
 // 箱庭は「将来の設計」としてステイ。今はSNS認知づくりに集中するため非表示（true で復活）。
 const GARDEN_ENABLED = false;
@@ -65,11 +67,8 @@ const SHARE_ENABLED = false;
 // バックアップは試作・引っ越し用（リリース版はクラウド同期に置換予定）。今は非表示（true で復活）。
 const BACKUP_ENABLED = false;
 
-// ビジョンボードは「したい」とは別データ。テンプレの枠に写真を嵌める。
-// 「3枚テンプレ」を初期表示にして、足りなければ「枠を追加」で増やせる。
-const VISION_SEED = [
-  { id: 'v1', imageUri: null }, { id: 'v2', imageUri: null }, { id: 'v3', imageUri: null },
-];
+// ビジョン（欲求のストック）は「したい」とは別データ。初期は空（空状態が招待になる）。
+const VISION_SEED = [];
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -143,8 +142,10 @@ export default function App() {
   const [profilePhoto, setProfilePhoto] = useState(null);
   const [density, setDensity] = useState('compact');
   const [items, setItems] = useState([]);
-  const [visionSlots, setVisionSlots] = useState(VISION_SEED);
-  const [visionTitle, setVisionTitle] = useState('2026 VISION');
+  const [visionSlots, setVisionSlots] = useState(VISION_SEED);   // ビジョン配列（v2）
+  const [visionCats, setVisionCats] = useState(VISION_CATEGORY_SEED); // カテゴリ配列
+  const [timingLabels, setTimingLabels] = useState([]);          // 「時期」独自ラベル（再利用）
+  const [visionTitle, setVisionTitle] = useState('MY VISION');
   const [filter, setFilter] = useState('all');
   const [tab, setTab] = useState('home');
   const [selectedId, setSelectedId] = useState(null);
@@ -172,8 +173,17 @@ export default function App() {
       const p = await AsyncStorage.getItem(PROFILE_KEY); if (p) setProfileName(p);
       const pp = await AsyncStorage.getItem(PROFILE_PHOTO_KEY); if (pp) setProfilePhoto(pp);
       const dn = await AsyncStorage.getItem(DENSITY_KEY); if (dn) setDensity(dn);
+      // カテゴリ（無ければ初期テンプレを保存）
+      const vc = await AsyncStorage.getItem(VISION_CAT_KEY);
+      if (vc) setVisionCats(JSON.parse(vc)); else AsyncStorage.setItem(VISION_CAT_KEY, JSON.stringify(VISION_CATEGORY_SEED));
+      // ビジョン（旧スロットは読み込み時にv2へ移行して保存し直す）
       const vs = await AsyncStorage.getItem(VISION_KEY);
-      if (vs) setVisionSlots(JSON.parse(vs)); else AsyncStorage.setItem(VISION_KEY, JSON.stringify(VISION_SEED));
+      if (vs) {
+        const migrated = migrateVisions(JSON.parse(vs));
+        setVisionSlots(migrated);
+        AsyncStorage.setItem(VISION_KEY, JSON.stringify(migrated));
+      }
+      const tl = await AsyncStorage.getItem(TIMING_LABELS_KEY); if (tl) setTimingLabels(JSON.parse(tl));
       const vt = await AsyncStorage.getItem(VISION_TITLE_KEY); if (vt) setVisionTitle(vt);
       const g = await AsyncStorage.getItem(GARDEN_KEY); if (g) setGarden(JSON.parse(g));
     })();
@@ -208,7 +218,7 @@ export default function App() {
     try {
       const payload = {
         app: 'WannaLog', version: 1, exportedAt: new Date().toISOString(),
-        items, vision: { slots: visionSlots, title: visionTitle },
+        items, vision: { slots: visionSlots, title: visionTitle, categories: visionCats, timingLabels },
         profile: { name: profileName }, garden,
         prefs: { theme: mode, density },
       };
@@ -238,7 +248,12 @@ export default function App() {
             withNotif.push({ ...it, notifId });
           }
           await persist(withNotif);
-          if (data.vision) { await persistVision(data.vision.slots || VISION_SEED); await saveVisionTitle(data.vision.title || '2026 VISION'); }
+          if (data.vision) {
+            await persistVision(migrateVisions(data.vision.slots || VISION_SEED));
+            if (data.vision.categories) await persistCats(data.vision.categories);
+            if (data.vision.timingLabels) await persistTimingLabels(data.vision.timingLabels);
+            await saveVisionTitle(data.vision.title || 'MY VISION');
+          }
           if (data.profile?.name) await saveName(data.profile.name);
           if (data.garden) await persistGarden(data.garden);
           if (data.prefs?.theme) { setMode(data.prefs.theme); await AsyncStorage.setItem(THEME_KEY, data.prefs.theme); }
@@ -254,24 +269,68 @@ export default function App() {
     Linking.openURL(url).catch(() => Alert.alert('リンクを開けませんでした'));
   }
 
-  // ビジョンボード操作（「したい」とは別データ）
+  // ビジョン（欲求ストック）操作。「したい」とは別データ。
   async function persistVision(next) { setVisionSlots(next); await AsyncStorage.setItem(VISION_KEY, JSON.stringify(next)); }
-  async function fillVisionSlot(id) {
+  async function persistCats(next) { setVisionCats(next); await AsyncStorage.setItem(VISION_CAT_KEY, JSON.stringify(next)); }
+  async function persistTimingLabels(next) { setTimingLabels(next); await AsyncStorage.setItem(TIMING_LABELS_KEY, JSON.stringify(next)); }
+  async function saveVisionTitle(v) { setVisionTitle(v); await AsyncStorage.setItem(VISION_TITLE_KEY, v); }
+
+  // 新規ビジョンを追加（1画面シートから）。初期ステータスは「叶えたい」。
+  async function addVision(data) {
+    const maxOrder = visionSlots.reduce((m, v) => Math.max(m, v.order || 0), 0);
+    const v = {
+      id: String(Date.now()), categoryId: data.categoryId || null, title: (data.title || '').trim(),
+      timing: data.timing || null, status: 'want', imageUri: data.imageUri || null,
+      memo: (data.memo || '').trim(), font: data.font || 'mincho',
+      createdAt: Date.now(), achievedAt: null, order: maxOrder + 1,
+    };
+    // 独自ラベルの時期は再利用リストに保存
+    if (v.timing && v.timing.kind === 'label' && v.timing.text) await rememberTimingLabel(v.timing.text);
+    await persistVision([...visionSlots, v]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+  async function updateVision(id, patch) {
+    if (patch.timing && patch.timing.kind === 'label' && patch.timing.text) await rememberTimingLabel(patch.timing.text);
+    await persistVision(visionSlots.map((v) => (v.id === id ? { ...v, ...patch } : v)));
+  }
+  async function removeVision(id) { await persistVision(visionSlots.filter((v) => v.id !== id)); }
+  // 写真をタップ→トリミングして差し替え（1ビジョン1枚）。
+  async function pickVisionPhoto(id) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
-    if (!res.canceled) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, imageUri: res.assets[0].uri } : sl))); Haptics.selectionAsync(); }
+    if (!res.canceled) { await updateVision(id, { imageUri: res.assets[0].uri }); Haptics.selectionAsync(); }
   }
-  async function clearVisionSlot(id) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, imageUri: null } : sl))); }
-  async function addVisionSlot() { await persistVision([...visionSlots, { id: String(Date.now()), imageUri: null }]); }
-  async function removeVisionSlot(id) { await persistVision(visionSlots.filter((sl) => sl.id !== id)); }
-  async function saveVisionTitle(v) { setVisionTitle(v); await AsyncStorage.setItem(VISION_TITLE_KEY, v); }
-  async function setVisionLabel(id, text) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, label: text } : sl))); }
-  async function updateVisionSlot(id, patch) { await persistVision(visionSlots.map((sl) => (sl.id === id ? { ...sl, ...patch } : sl))); }
+  // 「叶った」に変更：達成日を記録して達成演出（ホームと同じ演出を流用）。
+  async function markVisionAchieved(id) {
+    const v = visionSlots.find((x) => x.id === id); if (!v) return;
+    await persistVision(visionSlots.map((x) => (x.id === id ? { ...x, status: 'done', achievedAt: Date.now() } : x)));
+    setCeleb({ item: { imageUri: v.imageUri, title: v.title, category: null } });
+  }
+  // 「叶った」から戻す（達成日を消す）。
+  async function revertVision(id, status) { await updateVision(id, { status, achievedAt: null }); }
   async function reorderVision(ids) {
-    const map = Object.fromEntries(visionSlots.map((sl) => [sl.id, sl]));
-    await persistVision(ids.map((id) => map[id]).filter(Boolean));
+    // 表示中(id順)を order に反映。並びに含まれないもの（達成分など）は末尾へ。
+    const pos = Object.fromEntries(ids.map((id, i) => [id, i]));
+    const next = visionSlots.map((v) => (pos[v.id] != null ? { ...v, order: pos[v.id] } : v));
+    await persistVision(next);
     Haptics.selectionAsync();
+  }
+  // カテゴリ操作
+  async function addCategory(name, color) {
+    const c = { id: 'c' + Date.now(), name: (name || '').trim() || 'カテゴリ', color: color || CATEGORY_COLORS[0] };
+    await persistCats([...visionCats, c]);
+    return c;
+  }
+  async function updateCategory(id, patch) { await persistCats(visionCats.map((c) => (c.id === id ? { ...c, ...patch } : c))); }
+  async function removeCategory(id) {
+    // そのカテゴリのビジョンは「未分類」に戻す（消さない）。
+    await persistVision(visionSlots.map((v) => (v.categoryId === id ? { ...v, categoryId: null } : v)));
+    await persistCats(visionCats.filter((c) => c.id !== id));
+  }
+  async function rememberTimingLabel(text) {
+    const t2 = (text || '').trim(); if (!t2 || timingLabels.includes(t2)) return;
+    await persistTimingLabels([t2, ...timingLabels].slice(0, 12));
   }
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
@@ -365,7 +424,11 @@ export default function App() {
         ) : (
           <>
             {tab === 'home' && <HomeTab items={items} filter={filter} setFilter={setFilter} onOpen={openItem} onReorder={reorderItems} density={density} doneCount={doneCount} activeCount={activeCount} />}
-            {tab === 'vision' && <VisionTab slots={visionSlots} title={visionTitle} onSetTitle={saveVisionTitle} onFill={fillVisionSlot} onClear={clearVisionSlot} onAdd={addVisionSlot} onRemove={removeVisionSlot} onUpdateSlot={updateVisionSlot} onReorder={reorderVision} />}
+            {tab === 'vision' && <VisionTab
+              visions={visionSlots} cats={visionCats} title={visionTitle} timingLabels={timingLabels}
+              onSetTitle={saveVisionTitle} onAdd={addVision} onUpdate={updateVision} onRemove={removeVision}
+              onPickPhoto={pickVisionPhoto} onAchieve={markVisionAchieved} onRevert={revertVision} onReorder={reorderVision}
+              onAddCategory={addCategory} onUpdateCategory={updateCategory} onRemoveCategory={removeCategory} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} onSnooze={(id) => applyReminder(id, { remind: 'at', remindAt: Date.now() + DAY_MS })} onStop={(id) => applyReminder(id, { remind: 'none' })} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
             <TabBar tab={tab} onTab={setTab} onAdd={() => setQuickOpen(true)} mypageBounce={mypageBounce} />
@@ -759,17 +822,22 @@ function EmptyState({ text }) {
   );
 }
 
-/* ---------- ビジョンボード（ピン留めされた夢：淡い空の背景＋ワシテープ＋微回転） ---------- */
-function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove, onUpdateSlot, onReorder }) {
+/* ---------- ビジョン（欲求のストック：エディトリアルなギャラリー） ---------- */
+function VisionTab({ visions, cats, title, timingLabels, onSetTitle, onAdd, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onReorder, onAddCategory, onUpdateCategory, onRemoveCategory }) {
   const t = useTheme(); const s = useStyles();
-  const [editId, setEditId] = useState(null);          // 拡大・編集を開いている枠
-  const [reorderMode, setReorderMode] = useState(false); // 並べ替えモード（ホームと同じ操作）
-  const [dragging, setDragging] = useState(false);     // ドラッグ中は外側スクロールを止める
-  const editing = slots.find((sl) => sl.id === editId) || null;
-  const canSort = slots.length > 1;
+  const [editId, setEditId] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [achievedOpen, setAchievedOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const editing = visions.find((v) => v.id === editId) || null;
+  const byId = Object.fromEntries(visions.map((v) => [v.id, v]));
+  const { hero, sections, done } = buildVisionBoard(visions, cats);
+  const active = visions.filter((v) => v.status !== 'done').slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const canSort = active.length > 1;
   const inReorder = reorderMode && canSort;
-  const byId = Object.fromEntries(slots.map((sl) => [sl.id, sl]));
-  const { hero, shelves } = buildVisionBoard(slots);
+  const catColor = (id) => (getCategoryById(cats, id)?.color) || '#9A938A';
   return (
     <View style={{ flex: 1 }}>
       {/* 写真が主役になる、温かいオフホワイトのキャンバス */}
@@ -784,25 +852,24 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
               </Pressable>
             )}
           </View>
-          <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="2026 VISION" placeholderTextColor={t.sub} maxLength={24} editable={!inReorder} />
+          <TextInput style={s.visionTitle} value={title} onChangeText={onSetTitle} placeholder="MY VISION" placeholderTextColor={t.sub} maxLength={24} editable={!inReorder} />
         </View>
 
         {inReorder ? (
-          // ホーム画面と同じ：右端の ≡ をつまんで上下にドラッグ
           <View>
             <View style={s.reorderBar}>
               <Text style={s.reorderBarText}>右端の ≡ をつまんで、上下にドラッグ</Text>
               <Pressable onPress={() => setReorderMode(false)} style={s.reorderDone}><Text style={s.reorderDoneText}>完了</Text></Pressable>
             </View>
             <View style={{ paddingHorizontal: 20 }}>
-              <DragReorderList ids={slots.map((sl) => sl.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging, grip }) => {
-                const sl = byId[id]; if (!sl) return null;
+              <DragReorderList ids={active.map((v) => v.id)} onChange={onReorder} onDragActive={setDragging} renderRow={(id, { dragging: rowDragging, grip }) => {
+                const v = byId[id]; if (!v) return null;
                 return (
-                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: t.accent }, rowDragging && s.sortRowDrag]}>
-                    {sl.imageUri
-                      ? <Image source={{ uri: sl.imageUri }} style={s.sortThumb} />
-                      : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="image-outline" size={18} color={t.sub} /></View>}
-                    <Text style={s.sortTitle} numberOfLines={1}>{sl.label || '空の枠'}</Text>
+                  <View style={[s.sortRow, { borderLeftWidth: 3, borderLeftColor: catColor(v.categoryId) }, rowDragging && s.sortRowDrag]}>
+                    {v.imageUri
+                      ? <Image source={{ uri: v.imageUri }} style={s.sortThumb} />
+                      : <View style={[s.sortThumb, { backgroundColor: t.surface2, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="sparkles-outline" size={18} color={t.sub} /></View>}
+                    <Text style={s.sortTitle} numberOfLines={1}>{v.title || '（無題）'}</Text>
                     {grip}
                   </View>
                 );
@@ -811,72 +878,79 @@ function VisionTab({ slots, title, onSetTitle, onFill, onClear, onAdd, onRemove,
           </View>
         ) : (
           <>
+            {/* 操作の行：追加・叶った夢・カテゴリ */}
+            <View style={s.vActionRow}>
+              <Pressable style={[s.vActionPill, s.vActionPrimary]} onPress={() => setAddOpen(true)}>
+                <Ionicons name="add" size={17} color="#fff" /><Text style={[s.vActionText, { color: '#fff' }]}>夢を追加</Text>
+              </Pressable>
+              <Pressable style={s.vActionPill} onPress={() => setAchievedOpen(true)}>
+                <Ionicons name="trophy-outline" size={15} color={t.gold} /><Text style={s.vActionText}>叶った夢 {done.length}</Text>
+              </Pressable>
+              <Pressable style={s.vActionIcon} onPress={() => setManageOpen(true)} accessibilityLabel="カテゴリを編集">
+                <Ionicons name="pricetags-outline" size={17} color={t.sub} />
+              </Pressable>
+            </View>
+
             {hero && <VisionHero slot={hero} onPress={() => setEditId(hero.id)} />}
 
-            {shelves.map((sec) => (
-              <View key={sec.key} style={{ marginTop: 22 }}>
+            {sections.map((sec) => (
+              <View key={sec.id} style={{ marginTop: 22 }}>
                 <View style={s.shelfHead}>
-                  <Text style={s.shelfTitle}>{sec.emoji} {sec.label}</Text>
+                  <View style={[s.catDot, { backgroundColor: sec.color, width: 10, height: 10, borderRadius: 5 }]} />
+                  <Text style={s.shelfTitle}>{sec.name}</Text>
                   <View style={s.shelfBadge}><Text style={s.shelfBadgeText}>{sec.items.length}</Text></View>
                 </View>
-                <Masonry items={sec.items} renderTile={(sl) => <VisionCard key={sl.id} slot={sl} onPress={() => setEditId(sl.id)} />} />
+                <Masonry items={sec.items} renderTile={(v) => <VisionCard key={v.id} slot={v} onPress={() => setEditId(v.id)} />} />
               </View>
             ))}
 
-            {slots.length === 0 && (
+            {active.length === 0 && (
               <View style={s.vEmpty}>
                 <Text style={s.vEmptyTitle}>叶えたい夢を、ここに。</Text>
-                <Text style={s.vEmptyText}>憧れの写真を1枚、貼るところから。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
+                <Text style={s.vEmptyText}>「＋ 夢を追加」から、ひとつ願ってみましょう。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
               </View>
             )}
-
-            <Pressable style={s.visionAdd} onPress={onAdd}>
-              <Ionicons name="add" size={18} color={t.accent} />
-              <Text style={s.visionAddText}>夢を追加</Text>
-            </Pressable>
           </>
         )}
 
+        <VisionAddModal visible={addOpen} onClose={() => setAddOpen(false)} onSave={onAdd} cats={cats} timingLabels={timingLabels} onAddCategory={onAddCategory} />
+        <AchievedModal visible={achievedOpen} onClose={() => setAchievedOpen(false)} visions={visions} cats={cats} onOpen={(v) => { setAchievedOpen(false); setEditId(v.id); }} />
+        <CategoryManageModal visible={manageOpen} onClose={() => setManageOpen(false)} cats={cats} onAdd={onAddCategory} onUpdate={onUpdateCategory} onRemove={onRemoveCategory} />
         <VisionEditModal
-          slot={editing}
+          vision={editing} cats={cats} timingLabels={timingLabels}
           onClose={() => setEditId(null)}
-          onFill={() => editing && onFill(editing.id)}
-          onClear={() => editing && onClear(editing.id)}
+          onUpdate={(patch) => editing && onUpdate(editing.id, patch)}
           onRemove={() => { if (editing) { onRemove(editing.id); setEditId(null); } }}
-          onUpdate={(patch) => editing && onUpdateSlot(editing.id, patch)}
+          onPickPhoto={onPickPhoto} onAchieve={onAchieve} onRevert={onRevert} onAddCategory={onAddCategory}
         />
       </ScrollView>
     </View>
   );
 }
-// ステータスのアクセント（実行中＝炎グラデ／計画中＝青紫）。文字ラベルは持たず、色とアイコンだけで示す。
-function visionAccent(status) {
-  if (status === 'doing') return { grad: ['#FF7A45', '#FFB648'], icon: 'flame' };
-  if (status === 'planning') return { grad: ['#6E7FE0', '#93A6FF'], icon: 'bulb' };
-  return null;
-}
 // ヒーロー：今週のフォーカスを大きく1枚。写真に黒グラデ＋白の明朝タイトルを重ねる。
 function VisionHero({ slot, onPress }) {
-  const t = useTheme(); const s = useStyles();
-  const f = visionFont(slot.font); const acc = visionAccent(slot.status);
+  const s = useStyles();
+  const f = visionFont(slot.font); const acc = stageAccent(slot.status);
   return (
     <PressBounce onPress={onPress} style={s.heroWrap}>
       <View style={s.heroCard}>
-        <Image source={{ uri: slot.imageUri }} style={s.heroImg} />
+        {slot.imageUri
+          ? <Image source={{ uri: slot.imageUri }} style={s.heroImg} />
+          : <LinearGradient colors={acc ? acc.grad : ['#9A938A', '#B7AEA2']} style={s.heroImg} />}
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.72)']} style={StyleSheet.absoluteFill} />
         {acc && <View style={[s.vBadge, s.heroBadge]}><LinearGradient colors={acc.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.vBadgeGrad}><Ionicons name={acc.icon} size={13} color="#fff" /></LinearGradient></View>}
         <View style={s.heroTextWrap}>
           <Text style={s.heroKicker}>今週のフォーカス</Text>
-          {slot.label ? <Text style={[s.heroTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label}</Text> : null}
+          {slot.title ? <Text style={[s.heroTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.title}</Text> : null}
         </View>
       </View>
     </PressBounce>
   );
 }
-// マソンリーのカード：角丸＋写真オーバーレイに白文字。フチのグラデ色がステータスを表す。高さはIDで不揃い。
+// マソンリーのカード：角丸＋写真オーバーレイに白文字。フチのグラデ色がステータス（叶えたい/最中/叶った）。
 function VisionCard({ slot, onPress }) {
   const t = useTheme(); const s = useStyles();
-  const f = visionFont(slot.font); const acc = visionAccent(slot.status);
+  const f = visionFont(slot.font); const acc = stageAccent(slot.status);
   const ar = cardAspect(slot.id);
   const inner = (
     <View style={s.vCardInner}>
@@ -886,7 +960,7 @@ function VisionCard({ slot, onPress }) {
           : <LinearGradient colors={[catSoft(null, t.mode), t.surface]} style={[s.cardImg, s.cardCenter]}><Ionicons name="sparkles-outline" size={28} color={t.sub} /></LinearGradient>}
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.04)', 'rgba(0,0,0,0.66)']} style={StyleSheet.absoluteFill} />
         {acc && <View style={s.vBadge}><LinearGradient colors={acc.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.vBadgeGrad}><Ionicons name={acc.icon} size={11} color="#fff" /></LinearGradient></View>}
-        {slot.label ? <Text style={[s.vCardTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.label}</Text> : null}
+        {slot.title ? <Text style={[s.vCardTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.title}</Text> : null}
       </View>
     </View>
   );
@@ -898,7 +972,7 @@ function VisionCard({ slot, onPress }) {
     </PressBounce>
   );
 }
-// フォーカスすると spark カラーの細枠が浮かぶ入力欄（角丸16・ダーク対応）
+// フォーカスすると accent の細枠が浮かぶ入力欄
 function FocusInput({ multiline, style, ...props }) {
   const t = useTheme(); const s = useStyles();
   const [focused, setFocused] = useState(false);
@@ -909,78 +983,259 @@ function FocusInput({ multiline, style, ...props }) {
       style={[multiline ? s.memoInput : s.input, s.focusField, focused && { borderColor: t.accent }, style]} />
   );
 }
-// 拡大表示＋編集：写真・目標詳細・一言コメント・進み具合タグ・字体を1画面で。
-function VisionEditModal({ slot, onClose, onFill, onClear, onRemove, onUpdate }) {
+// カテゴリ選択（＋新規作成つき）
+function CategoryPicker({ cats, value, onChange, onAddCategory }) {
   const t = useTheme(); const s = useStyles();
-  const f = visionFont(slot?.font);
-  if (!slot) return null;
-  const confirmRemove = () => Alert.alert('この枠を削除しますか？', '写真とメモが消えます。', [
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState(''); const [color, setColor] = useState(CATEGORY_COLORS[0]);
+  return (
+    <View>
+      <View style={s.catWrap}>
+        {cats.map((c) => {
+          const on = value === c.id;
+          return (
+            <Pressable key={c.id} onPress={() => onChange(c.id)} style={[s.catChip, { borderColor: c.color }, on && { backgroundColor: c.color }]}>
+              <View style={[s.catDot, { backgroundColor: on ? '#fff' : c.color }]} />
+              <Text style={[s.catChipText, { color: on ? '#fff' : t.text }]}>{c.name}</Text>
+            </Pressable>
+          );
+        })}
+        <Pressable onPress={() => setCreating((v) => !v)} style={[s.catChip, s.catChipDashed]}><Ionicons name="add" size={13} color={t.accent} /><Text style={[s.catChipText, { color: t.accent }]}>カテゴリ</Text></Pressable>
+      </View>
+      {creating && (
+        <View style={s.newCatBox}>
+          <TextInput style={s.input} value={name} onChangeText={setName} placeholder="新しいカテゴリ名" placeholderTextColor={t.sub} maxLength={12} />
+          <View style={[s.catWrap, { marginTop: 8 }]}>
+            {CATEGORY_COLORS.map((col) => (
+              <Pressable key={col} onPress={() => setColor(col)} style={[s.colorDot, { backgroundColor: col }, color === col && s.colorDotOn]} />
+            ))}
+          </View>
+          <Pressable onPress={async () => { const nm = name.trim(); if (!nm) return; const c = await onAddCategory(nm, color); setName(''); setCreating(false); if (c) onChange(c.id); }} style={[s.saveBtn, { marginTop: 10 }]}><Text style={s.saveBtnText}>カテゴリを追加</Text></Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+// 時期の選択（プリセット＋独自ラベル＋日付。どれか一つ）
+function TimingPicker({ value, onChange, labels, onAddLabel }) {
+  const t = useTheme(); const s = useStyles();
+  const [showLabel, setShowLabel] = useState(false);
+  const [labelText, setLabelText] = useState('');
+  const [showDate, setShowDate] = useState(false);
+  const isPreset = (k) => value && value.kind === 'preset' && value.key === k;
+  const isLabel = (txt) => value && value.kind === 'label' && value.text === txt;
+  const isDate = value && value.kind === 'date';
+  const chip = (on, onPress, label, key) => (
+    <Pressable key={key} onPress={onPress} style={[s.catChip, on && { backgroundColor: t.accent, borderColor: t.accent }]}>
+      <Text style={[s.catChipText, on && { color: '#fff' }]}>{label}</Text>
+    </Pressable>
+  );
+  return (
+    <View>
+      <View style={s.catWrap}>
+        {TIMING_PRESETS.map((p) => chip(isPreset(p.key), () => onChange(isPreset(p.key) ? null : { kind: 'preset', key: p.key }), p.label, p.key))}
+        {(labels || []).map((lt) => chip(isLabel(lt), () => onChange(isLabel(lt) ? null : { kind: 'label', text: lt }), lt, 'L' + lt))}
+        <Pressable onPress={() => { setShowLabel((v) => !v); setShowDate(false); }} style={[s.catChip, s.catChipDashed]}><Ionicons name="add" size={13} color={t.accent} /><Text style={[s.catChipText, { color: t.accent }]}>自分の言葉</Text></Pressable>
+        <Pressable onPress={() => { setShowDate((v) => !v); setShowLabel(false); }} style={[s.catChip, s.catChipDashed, isDate && { backgroundColor: t.accent, borderColor: t.accent }]}><Ionicons name="calendar-outline" size={13} color={isDate ? '#fff' : t.accent} /><Text style={[s.catChipText, { color: isDate ? '#fff' : t.accent }]}>{isDate ? timingLabel(value) : '日付'}</Text></Pressable>
+      </View>
+      {showLabel && (
+        <View style={s.newCatRow}>
+          <TextInput style={[s.input, { flex: 1 }]} value={labelText} onChangeText={setLabelText} placeholder="例：30歳になるまで" placeholderTextColor={t.sub} maxLength={16} />
+          <Pressable onPress={() => { const txt = labelText.trim(); if (txt) { onChange({ kind: 'label', text: txt }); onAddLabel && onAddLabel(txt); } setLabelText(''); setShowLabel(false); }} style={s.newCatAdd}><Text style={s.newCatAddText}>追加</Text></Pressable>
+        </View>
+      )}
+      {showDate && (
+        <DateTimePicker value={isDate ? new Date(value.date) : new Date()} mode="date" display="inline"
+          onChange={(e, d) => { setShowDate(false); if (d) onChange({ kind: 'date', date: d.toISOString().slice(0, 10) }); }} />
+      )}
+    </View>
+  );
+}
+// 新規ビジョン追加（1画面シート）
+function VisionAddModal({ visible, onClose, onSave, cats, timingLabels, onAddCategory }) {
+  const t = useTheme(); const s = useStyles();
+  const [title, setTitle] = useState('');
+  const [categoryId, setCategoryId] = useState(null);
+  const [timing, setTiming] = useState(null);
+  const [image, setImage] = useState(null);
+  const [memo, setMemo] = useState('');
+  useEffect(() => { if (visible) { setTitle(''); setCategoryId(null); setTiming(null); setImage(null); setMemo(''); } }, [visible]);
+  async function pick() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('写真へのアクセスが許可されていません'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
+    if (!res.canceled) setImage(res.assets[0].uri);
+  }
+  function save() {
+    if (!title.trim()) { Alert.alert('タイトルを入力してください'); return; }
+    if (!categoryId) { Alert.alert('カテゴリを選んでください', '「＋カテゴリ」で新しく作ることもできます。'); return; }
+    onSave({ title, categoryId, timing, imageUri: image, memo });
+    onClose();
+  }
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView style={s.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={s.sheet}>
+          <View style={s.sheetHeader}><Text style={s.sheetTitle}>叶えたい夢を追加</Text><Pressable onPress={onClose}><Ionicons name="close" size={22} color={t.sub} /></Pressable></View>
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <TextInput style={s.input} placeholder="何を叶えたい？（例：スイス旅行）" placeholderTextColor={t.sub} value={title} onChangeText={setTitle} autoFocus />
+            <Text style={s.label}>カテゴリ（必須）</Text>
+            <CategoryPicker cats={cats} value={categoryId} onChange={setCategoryId} onAddCategory={onAddCategory} />
+            <Text style={s.label}>時期（任意）</Text>
+            <TimingPicker value={timing} onChange={setTiming} labels={timingLabels} />
+            <Text style={s.label}>写真（任意・1枚）</Text>
+            <Pressable style={s.photoPick} onPress={pick}>
+              {image ? <Image source={{ uri: image }} style={s.photoPreview} /> : <View style={s.photoPickInner}><Ionicons name="image-outline" size={22} color={t.sub} /><Text style={s.photoPickText}>写真を選ぶ（切り取りできます）</Text></View>}
+            </Pressable>
+            {image && <View style={s.photoSubRow}><Pressable style={s.photoSubBtn} onPress={() => setImage(null)}><Ionicons name="close" size={15} color="#E5484D" /><Text style={[s.photoSubText, { color: '#E5484D' }]}>写真を外す</Text></Pressable></View>}
+            <Text style={s.label}>メモ（任意）</Text>
+            <FocusInput value={memo} onChangeText={setMemo} placeholder="一言そえる（任意）" maxLength={60} />
+            <Pressable style={s.saveBtn} onPress={save}><Text style={s.saveBtnText}>ボードに追加</Text></Pressable>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+// 拡大表示＋編集（タイトル・カテゴリ・時期・状態・メモ・字体）。「叶った」は確認を挟む。
+function VisionEditModal({ vision, cats, timingLabels, onClose, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onAddCategory }) {
+  const t = useTheme(); const s = useStyles();
+  if (!vision) return null;
+  const f = visionFont(vision.font);
+  const isDone = vision.status === 'done';
+  const confirmRemove = () => Alert.alert('この夢を削除しますか？', '元に戻せません。', [
     { text: 'キャンセル', style: 'cancel' },
     { text: '削除', style: 'destructive', onPress: onRemove },
   ]);
+  function chooseStage(key) {
+    if (key === vision.status) return;
+    if (key === 'done') {
+      Alert.alert('叶えましたか？', `『${vision.title || 'この夢'}』を「叶った」にします。`, [
+        { text: 'まだ', style: 'cancel' },
+        { text: '叶えた！', onPress: () => { onAchieve(vision.id); onClose(); } },
+      ]);
+    } else {
+      onUpdate({ status: key, ...(isDone ? { achievedAt: null } : {}) });
+    }
+  }
   return (
-    <Modal visible={!!slot} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={!!vision} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={s.safe}>
         <View style={s.detailBar}>
           <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
           <Pressable onPress={confirmRemove} style={s.detailBarBtn}><Ionicons name="trash-outline" size={20} color="#E5484D" /></Pressable>
         </View>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          {/* 拡大写真（タップで設定／変更） */}
-          <Pressable onPress={onFill} style={s.visionBigPhotoWrap}>
-            {slot.imageUri
-              ? <Image source={{ uri: slot.imageUri }} style={s.visionBigPhoto} />
+          <Pressable onPress={() => onPickPhoto(vision.id)} style={s.visionBigPhotoWrap}>
+            {vision.imageUri
+              ? <Image source={{ uri: vision.imageUri }} style={s.visionBigPhoto} />
               : <LinearGradient colors={[catSoft(null, t.mode), t.surface]} style={[s.visionBigPhoto, s.visionBigEmpty]}>
-                  <Ionicons name="sparkles-outline" size={38} color={t.sub} />
-                  <Text style={s.visionEmptyText}>写真を入れる</Text>
+                  <Ionicons name="image-outline" size={38} color={t.sub} />
+                  <Text style={s.visionEmptyText}>写真を入れる（任意）</Text>
                 </LinearGradient>}
-            {slot.label ? (
-              <View style={s.visionLabelWrap}>
-                <Text style={[s.visionBigLabel, { fontFamily: f.family, letterSpacing: f.spacing }]} numberOfLines={3}>{slot.label}</Text>
-              </View>
-            ) : null}
+            <View style={s.photoTapHint}><Ionicons name="create-outline" size={13} color="#fff" /><Text style={s.photoTapHintText}>写真を編集</Text></View>
           </Pressable>
-          {slot.imageUri && (
-            <View style={s.photoSubRow}>
-              <Pressable style={s.photoSubBtn} onPress={onFill}><Ionicons name="camera-outline" size={15} color={t.accent} /><Text style={s.photoSubText}>写真を変更</Text></Pressable>
-              <Pressable style={s.photoSubBtn} onPress={onClear}><Ionicons name="close" size={15} color="#E5484D" /><Text style={[s.photoSubText, { color: '#E5484D' }]}>写真を外す</Text></Pressable>
-            </View>
-          )}
 
-          <Text style={s.sectionLabel}>進み具合</Text>
+          <Text style={s.sectionLabel}>タイトル</Text>
+          <FocusInput value={vision.title} onChangeText={(v) => onUpdate({ title: v })} placeholder="何を叶えたい？" maxLength={40} />
+
+          <Text style={s.sectionLabel}>カテゴリ</Text>
+          <CategoryPicker cats={cats} value={vision.categoryId} onChange={(id) => onUpdate({ categoryId: id })} onAddCategory={onAddCategory} />
+
+          <Text style={s.sectionLabel}>時期（任意）</Text>
+          <TimingPicker value={vision.timing} onChange={(tm) => onUpdate({ timing: tm })} labels={timingLabels} />
+
+          <Text style={s.sectionLabel}>いまの状態</Text>
           <View style={s.catWrap}>
-            {VISION_STATUS.map((x) => {
-              const on = slot.status === x.key;
+            {VISION_STAGES.map((st) => {
+              const on = vision.status === st.key;
+              const acc = stageAccent(st.key);
               return (
-                <Pressable key={x.key} onPress={() => onUpdate({ status: on ? null : x.key })}
-                  style={[s.catChip, { borderColor: x.color, backgroundColor: on ? x.color : 'transparent' }]}>
-                  <Ionicons name={x.icon} size={13} color={on ? '#fff' : x.color} />
-                  <Text style={[s.catChipText, { color: on ? '#fff' : x.color }]}>{x.label}</Text>
+                <Pressable key={st.key} onPress={() => chooseStage(st.key)} style={[s.catChip, on && { backgroundColor: acc.grad[0], borderColor: acc.grad[0] }]}>
+                  <Ionicons name={st.icon} size={13} color={on ? '#fff' : t.sub} />
+                  <Text style={[s.catChipText, on && { color: '#fff' }]}>{st.label}</Text>
                 </Pressable>
               );
             })}
           </View>
 
+          <Text style={s.sectionLabel}>メモ（任意）</Text>
+          <FocusInput value={vision.memo || ''} onChangeText={(v) => onUpdate({ memo: v })} placeholder="一言そえる（任意）" multiline />
+
           <Text style={s.sectionLabel}>字体</Text>
           <View style={s.catWrap}>
             {VISION_FONTS.map((fo) => {
-              const on = (slot.font || 'mincho') === fo.key;
+              const on = (vision.font || 'mincho') === fo.key;
               return (
-                <Pressable key={fo.key} onPress={() => onUpdate({ font: fo.key })}
-                  style={[s.catChip, on && { backgroundColor: t.accent, borderColor: t.accent }]}>
+                <Pressable key={fo.key} onPress={() => onUpdate({ font: fo.key })} style={[s.catChip, on && { backgroundColor: t.accent, borderColor: t.accent }]}>
                   <Text style={[s.catChipText, { fontFamily: fo.family }, on && { color: '#fff' }]}>{fo.label}</Text>
                 </Pressable>
               );
             })}
           </View>
-
-          <Text style={s.sectionLabel}>一言コメント</Text>
-          <FocusInput value={slot.label || ''} onChangeText={(v) => onUpdate({ label: v })}
-            placeholder="例：いつか家族でハワイ" maxLength={40} />
-
-          <Text style={s.sectionLabel}>目標の詳細（任意）</Text>
-          <FocusInput value={slot.detail || ''} onChangeText={(v) => onUpdate({ detail: v })}
-            placeholder="なぜ叶えたい？いつまでに？どうやって？" multiline />
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+// 「叶った夢」一覧（達成日の新しい順・カテゴリ切替）
+function AchievedModal({ visible, onClose, visions, cats, onOpen }) {
+  const t = useTheme(); const s = useStyles();
+  const [catFilter, setCatFilter] = useState(null);
+  const list = useMemo(() => achievedGallery(visions, catFilter), [visions, catFilter]);
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={s.safe}>
+        <View style={s.detailBar}>
+          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+          <Text style={s.detailBarTitle}>叶った夢</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+            <Chip label="すべて" active={catFilter === null} onPress={() => setCatFilter(null)} />
+            {cats.map((c) => <Chip key={c.id} label={c.name} active={catFilter === c.id} onPress={() => setCatFilter(c.id)} />)}
+          </ScrollView>
+          {list.length === 0
+            ? <View style={s.vEmpty}><Text style={s.vEmptyTitle}>まだ叶った夢はありません。</Text><Text style={s.vEmptyText}>ひとつずつ、叶えていきましょう。</Text></View>
+            : <Masonry items={list} renderTile={(v) => <VisionCard key={v.id} slot={v} onPress={() => onOpen(v)} />} />}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+// カテゴリの管理（追加・改名・色・削除）
+function CategoryManageModal({ visible, onClose, cats, onAdd, onUpdate, onRemove }) {
+  const t = useTheme(); const s = useStyles();
+  const [name, setName] = useState(''); const [color, setColor] = useState(CATEGORY_COLORS[0]);
+  const confirmDelete = (c) => Alert.alert(`「${c.name}」を削除しますか？`, 'このカテゴリの夢は「未分類」に移ります（消えません）。', [
+    { text: 'キャンセル', style: 'cancel' },
+    { text: '削除', style: 'destructive', onPress: () => onRemove(c.id) },
+  ]);
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={s.safe}>
+        <View style={s.detailBar}>
+          <Pressable onPress={onClose} style={s.detailBarBtn}><Ionicons name="chevron-back" size={24} color={t.text} /></Pressable>
+          <Text style={s.detailBarTitle}>カテゴリ</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {cats.map((c) => (
+            <View key={c.id} style={s.catManageRow}>
+              <View style={[s.catDot, { backgroundColor: c.color, width: 14, height: 14, borderRadius: 7 }]} />
+              <TextInput style={s.catManageInput} defaultValue={c.name} onEndEditing={(e) => onUpdate(c.id, { name: e.nativeEvent.text.trim() || c.name })} placeholderTextColor={t.sub} maxLength={12} />
+              <Pressable onPress={() => confirmDelete(c)} style={s.detailBarBtn}><Ionicons name="trash-outline" size={18} color="#E5484D" /></Pressable>
+            </View>
+          ))}
+          <Text style={s.sectionLabel}>新しいカテゴリ</Text>
+          <TextInput style={s.input} value={name} onChangeText={setName} placeholder="名前（例：健康）" placeholderTextColor={t.sub} maxLength={12} />
+          <View style={[s.catWrap, { marginTop: 8 }]}>
+            {CATEGORY_COLORS.map((col) => (
+              <Pressable key={col} onPress={() => setColor(col)} style={[s.colorDot, { backgroundColor: col }, color === col && s.colorDotOn]} />
+            ))}
+          </View>
+          <Pressable onPress={() => { const nm = name.trim(); if (!nm) return; onAdd(nm, color); setName(''); }} style={[s.saveBtn, { marginTop: 12 }]}><Text style={s.saveBtnText}>追加する</Text></Pressable>
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -2152,6 +2407,24 @@ function makeStyles(t) {
     vEmpty: { alignItems: 'center', paddingHorizontal: 40, paddingTop: 40, gap: 8 },
     vEmptyTitle: { fontSize: 20, color: t.text, fontFamily: FONT.mincho, letterSpacing: 1 },
     vEmptyText: { fontSize: 13, color: t.sub, textAlign: 'center', lineHeight: 21 },
+    // ビジョンの操作行（追加・叶った夢・カテゴリ）
+    vActionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginTop: 4 },
+    vActionPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.surface, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 },
+    vActionPrimary: { backgroundColor: t.accent },
+    vActionText: { fontSize: 13, fontWeight: '800', color: t.text },
+    vActionIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: t.surface },
+    // カテゴリ選択・作成
+    catDot: { width: 8, height: 8, borderRadius: 4 },
+    catChipDashed: { borderStyle: 'dashed', borderColor: t.accent, backgroundColor: 'transparent' },
+    newCatBox: { backgroundColor: t.surface, borderRadius: 14, padding: 12, marginTop: 8 },
+    newCatRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+    newCatAdd: { backgroundColor: t.accent, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+    newCatAddText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+    colorDot: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: 'transparent' },
+    colorDotOn: { borderColor: t.text },
+    catManageRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.surface, borderRadius: 14, paddingLeft: 14, paddingRight: 4, paddingVertical: 4, marginBottom: 8 },
+    catManageInput: { flex: 1, fontSize: 15, fontWeight: '700', color: t.text, paddingVertical: 10 },
+    detailBarTitle: { fontSize: 16, fontWeight: '800', color: t.text },
     visionBigPhotoWrap: { borderRadius: 22, overflow: 'hidden' },
     visionBigPhoto: { width: '100%', height: 300, borderRadius: 22 },
     visionBigEmpty: { backgroundColor: t.surface, borderWidth: 1.5, borderColor: t.line, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', gap: 8 },
