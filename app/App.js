@@ -882,22 +882,6 @@ function useReveal(dep) {
   });
   return line;
 }
-// タグの段に並ぶ、白基調のシンプルなカード（画像＋タイトル）。触れると確認画面へ。
-function VisionShelfCard({ vision, cardW, catColor, onPress }) {
-  const t = useTheme(); const s = useStyles();
-  const col = catColor(vision.categoryId);
-  return (
-    <PressBounce onPress={onPress} style={[s.shelfCard, { width: cardW }]}>
-      <View style={s.shelfCardImgWrap}>
-        {vision.imageUri
-          ? <Image source={{ uri: vision.imageUri }} style={s.cardImg} />
-          : <LinearGradient colors={[col + '44', col + '18']} style={[s.cardImg, s.cardCenter]}><Ionicons name="sparkles-outline" size={22} color={col} /></LinearGradient>}
-        {vision.favorite ? <View style={s.shelfFav}><Ionicons name="heart" size={11} color="#fff" /></View> : null}
-      </View>
-      <Text style={s.shelfCardTitle} numberOfLines={2}>{vision.title || '（無題）'}</Text>
-    </PressBounce>
-  );
-}
 // カード確認画面（全カード共通）：上に画像、下はグラデでぼかし、タイトルや期限を浮かび上がらせる。
 function FullscreenVisualizer({ visible, items, index, onClose, catName, catColor, onToggleFav, onHold, onEdit }) {
   const s = useStyles(); const { width, height } = useWindowDimensions();
@@ -946,7 +930,6 @@ function FullscreenVisualizer({ visible, items, index, onClose, catName, catColo
 }
 function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, onSetTitle, onAdd, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onReorder, onAddCategory, onUpdateCategory, onRemoveCategory }) {
   const t = useTheme(); const s = useStyles();
-  const { width } = useWindowDimensions();
   const [editId, setEditId] = useState(null);
   const [achievedOpen, setAchievedOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
@@ -962,7 +945,6 @@ function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, on
   const catOf = (v) => (v.categoryId && known.has(v.categoryId)) ? v.categoryId : '__none';
   const canSort = active.length > 1;
   const inReorder = reorderMode && canSort;
-  const cardW = Math.round((width - 52) / 3);   // 画面に約3枚並ぶ大きさ（3×3の目安）
 
   const catColor = (id) => (getCategoryById(cats, id)?.color) || '#9A938A';
   const catNameOf = (id) => (getCategoryById(cats, id)?.name) || '未分類';
@@ -1012,15 +994,13 @@ function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, on
               <Text style={s.vEmptyText}>下の ＋ から、ひとつ願ってみましょう。{'\n'}例：スイス旅行 / マラソン完走 / 憧れの部屋</Text>
             </View>
           ) : sections.map((sec) => (
-            <View key={sec.id} style={{ marginBottom: 18 }}>
+            <View key={sec.id} style={{ marginBottom: 10, marginTop: 6 }}>
               <View style={s.shelfHead}>
                 <View style={[s.catDot, { backgroundColor: sec.color, width: 10, height: 10, borderRadius: 5 }]} />
                 <Text style={s.shelfTitle}>{sec.name}</Text>
                 <View style={s.shelfBadge}><Text style={s.shelfBadgeText}>{sec.items.length}</Text></View>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 12, paddingTop: 2, paddingBottom: 2 }}>
-                {sec.items.map((v) => <VisionShelfCard key={v.id} vision={v} cardW={cardW} catColor={catColor} onPress={() => openDetail(v)} />)}
-              </ScrollView>
+              <Masonry items={sec.items} renderTile={(v) => <VisionCard key={v.id} slot={v} onPress={() => openDetail(v)} />} />
             </View>
           ))}
         </ScrollView>
@@ -1041,28 +1021,31 @@ function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, on
     </View>
   );
 }
-// マソンリーのカード：角丸＋写真オーバーレイに白文字。フチのグラデ色がステータス（叶えたい/最中/叶った）。
+// Pinteret型マソンリーのカード：写真が主役。角丸＋写真に重ねた白タイトル＋ステータスバッジ＋時期タグ。
 function VisionCard({ slot, onPress }) {
   const t = useTheme(); const s = useStyles();
-  const f = visionFont(slot.font); const acc = stageAccent(slot.status);
+  const f = visionFont(slot.font);
+  const st = visionStage(slot.status); const acc = stageAccent(slot.status);
   const ar = cardAspect(slot.id);
-  const inner = (
-    <View style={s.vCardInner}>
+  const tm = timingLabel(slot.timing);
+  return (
+    <PressBounce onPress={onPress} style={s.vCard}>
       <View style={{ width: '100%', aspectRatio: ar }}>
         {slot.imageUri
           ? <Image source={{ uri: slot.imageUri }} style={s.cardImg} />
-          : <LinearGradient colors={[catSoft(null, t.mode), t.surface]} style={[s.cardImg, s.cardCenter]}><Ionicons name="sparkles-outline" size={28} color={t.sub} /></LinearGradient>}
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.04)', 'rgba(0,0,0,0.66)']} style={StyleSheet.absoluteFill} />
-        {acc && <View style={s.vBadge}><LinearGradient colors={acc.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.vBadgeGrad}><Ionicons name={acc.icon} size={11} color="#fff" /></LinearGradient></View>}
+          : <LinearGradient colors={[catSoft(null, t.mode), t.surface]} style={[s.cardImg, s.cardCenter]}><Ionicons name="sparkles-outline" size={30} color={t.sub} /></LinearGradient>}
+        <LinearGradient colors={['rgba(0,0,0,0.05)', 'transparent', 'rgba(0,0,0,0.74)']} style={StyleSheet.absoluteFill} />
+        {/* ステータスバッジ（ドット＋文字） */}
+        <View style={s.vStatusBadge}>
+          <View style={[s.vStatusDot, { backgroundColor: acc ? acc.grad[0] : '#fff' }]} />
+          <Text style={s.vStatusText}>{st.label}</Text>
+        </View>
+        {slot.favorite ? <View style={s.vCardFav}><Ionicons name="heart" size={12} color="#fff" /></View> : null}
+        {/* 時期タグ */}
+        {tm ? <View style={s.vTimingTag}><Ionicons name="time-outline" size={10} color="#fff" /><Text style={s.vTimingTagText}>{tm}</Text></View> : null}
+        {/* タイトル（写真に重ねる） */}
         {slot.title ? <Text style={[s.vCardTitle, { fontFamily: f.family }]} numberOfLines={2}>{slot.title}</Text> : null}
       </View>
-    </View>
-  );
-  return (
-    <PressBounce onPress={onPress} style={{ width: '100%' }}>
-      {acc
-        ? <LinearGradient colors={acc.grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.vCardBorder}>{inner}</LinearGradient>
-        : <View style={[s.vCardBorder, { backgroundColor: t.line }]}>{inner}</View>}
     </PressBounce>
   );
 }
@@ -2495,6 +2478,14 @@ function makeStyles(t) {
     vCardBorder: { borderRadius: 16, padding: 1.5 },
     vCardInner: { borderRadius: 14.5, overflow: 'hidden', backgroundColor: t.surface },
     vCardTitle: { position: 'absolute', left: 11, right: 11, bottom: 10, color: '#fff', fontSize: 15, lineHeight: 20, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 8 },
+    // Pinterest型カード（写真主役・角丸・オーバーレイ）
+    vCard: { borderRadius: 14, overflow: 'hidden', backgroundColor: t.surface2, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
+    vStatusBadge: { position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(0,0,0,0.42)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+    vStatusDot: { width: 7, height: 7, borderRadius: 4 },
+    vStatusText: { color: '#fff', fontSize: 10.5, fontWeight: '800' },
+    vTimingTag: { position: 'absolute', top: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(0,0,0,0.42)', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 4 },
+    vTimingTagText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+    vCardFav: { position: 'absolute', top: 38, right: 8, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center' },
     // セクション見出し＋件数バッジ
     shelfHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, marginBottom: 6 },
     shelfTitle: { fontSize: 16, color: t.text, fontFamily: FONT.bold },
