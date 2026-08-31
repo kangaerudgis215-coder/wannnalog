@@ -824,11 +824,6 @@ function EmptyState({ text }) {
 }
 
 /* ---------- ビジョン（上＝全リスト / 下＝画像ありのビジュアライザー） ---------- */
-function fmtYMD(ms) {
-  if (!ms) return '';
-  const d = new Date(ms);
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-}
 // ホールドして完了：長押しでゲージが満ちると完了（誤タップ防止＋達成の“重み”を演出）。
 function HoldToComplete({ onComplete, label = 'ホールドして完了', compact = false, duration = 1150 }) {
   const t = useTheme(); const s = useStyles();
