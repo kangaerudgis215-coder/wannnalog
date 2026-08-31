@@ -22,7 +22,7 @@ import { actionLinks, detailLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
-import { moveItem } from './reorder';
+import { moveItem, reorderedItems } from './reorder';
 import { homeBlocks } from './layout';
 import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
 import { giftableItems, giftShareMessage } from './gift';
@@ -379,10 +379,7 @@ export default function App() {
   async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
   // 手動並べ替え：未達成カードを指定順に並べ、達成済みは末尾に保持して保存。
   async function reorderItems(activeIds) {
-    const map = Object.fromEntries(items.map((it) => [it.id, it]));
-    const active = activeIds.map((id) => map[id]).filter(Boolean);
-    const done = items.filter((it) => it.doneAt);
-    await persist([...active, ...done]);
+    await persist(reorderedItems(items, activeIds));
     Haptics.selectionAsync();
   }
   // 通知設定を丸ごと差し替え：古い予約を取り消し→新設定で予約し直す
