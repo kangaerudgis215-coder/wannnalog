@@ -9,3 +9,11 @@ export function moveItem(arr, from, to) {
   next.splice(dest, 0, x);
   return next;
 }
+
+// 手動並べ替え：未達成カードを activeIds の順に並べ、達成済みは元の順のまま末尾に保持した新しい配列を返す。
+export function reorderedItems(items, activeIds) {
+  const map = Object.fromEntries(items.map((it) => [it.id, it]));
+  const active = activeIds.map((id) => map[id]).filter(Boolean);
+  const done = items.filter((it) => it.doneAt);
+  return [...active, ...done];
+}

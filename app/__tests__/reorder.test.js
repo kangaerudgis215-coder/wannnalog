@@ -1,4 +1,4 @@
-import { moveItem } from '../reorder';
+import { moveItem, reorderedItems } from '../reorder';
 
 describe('moveItem', () => {
   test('下へ移動できる', () => {
@@ -22,5 +22,28 @@ describe('moveItem', () => {
   test('範囲外の from は何もせずコピーを返す', () => {
     expect(moveItem(['a', 'b', 'c'], -1, 0)).toEqual(['a', 'b', 'c']);
     expect(moveItem(['a', 'b', 'c'], 3, 0)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('reorderedItems', () => {
+  const a = { id: 'a', doneAt: null };
+  const b = { id: 'b', doneAt: null };
+  const c = { id: 'c', doneAt: 100 };
+
+  test('未達成カードをactiveIdsの順に並べ、達成済みは末尾に保持する', () => {
+    expect(reorderedItems([a, b, c], ['b', 'a']).map((it) => it.id)).toEqual(['b', 'a', 'c']);
+  });
+
+  test('達成済みが複数あっても元の順のまま末尾に保持する', () => {
+    const c2 = { id: 'c2', doneAt: 200 };
+    expect(reorderedItems([a, b, c, c2], ['b', 'a']).map((it) => it.id)).toEqual(['b', 'a', 'c', 'c2']);
+  });
+
+  test('activeIdsに存在しないidが混ざっていても無視する', () => {
+    expect(reorderedItems([a, b, c], ['b', 'ghost', 'a']).map((it) => it.id)).toEqual(['b', 'a', 'c']);
+  });
+
+  test('達成済みが無ければ未達成のみを返す', () => {
+    expect(reorderedItems([a, b], ['b', 'a']).map((it) => it.id)).toEqual(['b', 'a']);
   });
 });
