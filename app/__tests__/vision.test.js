@@ -1,7 +1,7 @@
 import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
   TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
-  migrateVision, migrateVisions, buildVisionBoard, achievedGallery, getCategoryById,
+  migrateVision, migrateVisions, buildVisionBoard, buildVisionTabView, achievedGallery, getCategoryById,
   VISION_CATEGORY_SEED,
 } from '../vision';
 
@@ -127,6 +127,58 @@ describe('achievedGallery', () => {
   });
   test('カテゴリ指定で絞れる', () => {
     expect(achievedGallery(visions, 'life').map((v) => v.id)).toEqual(['a']);
+  });
+});
+
+describe('buildVisionTabView', () => {
+  const cats = VISION_CATEGORY_SEED;
+  test('達成(done)は除外し、未達成のみ対象', () => {
+    const visions = [
+      { id: 'a', categoryId: 'life', status: 'done', createdAt: 1 },
+      { id: 'b', categoryId: 'life', status: 'want', createdAt: 2 },
+    ];
+    const { shown } = buildVisionTabView(visions, cats);
+    expect(shown.map((v) => v.id)).toEqual(['b']);
+  });
+  test('sortMode: newest(既定)は作成日が新しい順、oldestは古い順', () => {
+    const visions = [
+      { id: 'a', categoryId: 'life', status: 'want', createdAt: 1 },
+      { id: 'b', categoryId: 'life', status: 'want', createdAt: 3 },
+      { id: 'c', categoryId: 'life', status: 'want', createdAt: 2 },
+    ];
+    expect(buildVisionTabView(visions, cats).shown.map((v) => v.id)).toEqual(['b', 'c', 'a']);
+    expect(buildVisionTabView(visions, cats, 'all', 'oldest').shown.map((v) => v.id)).toEqual(['a', 'c', 'b']);
+  });
+  test('filterでカテゴリ絞り込み（__noneは未分類）', () => {
+    const visions = [
+      { id: 'a', categoryId: 'life', status: 'want', createdAt: 1 },
+      { id: 'b', categoryId: 'career', status: 'want', createdAt: 2 },
+      { id: 'c', categoryId: 'zzz', status: 'want', createdAt: 3 },
+    ];
+    expect(buildVisionTabView(visions, cats, 'life').shown.map((v) => v.id)).toEqual(['a']);
+    expect(buildVisionTabView(visions, cats, '__none').shown.map((v) => v.id)).toEqual(['c']);
+  });
+  test('カテゴリ別にセクション化し、空の段は出さない・未知カテゴリは未分類へ', () => {
+    const visions = [
+      { id: 'a', categoryId: 'life', status: 'want', createdAt: 1 },
+      { id: 'b', categoryId: 'zzz', status: 'want', createdAt: 2 },
+    ];
+    const { sections } = buildVisionTabView(visions, cats);
+    const ids = sections.map((s) => s.id);
+    expect(ids).toEqual(['life', '__none']);
+    expect(sections.find((s) => s.id === '__none').items.map((v) => v.id)).toEqual(['b']);
+  });
+  test('filterOptionsは「すべて」＋件数のあるカテゴリのみ、件数つき', () => {
+    const visions = [
+      { id: 'a', categoryId: 'life', status: 'want', createdAt: 1 },
+      { id: 'b', categoryId: 'life', status: 'want', createdAt: 2 },
+      { id: 'c', categoryId: 'career', status: 'done', createdAt: 3 },
+    ];
+    const { filterOptions } = buildVisionTabView(visions, cats);
+    expect(filterOptions).toEqual([
+      { id: 'all', name: 'すべて', count: 2 },
+      { id: 'life', name: '生活習慣', count: 2, color: '#FF7A45' },
+    ]);
   });
 });
 
