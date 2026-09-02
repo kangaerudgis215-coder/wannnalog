@@ -129,3 +129,28 @@ export function achievedGallery(visions, categoryId = null) {
 export function getCategoryById(categories, id) {
   return (categories || []).find((c) => c.id === id) || null;
 }
+
+// ビジョンタブ本体の表示用データ組み立て：未達成のみを対象に、並べ替え→絞り込み→カテゴリ別セクション化。
+// filter: 'all' | categoryId | '__none'（未分類） / sortMode: 'newest' | 'oldest'（作成日）
+export function buildVisionTabView(visions, categories, filter = 'all', sortMode = 'newest') {
+  const cats = categories || [];
+  const known = new Set(cats.map((c) => c.id));
+  const catOf = (v) => (v.categoryId && known.has(v.categoryId)) ? v.categoryId : '__none';
+  const cmp = sortMode === 'oldest'
+    ? (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
+    : (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
+  const active = (visions || []).filter((v) => v.status !== 'done').slice().sort(cmp);
+  const shown = filter === 'all' ? active : active.filter((v) => catOf(v) === filter);
+
+  // カテゴリ別セクション（絞り込み中はその1つだけ）。空の段は出さない。
+  const sections = [];
+  cats.forEach((c) => { const items = shown.filter((v) => v.categoryId === c.id); if (items.length) sections.push({ id: c.id, name: c.name, color: c.color, items }); });
+  const unc = shown.filter((v) => catOf(v) === '__none'); if (unc.length) sections.push({ id: '__none', name: '未分類', color: '#9A938A', items: unc });
+
+  // 絞り込みシートのカテゴリ候補（件数つき）
+  const filterOptions = [{ id: 'all', name: 'すべて', count: active.length }];
+  cats.forEach((c) => { const n = active.filter((v) => v.categoryId === c.id).length; if (n) filterOptions.push({ id: c.id, name: c.name, count: n, color: c.color }); });
+  const noneN = active.filter((v) => catOf(v) === '__none').length; if (noneN) filterOptions.push({ id: '__none', name: '未分類', count: noneN });
+
+  return { shown, sections, filterOptions };
+}

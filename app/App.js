@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -961,26 +961,10 @@ function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, on
   const [sortMode, setSortMode] = useState('newest');    // 'newest' | 'oldest'（作成日）
 
   const editing = visions.find((v) => v.id === editId) || null;
-  const known = new Set(cats.map((c) => c.id));
-  const catOf = (v) => (v.categoryId && known.has(v.categoryId)) ? v.categoryId : '__none';
-  const cmp = sortMode === 'oldest'
-    ? (a, b) => (a.createdAt || 0) - (b.createdAt || 0)
-    : (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
-  const active = visions.filter((v) => v.status !== 'done').slice().sort(cmp);
-  const shown = filter === 'all' ? active : active.filter((v) => catOf(v) === filter);
+  const { shown, sections, filterOptions } = buildVisionTabView(visions, cats, filter, sortMode);
 
   const catColor = (id) => (getCategoryById(cats, id)?.color) || '#9A938A';
   const catNameOf = (id) => (getCategoryById(cats, id)?.name) || '未分類';
-
-  // カテゴリ別セクション（絞り込み中はその1つだけ）。空の段は出さない。
-  const sections = [];
-  cats.forEach((c) => { const items = shown.filter((v) => v.categoryId === c.id); if (items.length) sections.push({ id: c.id, name: c.name, color: c.color, items }); });
-  const unc = shown.filter((v) => catOf(v) === '__none'); if (unc.length) sections.push({ id: '__none', name: '未分類', color: '#9A938A', items: unc });
-
-  // 絞り込みシートのカテゴリ候補（件数つき）
-  const filterOptions = [{ id: 'all', name: 'すべて', count: active.length }];
-  cats.forEach((c) => { const n = active.filter((v) => v.categoryId === c.id).length; if (n) filterOptions.push({ id: c.id, name: c.name, count: n, color: c.color }); });
-  const noneN = active.filter((v) => catOf(v) === '__none').length; if (noneN) filterOptions.push({ id: '__none', name: '未分類', count: noneN });
 
   // カードを触ると確認画面（フルスクリーン）へ。編集はその中の鉛筆ボタンからのみ。
   const openDetail = (v) => { const i = shown.findIndex((x) => x.id === v.id); setFullIndex(Math.max(0, i)); setFullOpen(true); };
