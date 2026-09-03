@@ -311,13 +311,6 @@ export default function App() {
   }
   // 「叶った」から戻す（達成日を消す）。
   async function revertVision(id, status) { await updateVision(id, { status, achievedAt: null }); }
-  async function reorderVision(ids) {
-    // 表示中(id順)を order に反映。並びに含まれないもの（達成分など）は末尾へ。
-    const pos = Object.fromEntries(ids.map((id, i) => [id, i]));
-    const next = visionSlots.map((v) => (pos[v.id] != null ? { ...v, order: pos[v.id] } : v));
-    await persistVision(next);
-    Haptics.selectionAsync();
-  }
   // カテゴリ操作
   async function addCategory(name, color) {
     const c = { id: 'c' + Date.now(), name: (name || '').trim() || 'カテゴリ', color: color || CATEGORY_COLORS[0] };
@@ -427,7 +420,7 @@ export default function App() {
               visions={visionSlots} cats={visionCats} title={visionTitle} timingLabels={timingLabels}
               addOpen={visionAddOpen} onCloseAdd={() => setVisionAddOpen(false)}
               onSetTitle={saveVisionTitle} onAdd={addVision} onUpdate={updateVision} onRemove={removeVision}
-              onPickPhoto={pickVisionPhoto} onAchieve={markVisionAchieved} onRevert={revertVision} onReorder={reorderVision}
+              onPickPhoto={pickVisionPhoto} onAchieve={markVisionAchieved} onRevert={revertVision}
               onAddCategory={addCategory} onUpdateCategory={updateCategory} onRemoveCategory={removeCategory} />}
             {tab === 'notify' && <NotifyTab items={items} onOpen={openItem} onSnooze={(id) => applyReminder(id, { remind: 'at', remindAt: Date.now() + DAY_MS })} onStop={(id) => applyReminder(id, { remind: 'none' })} />}
             {tab === 'mypage' && <MyPageTab items={items} doneCount={doneCount} garden={garden} name={profileName} onName={saveName} photoUri={profilePhoto} onPickPhoto={pickProfilePhoto} density={density} onDensity={setDensityPref} onExport={exportData} onImport={importData} mode={mode} onToggleMode={toggleMode} onOpen={openItem} onOpenGift={() => setGiftOpen(true)} onOpenGarden={() => setGardenOpen(true)} />}
@@ -948,7 +941,7 @@ function ChoiceSheet({ visible, onClose, title, options, value, onSelect, footer
     </Modal>
   );
 }
-function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, onSetTitle, onAdd, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onReorder, onAddCategory, onUpdateCategory, onRemoveCategory }) {
+function VisionTab({ visions, cats, title, timingLabels, addOpen, onCloseAdd, onSetTitle, onAdd, onUpdate, onRemove, onPickPhoto, onAchieve, onRevert, onAddCategory, onUpdateCategory, onRemoveCategory }) {
   const t = useTheme(); const s = useStyles();
   const [editId, setEditId] = useState(null);
   const [achievedOpen, setAchievedOpen] = useState(false);
