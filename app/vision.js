@@ -98,26 +98,6 @@ export function migrateVisions(list, now = Date.now()) {
   return (list || []).map((s) => migrateVision(s, now));
 }
 
-// アクティブなビジョンを「表紙(hero)」「カテゴリ別セクション」に、達成分を「done」に分ける。
-// hero は『叶えている最中』の写真つきを優先、無ければ写真つき先頭。空セクションは除く。
-export function buildVisionBoard(visions, categories = []) {
-  const list = visions || [];
-  const active = list.filter((v) => v.status !== 'done');
-  const done = list.filter((v) => v.status === 'done').slice().sort((a, b) => (b.achievedAt || 0) - (a.achievedAt || 0));
-  const withImg = active.filter((v) => v.imageUri);
-  const hero = withImg.find((v) => v.status === 'doing') || withImg[0]
-    || active.find((v) => v.status === 'doing') || active[0] || null;
-  const rest = active.filter((v) => !hero || v.id !== hero.id);
-  const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
-  const sections = categories
-    .map((c) => ({ ...c, items: rest.filter((v) => v.categoryId === c.id).slice().sort(byOrder) }))
-    .filter((sec) => sec.items.length > 0);
-  const known = new Set(categories.map((c) => c.id));
-  const uncategorized = rest.filter((v) => !v.categoryId || !known.has(v.categoryId)).slice().sort(byOrder);
-  if (uncategorized.length) sections.push({ id: '__none', name: '未分類', color: '#9A938A', items: uncategorized });
-  return { hero, sections, done };
-}
-
 // 「叶った夢」一覧：達成日の新しい順。カテゴリ指定があればそれだけに絞る。
 export function achievedGallery(visions, categoryId = null) {
   return (visions || [])

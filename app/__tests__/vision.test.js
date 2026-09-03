@@ -1,7 +1,7 @@
 import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
   TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
-  migrateVision, migrateVisions, buildVisionBoard, buildVisionTabView, achievedGallery, getCategoryById,
+  migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
   VISION_CATEGORY_SEED,
 } from '../vision';
 
@@ -76,43 +76,6 @@ describe('migrateVision', () => {
   test('migrateVisions は配列を丸ごと変換', () => {
     const out = migrateVisions([{ id: '1', label: 'a' }, { id: '2', label: 'b', status: 'doing' }], 1);
     expect(out.map((v) => v.status)).toEqual(['want', 'doing']);
-  });
-});
-
-describe('buildVisionBoard', () => {
-  const cats = VISION_CATEGORY_SEED;
-  test('空なら hero=null / sections=[] / done=[]', () => {
-    expect(buildVisionBoard([], cats)).toEqual({ hero: null, sections: [], done: [] });
-  });
-  test('達成(done)はボードから外れ done に入り、達成日の新しい順', () => {
-    const visions = [
-      { id: 'a', categoryId: 'life', status: 'done', achievedAt: 100 },
-      { id: 'b', categoryId: 'life', status: 'done', achievedAt: 200 },
-      { id: 'c', categoryId: 'life', status: 'want' },
-    ];
-    const { sections, done } = buildVisionBoard(visions, cats);
-    expect(done.map((v) => v.id)).toEqual(['b', 'a']);
-    // hero が c を拾うので、残りセクションは空 → sections は空
-    expect(sections).toEqual([]);
-  });
-  test('hero は「叶えている最中」の写真つきを優先', () => {
-    const visions = [
-      { id: 'a', categoryId: 'life', status: 'want', imageUri: 'a.jpg' },
-      { id: 'b', categoryId: 'life', status: 'doing', imageUri: 'b.jpg' },
-    ];
-    expect(buildVisionBoard(visions, cats).hero.id).toBe('b');
-  });
-  test('カテゴリ別にセクション化し、未知カテゴリは「未分類」に', () => {
-    const visions = [
-      { id: 'h', categoryId: 'life', status: 'doing', imageUri: 'h.jpg' }, // hero
-      { id: 'x', categoryId: 'career', status: 'want' },
-      { id: 'y', categoryId: 'zzz', status: 'want' },
-    ];
-    const { hero, sections } = buildVisionBoard(visions, cats);
-    expect(hero.id).toBe('h');
-    const ids = sections.map((s) => s.id);
-    expect(ids).toContain('career');
-    expect(ids).toContain('__none');
   });
 });
 
