@@ -118,3 +118,33 @@ export function groupNotifyItems(items, now = Date.now()) {
   reminders.forEach((r) => groups[notifyBucket(r.at, now)].push(r.it));
   return groups;
 }
+
+// 「日時指定」の既定値：翌日9:00(ms)。ReminderEditorの日時ピッカーの初期値に使う。
+export function defaultReminderAt(now = Date.now()) {
+  const d = new Date(now);
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  return d.getTime();
+}
+
+// ReminderEditorで通知タイミングの種類を選び直したときの patch（純粋関数）。
+// 「日時指定」に切り替えた直後で、まだ日時が未設定なら既定値を一緒に入れる。
+export function reminderChoicePatch(key, value, now = Date.now()) {
+  const v = value || {};
+  if (key === 'at' && !v.remindAt) return { remind: key, remindAt: defaultReminderAt(now) };
+  return { remind: key };
+}
+
+// 「日時指定」ピッカーに表示する時刻(ms)（純粋関数）。未設定なら既定値。
+export function reminderAtPickerMs(value, now = Date.now()) {
+  const v = value || {};
+  return v.remindAt || defaultReminderAt(now);
+}
+
+// 「毎日/毎週」ピッカーに表示する時刻(ms)（純粋関数）。今日の日付に remindHour/remindMinute（既定 9:00）をあてはめる。
+export function reminderTimePickerMs(value, now = Date.now()) {
+  const v = value || {};
+  const d = new Date(now);
+  d.setHours(v.remindHour ?? 9, v.remindMinute ?? 0, 0, 0);
+  return d.getTime();
+}

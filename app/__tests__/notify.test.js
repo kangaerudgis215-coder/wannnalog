@@ -1,4 +1,4 @@
-import { reminderSeconds, defaultRemindForDue, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary } from '../notify';
+import { reminderSeconds, defaultRemindForDue, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs } from '../notify';
 
 const DAY = 24 * 60 * 60;
 
@@ -88,5 +88,81 @@ describe('remindSummary', () => {
   });
   test('remindが無いアイテムは「なし」', () => {
     expect(remindSummary({})).toBe('なし');
+  });
+});
+
+describe('defaultReminderAt', () => {
+  test('翌日9:00(ms)を返す', () => {
+    const now = new Date(2026, 6, 15, 20, 30, 0).getTime();
+    const at = defaultReminderAt(now);
+    const d = new Date(at);
+    expect(d.getDate()).toBe(16);
+    expect(d.getHours()).toBe(9);
+    expect(d.getMinutes()).toBe(0);
+  });
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(typeof defaultReminderAt()).toBe('number');
+  });
+});
+
+describe('reminderChoicePatch', () => {
+  const now = new Date(2026, 6, 15, 20, 30, 0).getTime();
+  test('「日時指定」に切り替え、まだ未設定なら既定値も一緒に入れる', () => {
+    const patch = reminderChoicePatch('at', { remind: 'none' }, now);
+    expect(patch.remind).toBe('at');
+    expect(patch.remindAt).toBe(defaultReminderAt(now));
+  });
+  test('「日時指定」で既に日時が設定済みなら上書きしない', () => {
+    const patch = reminderChoicePatch('at', { remind: 'at', remindAt: 12345 }, now);
+    expect(patch).toEqual({ remind: 'at' });
+  });
+  test('それ以外の種類はそのまま remind だけ変える', () => {
+    expect(reminderChoicePatch('daily', { remind: 'none' }, now)).toEqual({ remind: 'daily' });
+    expect(reminderChoicePatch('none', { remind: 'at', remindAt: 1 }, now)).toEqual({ remind: 'none' });
+  });
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(reminderChoicePatch('at', {}).remind).toBe('at');
+  });
+  test('valueを省略しても動く', () => {
+    expect(reminderChoicePatch('daily', undefined, now)).toEqual({ remind: 'daily' });
+  });
+});
+
+describe('reminderAtPickerMs', () => {
+  const now = new Date(2026, 6, 15, 20, 30, 0).getTime();
+  test('remindAtが設定済みならそれを返す', () => {
+    expect(reminderAtPickerMs({ remindAt: 999 }, now)).toBe(999);
+  });
+  test('未設定なら既定値（翌日9:00）', () => {
+    expect(reminderAtPickerMs({}, now)).toBe(defaultReminderAt(now));
+    expect(reminderAtPickerMs(null, now)).toBe(defaultReminderAt(now));
+  });
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(typeof reminderAtPickerMs({})).toBe('number');
+  });
+});
+
+describe('reminderTimePickerMs', () => {
+  test('remindHour/remindMinuteをnowの日付にあてはめる', () => {
+    const now = new Date(2026, 6, 15, 20, 30, 0).getTime();
+    const ms = reminderTimePickerMs({ remindHour: 8, remindMinute: 5 }, now);
+    const d = new Date(ms);
+    expect(d.getDate()).toBe(15);
+    expect(d.getHours()).toBe(8);
+    expect(d.getMinutes()).toBe(5);
+  });
+  test('未設定なら既定 9:00', () => {
+    const now = new Date(2026, 6, 15, 20, 30, 0).getTime();
+    const d = new Date(reminderTimePickerMs({}, now));
+    expect(d.getHours()).toBe(9);
+    expect(d.getMinutes()).toBe(0);
+  });
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(typeof reminderTimePickerMs({})).toBe('number');
+  });
+  test('valueを省略しても動く', () => {
+    const now = new Date(2026, 6, 15, 20, 30, 0).getTime();
+    const d = new Date(reminderTimePickerMs(undefined, now));
+    expect(d.getHours()).toBe(9);
   });
 });
