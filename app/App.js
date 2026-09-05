@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
-import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS } from './notify';
+import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
 import { moveItem, reorderedItems } from './reorder';
@@ -1648,21 +1648,16 @@ const WEEKDAYS = [
   { k: 5, l: '木' }, { k: 6, l: '金' }, { k: 7, l: '土' },
 ];
 // 既定の指定日時：明日の9:00
-function defaultFutureDate() { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; }
-
 // 通知タイミングを選ぶUI。value/onChange は { remind, remindAt, remindHour, remindMinute, remindWeekday }
 function ReminderEditor({ value, onChange }) {
   const t = useTheme(); const s = useStyles();
   const v = value || { remind: 'none' };
   const remind = v.remind || 'none';
   function set(patch) { onChange({ ...v, ...patch }); }
-  function choose(key) {
-    if (key === 'at' && !v.remindAt) set({ remind: key, remindAt: defaultFutureDate().getTime() });
-    else set({ remind: key });
-  }
+  function choose(key) { set(reminderChoicePatch(key, v)); }
   const optChip = (selected) => [s.catChip, selected && { backgroundColor: t.accent, borderColor: t.accent }];
-  const atDate = v.remindAt ? new Date(v.remindAt) : defaultFutureDate();
-  const timeDate = (() => { const d = new Date(); d.setHours(v.remindHour ?? 9, v.remindMinute ?? 0, 0, 0); return d; })();
+  const atDate = new Date(reminderAtPickerMs(v));
+  const timeDate = new Date(reminderTimePickerMs(v));
   return (
     <View>
       <View style={s.catWrap}>
