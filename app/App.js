@@ -28,7 +28,7 @@ import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
 import { giftableItems, giftShareMessage } from './gift';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
-import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
+import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { cardAspect } from './hash';
 import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView, buildNewVision } from './vision';
@@ -335,9 +335,7 @@ export default function App() {
   }
 
   async function addItem(data, opts = {}) {
-    const { title, category, due, imageUri, heat, reminder, link, withWho } = data;
-    const rem = reminder || { remind: '3days' };
-    const item = { id: String(Date.now()), title, category: category || null, dueTag: due || 'none', imageUri: imageUri || null, heat: heat || 2, withWho: withWho || null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null, ...rem, notifId: null, createdAt: Date.now(), doneAt: null };
+    const item = buildNewItem(data);
     item.notifId = await scheduleReminder(item);
     await persist([item, ...items]);
     if (!opts.silent) { // クイック保存は独自アニメがあるのでAlert抑制
