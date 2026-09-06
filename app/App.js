@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView, buildNewVision } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -278,13 +278,7 @@ export default function App() {
 
   // 新規ビジョンを追加（1画面シートから）。初期ステータスは「叶えたい」。
   async function addVision(data) {
-    const maxOrder = visionSlots.reduce((m, v) => Math.max(m, v.order || 0), 0);
-    const v = {
-      id: String(Date.now()), categoryId: data.categoryId || null, title: (data.title || '').trim(),
-      timing: data.timing || null, status: 'want', imageUri: data.imageUri || null,
-      memo: (data.memo || '').trim(), font: data.font || 'mincho',
-      createdAt: Date.now(), achievedAt: null, order: maxOrder + 1,
-    };
+    const v = buildNewVision(data, visionSlots);
     // 独自ラベルの時期は再利用リストに保存
     if (v.timing && v.timing.kind === 'label' && v.timing.text) await rememberTimingLabel(v.timing.text);
     await persistVision([...visionSlots, v]);

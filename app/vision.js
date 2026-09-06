@@ -110,6 +110,18 @@ export function getCategoryById(categories, id) {
   return (categories || []).find((c) => c.id === id) || null;
 }
 
+// 新規ビジョンの組み立て：既存一覧の最大orderの次に並べ、初期ステータスは「叶えたい」。
+export function buildNewVision(data, visionSlots, now = Date.now()) {
+  const d = data || {};
+  const maxOrder = (visionSlots || []).reduce((m, v) => Math.max(m, v.order || 0), 0);
+  return {
+    id: String(now), categoryId: d.categoryId || null, title: (d.title || '').trim(),
+    timing: d.timing || null, status: 'want', imageUri: d.imageUri || null,
+    memo: (d.memo || '').trim(), font: d.font || 'mincho',
+    createdAt: now, achievedAt: null, order: maxOrder + 1,
+  };
+}
+
 // ビジョンタブ本体の表示用データ組み立て：未達成のみを対象に、並べ替え→絞り込み→カテゴリ別セクション化。
 // filter: 'all' | categoryId | '__none'（未分類） / sortMode: 'newest' | 'oldest'（作成日）
 export function buildVisionTabView(visions, categories, filter = 'all', sortMode = 'newest') {

@@ -2,6 +2,7 @@ import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
   TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
+  buildNewVision,
   VISION_CATEGORY_SEED,
 } from '../vision';
 
@@ -149,5 +150,36 @@ describe('getCategoryById', () => {
   test('idからカテゴリを引く', () => {
     expect(getCategoryById(VISION_CATEGORY_SEED, 'career').name).toBe('キャリア&お金');
     expect(getCategoryById(VISION_CATEGORY_SEED, 'nope')).toBeNull();
+  });
+});
+
+describe('buildNewVision', () => {
+  test('入力値を反映し、初期ステータスは「叶えたい」', () => {
+    const v = buildNewVision(
+      { categoryId: 'career', title: ' 独立する ', timing: { kind: 'year', year: 2027 }, imageUri: 'img://1', memo: ' メモ ', font: 'pop' },
+      [],
+      1000,
+    );
+    expect(v).toEqual({
+      id: '1000', categoryId: 'career', title: '独立する', timing: { kind: 'year', year: 2027 },
+      status: 'want', imageUri: 'img://1', memo: 'メモ', font: 'pop',
+      createdAt: 1000, achievedAt: null, order: 1,
+    });
+  });
+  test('既存一覧のorder最大値+1を採番する', () => {
+    const slots = [{ id: 'a', order: 2 }, { id: 'b', order: 5 }, { id: 'c' }];
+    expect(buildNewVision({ title: 'x' }, slots, 1000).order).toBe(6);
+  });
+  test('空・未指定は既定値にフォールバック', () => {
+    const v = buildNewVision({}, undefined, 1000);
+    expect(v).toEqual({
+      id: '1000', categoryId: null, title: '', timing: null,
+      status: 'want', imageUri: null, memo: '', font: 'mincho',
+      createdAt: 1000, achievedAt: null, order: 1,
+    });
+    expect(buildNewVision(undefined, [], 1000).font).toBe('mincho');
+  });
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(typeof buildNewVision({ title: 'x' }, []).id).toBe('string');
   });
 });
