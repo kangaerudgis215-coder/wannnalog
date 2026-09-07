@@ -61,6 +61,15 @@ export function remainingWaterToday(state, key = todayKey()) {
   return Math.max(0, WATER_MAX - used);
 }
 
+// 水やり実行後の新しい箱庭状態を返す（今日の上限に達していればnull＝水やりできない）。
+export function waterGarden(state, now = new Date()) {
+  const key = todayKey(now);
+  const s = state || {};
+  const used = s.waterDate === key ? (s.waterCount || 0) : 0;
+  if (used >= WATER_MAX) return null;
+  return { ...s, points: (s.points || 0) + 1, waterDate: key, waterCount: used + 1 };
+}
+
 // 時刻 → 朝昼夕夜（外の光・あいさつ・空の色）
 export function dayPeriod(hour = new Date().getHours()) {
   const h = ((hour % 24) + 24) % 24;

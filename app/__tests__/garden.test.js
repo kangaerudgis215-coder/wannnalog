@@ -1,6 +1,6 @@
 import {
   PLANT, stageForCount, growthProgress, coinsForCount,
-  WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod,
+  WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, waterGarden, dayPeriod,
 } from '../garden';
 
 describe('stageForCount', () => {
@@ -61,6 +61,31 @@ describe('水やり', () => {
   test('日付が違えばリセット（満タン）', () => {
     expect(remainingWaterToday({ waterDate: '2000-1-1', waterCount: 5 }, todayKey())).toBe(5);
     expect(remainingWaterToday(undefined)).toBe(5);
+  });
+});
+
+describe('waterGarden', () => {
+  const now = new Date(2026, 8, 7, 10, 0, 0);
+  const key = todayKey(now);
+  test('今日まだ水やり可能なら成長ポイント+1して回数を記録', () => {
+    const next = waterGarden({ points: 4, waterDate: key, waterCount: 2 }, now);
+    expect(next).toEqual({ points: 5, waterDate: key, waterCount: 3 });
+  });
+  test('日付が変わっていれば回数は0から+1（前日の分は引き継がない）', () => {
+    const next = waterGarden({ points: 4, waterDate: '2000-1-1', waterCount: 5 }, now);
+    expect(next).toEqual({ points: 5, waterDate: key, waterCount: 1 });
+  });
+  test('今日すでに上限まで使っていればnull（水やりできない）', () => {
+    expect(waterGarden({ points: 4, waterDate: key, waterCount: WATER_MAX }, now)).toBeNull();
+  });
+  test('状態未定義でも今日の1回目として動く', () => {
+    expect(waterGarden(undefined, now)).toEqual({ points: 1, waterDate: key, waterCount: 1 });
+  });
+  test('今日すでに水やり済みだがwaterCountが0（例外的な保存データ）でも1回目として動く', () => {
+    expect(waterGarden({ points: 0, waterDate: key, waterCount: 0 }, now)).toEqual({ points: 1, waterDate: key, waterCount: 1 });
+  });
+  test('nowを省略しても現在時刻で動く', () => {
+    expect(waterGarden(undefined)).toEqual({ points: 1, waterDate: todayKey(), waterCount: 1 });
   });
 });
 
