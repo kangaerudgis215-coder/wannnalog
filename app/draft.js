@@ -22,3 +22,15 @@ export function resolveSaveImageAndLink({ image, sns, link }) {
     : ((link || '').trim() ? { url: link.trim(), platform: null } : null);
   return { imageUri, linkInfo };
 }
+
+// 新規アイテムの組み立て：保存フォームの入力値から、保存用アイテムを作る（通知IDは未予約でnull）
+export function buildNewItem(data, now = Date.now()) {
+  const d = data || {};
+  const { title, category, due, imageUri, heat, reminder, link, withWho } = d;
+  const rem = reminder || { remind: '3days' };
+  return {
+    id: String(now), title, category: category || null, dueTag: due || 'none', imageUri: imageUri || null,
+    heat: heat || 2, withWho: withWho || null, sourceUrl: link?.url || null, sourcePlatform: link?.platform || null,
+    ...rem, notifId: null, createdAt: now, doneAt: null,
+  };
+}
