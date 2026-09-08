@@ -29,7 +29,7 @@ import { giftableItems, giftShareMessage } from './gift';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
 import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem } from './draft';
-import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, dayPeriod } from './garden';
+import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, dayPeriod } from './garden';
 import { cardAspect } from './hash';
 import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView, buildNewVision } from './vision';
 import { baseFamily } from './font';
@@ -327,10 +327,9 @@ export default function App() {
   // 箱庭：成長ポイント・水やり回数を保存
   async function persistGarden(next) { setGarden(next); await AsyncStorage.setItem(GARDEN_KEY, JSON.stringify(next)); }
   async function waterPlant() {
-    const key = todayKey();
-    const used = garden.waterDate === key ? (garden.waterCount || 0) : 0;
-    if (used >= WATER_MAX) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); return; }
-    await persistGarden({ ...garden, points: (garden.points || 0) + 1, waterDate: key, waterCount: used + 1 });
+    const next = waterGarden(garden);
+    if (!next) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); return; }
+    await persistGarden(next);
     Haptics.selectionAsync();
   }
 
