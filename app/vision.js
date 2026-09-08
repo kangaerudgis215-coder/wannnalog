@@ -110,6 +110,13 @@ export function getCategoryById(categories, id) {
   return (categories || []).find((c) => c.id === id) || null;
 }
 
+// 「いまの状態」を切り替えたときの更新差分。同じ状態ならnull（変更なし）。
+// 「叶った」から他状態へ戻す場合は達成日時をクリアする。
+export function visionStagePatch(vision, key) {
+  if (!vision || key === vision.status) return null;
+  return { status: key, ...(vision.status === 'done' ? { achievedAt: null } : {}) };
+}
+
 // 新規ビジョンの組み立て：既存一覧の最大orderの次に並べ、初期ステータスは「叶えたい」。
 export function buildNewVision(data, visionSlots, now = Date.now()) {
   const d = data || {};
