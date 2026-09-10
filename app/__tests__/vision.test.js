@@ -2,7 +2,7 @@ import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
   TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
-  buildNewVision,
+  buildNewVision, visionStagePatch,
   VISION_CATEGORY_SEED,
 } from '../vision';
 
@@ -150,6 +150,21 @@ describe('getCategoryById', () => {
   test('idからカテゴリを引く', () => {
     expect(getCategoryById(VISION_CATEGORY_SEED, 'career').name).toBe('キャリア&お金');
     expect(getCategoryById(VISION_CATEGORY_SEED, 'nope')).toBeNull();
+  });
+});
+
+describe('visionStagePatch', () => {
+  test('別の状態を選べば{status}を返す', () => {
+    expect(visionStagePatch({ status: 'want' }, 'doing')).toEqual({ status: 'doing' });
+  });
+  test('同じ状態を選べばnull（変更なし）', () => {
+    expect(visionStagePatch({ status: 'doing' }, 'doing')).toBeNull();
+  });
+  test('「叶った」から他状態へ戻すときは達成日時もクリアする', () => {
+    expect(visionStagePatch({ status: 'done', achievedAt: 123 }, 'want')).toEqual({ status: 'want', achievedAt: null });
+  });
+  test('vision未指定ならnull', () => {
+    expect(visionStagePatch(null, 'doing')).toBeNull();
   });
 });
 

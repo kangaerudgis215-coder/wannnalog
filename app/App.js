@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView, buildNewVision } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView, buildNewVision, visionStagePatch } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1175,8 +1175,8 @@ function VisionEditModal({ vision, cats, timingLabels, onClose, onUpdate, onRemo
     { text: '削除', style: 'destructive', onPress: onRemove },
   ]);
   function setStage(key) {
-    if (key === vision.status) return;
-    onUpdate({ status: key, ...(isDone ? { achievedAt: null } : {}) });
+    const patch = visionStagePatch(vision, key);
+    if (patch) onUpdate(patch);
   }
   return (
     <Modal visible={!!vision} animationType="slide" onRequestClose={onClose}>
