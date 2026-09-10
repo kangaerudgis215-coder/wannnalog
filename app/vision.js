@@ -134,6 +134,14 @@ export function buildNewCategory(name, color, now = Date.now()) {
   return { id: 'c' + now, name: (name || '').trim() || 'カテゴリ', color: color || CATEGORY_COLORS[0] };
 }
 
+// カテゴリ削除の更新差分：そのカテゴリのビジョンは消さず「未分類」に戻し、カテゴリ一覧から除く。
+export function removeCategoryPatch(visions, categories, id) {
+  return {
+    visions: (visions || []).map((v) => (v.categoryId === id ? { ...v, categoryId: null } : v)),
+    categories: (categories || []).filter((c) => c.id !== id),
+  };
+}
+
 // ビジョンタブ本体の表示用データ組み立て：未達成のみを対象に、並べ替え→絞り込み→カテゴリ別セクション化。
 // filter: 'all' | categoryId | '__none'（未分類） / sortMode: 'newest' | 'oldest'（作成日）
 export function buildVisionTabView(visions, categories, filter = 'all', sortMode = 'newest') {
