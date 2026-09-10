@@ -2,8 +2,8 @@ import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
   TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
-  buildNewVision, visionStagePatch,
-  VISION_CATEGORY_SEED,
+  buildNewVision, visionStagePatch, buildNewCategory,
+  VISION_CATEGORY_SEED, CATEGORY_COLORS,
 } from '../vision';
 
 describe('visionFont', () => {
@@ -196,5 +196,26 @@ describe('buildNewVision', () => {
   });
   test('nowを省略しても動く（現在時刻を使う）', () => {
     expect(typeof buildNewVision({ title: 'x' }, []).id).toBe('string');
+  });
+});
+
+describe('buildNewCategory', () => {
+  test('入力値を反映する', () => {
+    expect(buildNewCategory('旅', '#FF0000', 1000)).toEqual({ id: 'c1000', name: '旅', color: '#FF0000' });
+  });
+  test('名前の前後空白を除く', () => {
+    expect(buildNewCategory('  旅  ', '#FF0000', 1000).name).toBe('旅');
+  });
+  test('名前が空・未指定なら「カテゴリ」にフォールバック', () => {
+    expect(buildNewCategory('', '#FF0000', 1000).name).toBe('カテゴリ');
+    expect(buildNewCategory('   ', '#FF0000', 1000).name).toBe('カテゴリ');
+    expect(buildNewCategory(undefined, '#FF0000', 1000).name).toBe('カテゴリ');
+  });
+  test('色が未指定ならパレット先頭にフォールバック', () => {
+    expect(buildNewCategory('旅', null, 1000).color).toBe(CATEGORY_COLORS[0]);
+    expect(buildNewCategory('旅', undefined, 1000).color).toBe(CATEGORY_COLORS[0]);
+  });
+  test('nowを省略しても動く（現在時刻を使う）', () => {
+    expect(buildNewCategory('旅', '#FF0000').id.startsWith('c')).toBe(true);
   });
 });

@@ -129,6 +129,11 @@ export function buildNewVision(data, visionSlots, now = Date.now()) {
   };
 }
 
+// 新規カテゴリの組み立て：名前は前後空白を除き、空なら「カテゴリ」。色は未指定ならパレット先頭。
+export function buildNewCategory(name, color, now = Date.now()) {
+  return { id: 'c' + now, name: (name || '').trim() || 'カテゴリ', color: color || CATEGORY_COLORS[0] };
+}
+
 // ビジョンタブ本体の表示用データ組み立て：未達成のみを対象に、並べ替え→絞り込み→カテゴリ別セクション化。
 // filter: 'all' | categoryId | '__none'（未分類） / sortMode: 'newest' | 'oldest'（作成日）
 export function buildVisionTabView(visions, categories, filter = 'all', sortMode = 'newest') {
