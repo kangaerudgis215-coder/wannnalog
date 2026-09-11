@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -298,10 +298,9 @@ export default function App() {
   }
   // 「叶った」に変更：達成日を記録し、日本語「〇〇を叶えました」＋願ってからの日数で祝う。
   async function markVisionAchieved(id) {
-    const v = visionSlots.find((x) => x.id === id); if (!v) return;
-    const achievedAt = Date.now();
-    await persistVision(visionSlots.map((x) => (x.id === id ? { ...x, status: 'done', achievedAt } : x)));
-    setCeleb({ item: { imageUri: v.imageUri, title: v.title, category: null }, jp: true, days: daysToAchieve({ createdAt: v.createdAt, achievedAt }) });
+    const result = visionAchievedResult(visionSlots, id); if (!result) return;
+    await persistVision(result.visions);
+    setCeleb(result.celeb);
   }
   // 「叶った」から戻す（達成日を消す）。
   async function revertVision(id, status) { await updateVision(id, { status, achievedAt: null }); }

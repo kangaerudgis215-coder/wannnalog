@@ -142,6 +142,18 @@ export function removeCategoryPatch(visions, categories, id) {
   };
 }
 
+// 「叶った」に変更する更新差分：達成日時を記録した一覧と、お祝い演出用のデータをまとめて返す。
+// 対象が見つからなければnull（何もしない）。
+export function visionAchievedResult(visions, id, now = Date.now()) {
+  const v = (visions || []).find((x) => x.id === id);
+  if (!v) return null;
+  const achievedAt = now;
+  return {
+    visions: visions.map((x) => (x.id === id ? { ...x, status: 'done', achievedAt } : x)),
+    celeb: { item: { imageUri: v.imageUri, title: v.title, category: null }, jp: true, days: daysToAchieve({ createdAt: v.createdAt, achievedAt }) },
+  };
+}
+
 // ビジョンタブ本体の表示用データ組み立て：未達成のみを対象に、並べ替え→絞り込み→カテゴリ別セクション化。
 // filter: 'all' | categoryId | '__none'（未分類） / sortMode: 'newest' | 'oldest'（作成日）
 export function buildVisionTabView(visions, categories, filter = 'all', sortMode = 'newest') {
