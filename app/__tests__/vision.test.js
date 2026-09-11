@@ -2,7 +2,7 @@ import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
   TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
-  buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch,
+  buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult,
   VISION_CATEGORY_SEED, CATEGORY_COLORS,
 } from '../vision';
 
@@ -242,5 +242,32 @@ describe('removeCategoryPatch', () => {
   });
   test('visions/categories未指定なら空配列を返す', () => {
     expect(removeCategoryPatch(undefined, undefined, 'c1')).toEqual({ visions: [], categories: [] });
+  });
+});
+
+describe('visionAchievedResult', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const visions = [
+    { id: 'v1', title: '富士山に登る', imageUri: 'file://a.jpg', createdAt: 0, status: 'doing' },
+    { id: 'v2', title: '別のビジョン', createdAt: 0, status: 'want' },
+  ];
+
+  test('対象を叶った状態にし、達成日時を記録する', () => {
+    const result = visionAchievedResult(visions, 'v1', 10 * DAY);
+    expect(result.visions).toEqual([
+      { id: 'v1', title: '富士山に登る', imageUri: 'file://a.jpg', createdAt: 0, status: 'done', achievedAt: 10 * DAY },
+      visions[1],
+    ]);
+  });
+  test('お祝い演出用のデータ（タイトル・画像・かかった日数）を返す', () => {
+    const result = visionAchievedResult(visions, 'v1', 10 * DAY);
+    expect(result.celeb).toEqual({
+      item: { imageUri: 'file://a.jpg', title: '富士山に登る', category: null },
+      jp: true,
+      days: 10,
+    });
+  });
+  test('対象が見つからなければnull', () => {
+    expect(visionAchievedResult(visions, 'missing', 10 * DAY)).toBeNull();
   });
 });
