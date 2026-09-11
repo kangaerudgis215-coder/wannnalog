@@ -2,7 +2,7 @@ import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
   TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
-  buildNewVision, visionStagePatch, buildNewCategory,
+  buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch,
   VISION_CATEGORY_SEED, CATEGORY_COLORS,
 } from '../vision';
 
@@ -217,5 +217,30 @@ describe('buildNewCategory', () => {
   });
   test('nowを省略しても動く（現在時刻を使う）', () => {
     expect(buildNewCategory('旅', '#FF0000').id.startsWith('c')).toBe(true);
+  });
+});
+
+describe('removeCategoryPatch', () => {
+  const visions = [
+    { id: 'v1', categoryId: 'c1', title: 'a' },
+    { id: 'v2', categoryId: 'c2', title: 'b' },
+    { id: 'v3', categoryId: 'c1', title: 'c' },
+  ];
+  const categories = [{ id: 'c1', name: '旅' }, { id: 'c2', name: '食' }];
+
+  test('該当カテゴリのビジョンは消さず未分類（categoryId: null）に戻す', () => {
+    const patch = removeCategoryPatch(visions, categories, 'c1');
+    expect(patch.visions).toEqual([
+      { id: 'v1', categoryId: null, title: 'a' },
+      { id: 'v2', categoryId: 'c2', title: 'b' },
+      { id: 'v3', categoryId: null, title: 'c' },
+    ]);
+  });
+  test('カテゴリ一覧から該当カテゴリを除く', () => {
+    const patch = removeCategoryPatch(visions, categories, 'c1');
+    expect(patch.categories).toEqual([{ id: 'c2', name: '食' }]);
+  });
+  test('visions/categories未指定なら空配列を返す', () => {
+    expect(removeCategoryPatch(undefined, undefined, 'c1')).toEqual({ visions: [], categories: [] });
   });
 });

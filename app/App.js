@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem } from './draft';
 import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, daysToAchieve, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch } from './vision';
 import { baseFamily } from './font';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -313,9 +313,9 @@ export default function App() {
   }
   async function updateCategory(id, patch) { await persistCats(visionCats.map((c) => (c.id === id ? { ...c, ...patch } : c))); }
   async function removeCategory(id) {
-    // そのカテゴリのビジョンは「未分類」に戻す（消さない）。
-    await persistVision(visionSlots.map((v) => (v.categoryId === id ? { ...v, categoryId: null } : v)));
-    await persistCats(visionCats.filter((c) => c.id !== id));
+    const patch = removeCategoryPatch(visionSlots, visionCats, id);
+    await persistVision(patch.visions);
+    await persistCats(patch.categories);
   }
   async function rememberTimingLabel(text) {
     const t2 = (text || '').trim(); if (!t2 || timingLabels.includes(t2)) return;
