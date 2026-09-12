@@ -117,6 +117,21 @@ export function visionStagePatch(vision, key) {
   return { status: key, ...(vision.status === 'done' ? { achievedAt: null } : {}) };
 }
 
+// 「叶った」に変更するときの更新差分：達成日時を記録する。
+export function achieveVisionPatch(now = Date.now()) {
+  return { status: 'done', achievedAt: now };
+}
+
+// 「叶った」演出（お祝いモーダル）に渡すデータの組み立て：願ってからの日数もあわせて計算する。
+export function buildAchievedCeleb(vision, achievedAt) {
+  const v = vision || {};
+  return {
+    item: { imageUri: v.imageUri, title: v.title, category: null },
+    jp: true,
+    days: daysToAchieve({ createdAt: v.createdAt, achievedAt }),
+  };
+}
+
 // 新規ビジョンの組み立て：既存一覧の最大orderの次に並べ、初期ステータスは「叶えたい」。
 export function buildNewVision(data, visionSlots, now = Date.now()) {
   const d = data || {};

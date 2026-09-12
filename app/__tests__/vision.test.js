@@ -3,6 +3,7 @@ import {
   TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
   buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch,
+  achieveVisionPatch, buildAchievedCeleb,
   VISION_CATEGORY_SEED, CATEGORY_COLORS,
 } from '../vision';
 
@@ -165,6 +166,36 @@ describe('visionStagePatch', () => {
   });
   test('vision未指定ならnull', () => {
     expect(visionStagePatch(null, 'doing')).toBeNull();
+  });
+});
+
+describe('achieveVisionPatch', () => {
+  test('「叶った」状態と達成日時の差分を返す', () => {
+    expect(achieveVisionPatch(1000)).toEqual({ status: 'done', achievedAt: 1000 });
+  });
+  test('日時省略時は現在時刻を使う', () => {
+    const before = Date.now();
+    const patch = achieveVisionPatch();
+    expect(patch.status).toBe('done');
+    expect(patch.achievedAt).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe('buildAchievedCeleb', () => {
+  test('演出に渡す画像・タイトル・願ってからの日数を組み立てる', () => {
+    const v = { imageUri: 'img://1', title: '独立する', createdAt: 0 };
+    expect(buildAchievedCeleb(v, 10 * 24 * 60 * 60 * 1000)).toEqual({
+      item: { imageUri: 'img://1', title: '独立する', category: null },
+      jp: true,
+      days: 10,
+    });
+  });
+  test('vision未指定なら空データ扱い', () => {
+    expect(buildAchievedCeleb(null, 1000)).toEqual({
+      item: { imageUri: undefined, title: undefined, category: null },
+      jp: true,
+      days: null,
+    });
   });
 });
 
