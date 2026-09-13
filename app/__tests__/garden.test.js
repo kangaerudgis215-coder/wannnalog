@@ -1,6 +1,6 @@
 import {
   PLANT, stageForCount, growthProgress, coinsForCount,
-  WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, waterGarden, dayPeriod,
+  WATER_MAX, ACHIEVE_GAIN, todayKey, remainingWaterToday, waterGarden, achieveGarden, dayPeriod,
 } from '../garden';
 
 describe('stageForCount', () => {
@@ -86,6 +86,17 @@ describe('waterGarden', () => {
   });
   test('nowを省略しても現在時刻で動く', () => {
     expect(waterGarden(undefined)).toEqual({ points: 1, waterDate: todayKey(), waterCount: 1 });
+  });
+});
+
+describe('achieveGarden', () => {
+  test('達成ボーナス分の成長ポイントを加算する', () => {
+    expect(achieveGarden({ points: 4, waterDate: '2026-9-7', waterCount: 2 })).toEqual({
+      points: 4 + ACHIEVE_GAIN, waterDate: '2026-9-7', waterCount: 2,
+    });
+  });
+  test('状態未定義でも0からの加算として動く', () => {
+    expect(achieveGarden(undefined)).toEqual({ points: ACHIEVE_GAIN });
   });
 });
 

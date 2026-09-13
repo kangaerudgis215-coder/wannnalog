@@ -70,6 +70,11 @@ export function waterGarden(state, now = new Date()) {
   return { ...s, points: (s.points || 0) + 1, waterDate: key, waterCount: used + 1 };
 }
 
+// 達成ボーナス：成長ポイントを加算した新しい箱庭状態を返す。
+export function achieveGarden(state) {
+  return { ...(state || {}), points: ((state && state.points) || 0) + ACHIEVE_GAIN };
+}
+
 // 時刻 → 朝昼夕夜（外の光・あいさつ・空の色）
 export function dayPeriod(hour = new Date().getHours()) {
   const h = ((hour % 24) + 24) % 24;
