@@ -28,8 +28,8 @@ import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
 import { giftableItems, giftShareMessage } from './gift';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
-import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem } from './draft';
-import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, dayPeriod } from './garden';
+import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem, doneItemPatch } from './draft';
+import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, achieveGarden, dayPeriod } from './garden';
 import { cardAspect } from './hash';
 import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
 import { baseFamily } from './font';
@@ -352,12 +352,11 @@ export default function App() {
   }
 
   async function markDone(id) {
-    const it0 = items.find((x) => x.id === id);
-    const next = items.map((it) => (it.id === id ? { ...it, doneAt: Date.now() } : it));
-    await persist(next);
-    await persistGarden({ ...garden, points: (garden.points || 0) + ACHIEVE_GAIN }); // 達成ボーナスで植物が大きく育つ
+    const result = doneItemPatch(items, id); if (!result) return;
+    await persist(result.items);
+    await persistGarden(achieveGarden(garden)); // 達成ボーナスで植物が大きく育つ
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (it0) setCeleb({ item: { ...it0, doneAt: Date.now() } });
+    setCeleb(result.celeb);
   }
   async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
   // 手動並べ替え：未達成カードを指定順に並べ、達成済みは末尾に保持して保存。

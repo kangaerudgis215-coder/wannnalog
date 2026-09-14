@@ -1,4 +1,4 @@
-import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem } from '../draft';
+import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem, doneItemPatch } from '../draft';
 
 describe('buildQuickCaptureItem', () => {
   test('タイトル・カテゴリ・画像・リンクをそのまま反映する', () => {
@@ -85,5 +85,35 @@ describe('buildNewItem', () => {
 
   test('dataとnowを省略しても動く', () => {
     expect(typeof buildNewItem().id).toBe('string');
+  });
+});
+
+describe('doneItemPatch', () => {
+  const items = [
+    { id: 'i1', title: '鎌倉の海カフェ', doneAt: null },
+    { id: 'i2', title: '別の項目', doneAt: null },
+  ];
+
+  test('対象を達成済みにし、達成日時を記録する', () => {
+    const result = doneItemPatch(items, 'i1', 1000);
+    expect(result.items).toEqual([
+      { id: 'i1', title: '鎌倉の海カフェ', doneAt: 1000 },
+      items[1],
+    ]);
+  });
+  test('お祝い演出用のデータ（達成後のアイテム情報）を返す', () => {
+    const result = doneItemPatch(items, 'i1', 1000);
+    expect(result.celeb).toEqual({ item: { id: 'i1', title: '鎌倉の海カフェ', doneAt: 1000 } });
+  });
+  test('対象が見つからなければnull', () => {
+    expect(doneItemPatch(items, 'missing', 1000)).toBeNull();
+  });
+  test('一覧未指定でもnull（例外にしない）', () => {
+    expect(doneItemPatch(undefined, 'i1', 1000)).toBeNull();
+  });
+  test('nowを省略しても現在時刻で動く', () => {
+    const before = Date.now();
+    const result = doneItemPatch(items, 'i1');
+    expect(result.celeb.item.doneAt).toBeGreaterThanOrEqual(before);
   });
 });

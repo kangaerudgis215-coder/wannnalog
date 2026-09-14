@@ -23,6 +23,17 @@ export function resolveSaveImageAndLink({ image, sns, link }) {
   return { imageUri, linkInfo };
 }
 
+// 達成にする更新差分：達成日時を記録した一覧と、お祝い演出用データ（達成後のアイテム情報）をまとめて返す。
+// 対象が見つからなければnull（何もしない）。
+export function doneItemPatch(items, id, now = Date.now()) {
+  const it0 = (items || []).find((x) => x.id === id);
+  if (!it0) return null;
+  return {
+    items: items.map((it) => (it.id === id ? { ...it, doneAt: now } : it)),
+    celeb: { item: { ...it0, doneAt: now } },
+  };
+}
+
 // 新規アイテムの組み立て：保存フォームの入力値から、保存用アイテムを作る（通知IDは未予約でnull）
 export function buildNewItem(data, now = Date.now()) {
   const d = data || {};
