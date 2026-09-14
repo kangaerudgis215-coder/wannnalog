@@ -1,4 +1,4 @@
-import { reminderSeconds, defaultRemindForDue, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs } from '../notify';
+import { reminderSeconds, defaultRemindForDue, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch } from '../notify';
 
 const DAY = 24 * 60 * 60;
 
@@ -164,5 +164,31 @@ describe('reminderTimePickerMs', () => {
     const now = new Date(2026, 6, 15, 20, 30, 0).getTime();
     const d = new Date(reminderTimePickerMs(undefined, now));
     expect(d.getHours()).toBe(9);
+  });
+});
+
+describe('resetReminderPatch', () => {
+  const item = {
+    id: 'i1', title: '鎌倉の海カフェ', remind: 'weekly',
+    remindAt: 111, remindHour: 8, remindMinute: 30, remindWeekday: 2,
+  };
+
+  test('古い通知フィールドをリセットしてから新しい設定をマージする', () => {
+    expect(resetReminderPatch(item, { remind: '3days' })).toEqual({
+      ...item, remind: '3days', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null,
+    });
+  });
+  test('remindAt指定（日時指定）の場合はそれを残す', () => {
+    expect(resetReminderPatch(item, { remind: 'at', remindAt: 999 })).toEqual({
+      ...item, remind: 'at', remindAt: 999, remindHour: null, remindMinute: null, remindWeekday: null,
+    });
+  });
+  test('item以外のフィールドはそのまま保持する', () => {
+    expect(resetReminderPatch(item, { remind: 'none' }).title).toBe('鎌倉の海カフェ');
+  });
+  test('reminderを省略してもリセットだけは行う', () => {
+    expect(resetReminderPatch(item, undefined)).toEqual({
+      ...item, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null,
+    });
   });
 });

@@ -148,3 +148,9 @@ export function reminderTimePickerMs(value, now = Date.now()) {
   d.setHours(v.remindHour ?? 9, v.remindMinute ?? 0, 0, 0);
   return d.getTime();
 }
+
+// 通知設定を丸ごと差し替えるときの更新後アイテム（純粋関数）。
+// 古い通知関連フィールドを一旦リセットしてから、新しい設定をマージする。
+export function resetReminderPatch(item, reminder) {
+  return { ...item, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null, ...(reminder || {}) };
+}
