@@ -33,6 +33,7 @@ import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE
 import { cardAspect } from './hash';
 import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
 import { baseFamily } from './font';
+import { buildBackupPayload } from './backup';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -217,12 +218,7 @@ export default function App() {
   // バックアップ書き出し：全データをJSONファイルにして共有（保存/AirDrop/iCloud）。
   async function exportData() {
     try {
-      const payload = {
-        app: 'WannaLog', version: 1, exportedAt: new Date().toISOString(),
-        items, vision: { slots: visionSlots, title: visionTitle, categories: visionCats, timingLabels },
-        profile: { name: profileName }, garden,
-        prefs: { theme: mode, density },
-      };
+      const payload = buildBackupPayload({ items, visionSlots, visionTitle, visionCats, timingLabels, profileName, garden, mode, density });
       const json = JSON.stringify(payload, null, 2);
       const uri = FileSystem.documentDirectory + `wannalog-backup-${Date.now()}.json`;
       await FileSystem.writeAsStringAsync(uri, json);
