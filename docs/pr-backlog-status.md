@@ -177,6 +177,13 @@
 - 結果：`npx jest --coverage` は 21 suites / 280 tests すべて成功（作業開始時は273 tests）。`draft.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`@babel/core`のtransformSyncで確認）。
 - App.js以外の純粋ロジック抽出は、探すたびにまだ小さな候補が見つかる状態が続いている。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
 
+## 2026-09-14（今回）
+
+- 前回（9/13）の整理PR #84（アイテム達成の更新差分を`draft.js`/`garden.js`へ分離）を確認したところ、見た目・動作を変えない安全な変更だったため直接マージした。
+- 続けてApp.js内でまだ切り出されていない純粋ロジックを探し、通知設定の丸ごと差し替え（`applyReminder`）の中にあった「古い通知関連フィールド（remindAt/remindHour/remindMinute/remindWeekday）をリセットしてから新しい設定をマージする」処理を発見。`notify.js`に`resetReminderPatch(item, reminder)`として切り出し、テストを4件追加した（新規PR）。
+- 結果：`npx jest --coverage` は 21 suites / 284 tests すべて成功（作業開始時は280 tests）。`notify.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（プロジェクトの`babel.config.js`経由、`@babel/core`のtransformFileSyncで確認）。
+- App.js以外の純粋ロジック抽出は、探すたびにまだ小さな候補が見つかる状態が続いている。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
+
 ## 次にやること
 
 - オーナーが上記表を見て、欲しい機能のPRだけ実機（Expo Go）で試してマージ。同じ課題の複数案（#26/#37/#38、#20/#32）はどちらか一方を選んでもう片方をクローズ。

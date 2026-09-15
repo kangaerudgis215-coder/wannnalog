@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
-import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs } from './notify';
+import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
 import { moveItem, reorderedItems } from './reorder';
@@ -368,7 +368,7 @@ export default function App() {
   async function applyReminder(id, reminder) {
     const it = items.find((x) => x.id === id); if (!it) return;
     if (it.notifId) { try { await Notifications.cancelScheduledNotificationAsync(it.notifId); } catch (e) {} }
-    const updated = { ...it, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null, ...reminder };
+    const updated = resetReminderPatch(it, reminder);
     const notifId = await scheduleReminder(updated);
     await persist(items.map((x) => (x.id === id ? { ...updated, notifId } : x)));
   }
