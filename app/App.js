@@ -1391,7 +1391,7 @@ function CatStatBar({ c }) {
 function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, density, onDensity, onExport, onImport, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
   const done = items.filter((it) => it.doneAt);
-  const publicCount = items.filter((it) => it.isPublic && !it.doneAt).length;
+  const publicCount = giftableItems(items).length; // ギフトページの対象件数と同じ定義に揃える
   const plantStage = growthProgress((garden && garden.points) || 0);
   const total = items.length;
   const rate = achievementRate(doneCount, total);
