@@ -259,12 +259,10 @@ describe('visionAchievedResult', () => {
       visions[1],
     ]);
   });
-  test('お祝い演出用のデータ（タイトル・画像・かかった日数）を返す', () => {
+  test('お祝い演出用のデータ（タイトル・画像）を返す（日付/日数は含めない）', () => {
     const result = visionAchievedResult(visions, 'v1', 10 * DAY);
     expect(result.celeb).toEqual({
       item: { imageUri: 'file://a.jpg', title: '富士山に登る', category: null },
-      jp: true,
-      days: 10,
     });
   });
   test('対象が見つからなければnull', () => {

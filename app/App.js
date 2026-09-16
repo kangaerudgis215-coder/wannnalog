@@ -296,7 +296,7 @@ export default function App() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
     if (!res.canceled) { await updateVision(id, { imageUri: res.assets[0].uri }); Haptics.selectionAsync(); }
   }
-  // 「叶った」に変更：達成日を記録し、日本語「〇〇を叶えました」＋願ってからの日数で祝う。
+  // 「叶った」に変更：達成日を記録し、写真主役＋英語の短い一言で祝う（日付/日数は表示しない）。
   async function markVisionAchieved(id) {
     const result = visionAchievedResult(visionSlots, id); if (!result) return;
     await persistVision(result.visions);

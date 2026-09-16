@@ -143,14 +143,13 @@ export function removeCategoryPatch(visions, categories, id) {
 }
 
 // 「叶った」に変更する更新差分：達成日時を記録した一覧と、お祝い演出用のデータをまとめて返す。
-// 対象が見つからなければnull（何もしない）。
+// 演出は写真主役＋英語の短い一言（日付/日数は表示しない）。対象が見つからなければnull。
 export function visionAchievedResult(visions, id, now = Date.now()) {
   const v = (visions || []).find((x) => x.id === id);
   if (!v) return null;
-  const achievedAt = now;
   return {
-    visions: visions.map((x) => (x.id === id ? { ...x, status: 'done', achievedAt } : x)),
-    celeb: { item: { imageUri: v.imageUri, title: v.title, category: null }, jp: true, days: daysToAchieve({ createdAt: v.createdAt, achievedAt }) },
+    visions: visions.map((x) => (x.id === id ? { ...x, status: 'done', achievedAt: now } : x)),
+    celeb: { item: { imageUri: v.imageUri, title: v.title, category: null } },
   };
 }
 
