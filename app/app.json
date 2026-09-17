@@ -3,6 +3,7 @@
     "name": "WannaLog",
     "slug": "wannalog",
     "version": "0.1.0",
+    "scheme": "wannalog",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -20,9 +21,11 @@
       ]
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wannalog.app"
     },
     "android": {
+      "package": "com.wannalog.app",
       "adaptiveIcon": {
         "backgroundColor": "#15161C",
         "foregroundImage": "./assets/android-icon-foreground.png"
