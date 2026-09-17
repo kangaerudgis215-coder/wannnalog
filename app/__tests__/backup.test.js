@@ -1,4 +1,4 @@
-import { buildBackupPayload } from '../backup';
+import { buildBackupPayload, isValidBackupPayload } from '../backup';
 
 describe('buildBackupPayload', () => {
   const state = {
@@ -41,5 +41,23 @@ describe('buildBackupPayload', () => {
     const before = Date.now();
     const payload = buildBackupPayload(state);
     expect(new Date(payload.exportedAt).getTime()).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe('isValidBackupPayload', () => {
+  test('itemsが配列ならOK', () => {
+    expect(isValidBackupPayload({ items: [] })).toBe(true);
+    expect(isValidBackupPayload(buildBackupPayload({ items: [{ id: 'i1' }] }, 1000))).toBe(true);
+  });
+
+  test('データがnull/undefinedならNG', () => {
+    expect(isValidBackupPayload(null)).toBe(false);
+    expect(isValidBackupPayload(undefined)).toBe(false);
+  });
+
+  test('itemsが無い、または配列でないならNG', () => {
+    expect(isValidBackupPayload({})).toBe(false);
+    expect(isValidBackupPayload({ items: 'not-an-array' })).toBe(false);
+    expect(isValidBackupPayload({ items: null })).toBe(false);
   });
 });

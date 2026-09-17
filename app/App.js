@@ -33,7 +33,7 @@ import { PLANT, stageForCount, growthProgress, coinsForCount, WATER_MAX, ACHIEVE
 import { cardAspect } from './hash';
 import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
 import { baseFamily } from './font';
-import { buildBackupPayload } from './backup';
+import { buildBackupPayload, isValidBackupPayload } from './backup';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -233,7 +233,7 @@ export default function App() {
       if (res.canceled) return;
       const uri = res.assets?.[0]?.uri; if (!uri) return;
       const data = JSON.parse(await FileSystem.readAsStringAsync(uri));
-      if (!data || !Array.isArray(data.items)) { Alert.alert('読み込めませんでした', 'WannaLog のバックアップファイルではないようです。'); return; }
+      if (!isValidBackupPayload(data)) { Alert.alert('読み込めませんでした', 'WannaLog のバックアップファイルではないようです。'); return; }
       Alert.alert('読み込みますか？', '今のデータは上書きされます。よろしいですか？', [
         { text: 'キャンセル', style: 'cancel' },
         { text: '上書きして復元', style: 'destructive', onPress: async () => {

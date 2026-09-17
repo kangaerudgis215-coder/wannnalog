@@ -191,6 +191,13 @@
 - 結果：`npx jest --coverage` は 22 suites / 289 tests すべて成功（作業開始時は284 tests）。`backup.js` は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`@babel/core`のtransformFileSyncで確認）。
 - App.js以外の純粋ロジック抽出は、探すたびにまだ小さな候補が見つかる状態が続いている。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
 
+## 2026-09-17（今回）
+
+- 前回（9/15）の整理PR（バックアップ書き出しの`buildBackupPayload`分離）は既にtrunkへ取り込み済みだった。また、直前のセッションで作られていた「EAS開発ビルド準備（app.jsonへのscheme/バンドルID追加＋Windowsでの入れ方ガイド）」もtrunkに既に反映済みだったため、今回はPR作成不要だった。
+- 続けてApp.js内でまだ切り出されていない純粋ロジックを探し、バックアップ読み込み（`importData`）の中にあった「読み込んだJSONがWannaLogのバックアップとして扱える形か（items配列を持つか）」の判定を発見。`backup.js`に`isValidBackupPayload(data)`として切り出し、テストを3件追加した（新規PR）。
+- 結果：`npx jest --coverage` は 22 suites / 292 tests すべて成功（作業開始時は289 tests）。`backup.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`babel-preset-expo`経由、`@babel/core`のtransformSyncで確認）。
+- App.js以外の純粋ロジック抽出は、探すたびにまだ小さな候補が見つかる状態が続いている。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
+
 ## 次にやること
 
 - オーナーが上記表を見て、欲しい機能のPRだけ実機（Expo Go）で試してマージ。同じ課題の複数案（#26/#37/#38、#20/#32）はどちらか一方を選んでもう片方をクローズ。

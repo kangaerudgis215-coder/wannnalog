@@ -1,4 +1,9 @@
-// バックアップ書き出し用のデータ組み立て（純粋関数）。
+// バックアップ書き出し・読み込み用のデータ組み立て・検証（純粋関数）。
+
+// 読み込んだJSONがWannaLogのバックアップとして扱える形か確認する。
+export function isValidBackupPayload(data) {
+  return !!data && Array.isArray(data.items);
+}
 
 export function buildBackupPayload(state, now = Date.now()) {
   const { items, visionSlots, visionTitle, visionCats, timingLabels, profileName, garden, mode, density } = state;
