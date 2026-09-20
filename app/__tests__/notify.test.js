@@ -1,4 +1,4 @@
-import { reminderSeconds, defaultRemindForDue, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch } from '../notify';
+import { reminderSeconds, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch } from '../notify';
 
 const DAY = 24 * 60 * 60;
 
@@ -12,15 +12,6 @@ describe('reminderSeconds', () => {
     expect(reminderSeconds('none')).toBeNull();
     expect(reminderSeconds('???')).toBeNull();
     expect(reminderSeconds(undefined)).toBeNull();
-  });
-});
-
-describe('defaultRemindForDue', () => {
-  test('期限に応じた既定', () => {
-    expect(defaultRemindForDue('thisWeek')).toBe('3days');
-    expect(defaultRemindForDue('thisMonth')).toBe('week');
-    expect(defaultRemindForDue('none')).toBe('3days');
-    expect(defaultRemindForDue(undefined)).toBe('3days');
   });
 });
 
