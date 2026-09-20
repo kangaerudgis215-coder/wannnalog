@@ -67,13 +67,6 @@ export function formatTimingDate(dateStr) {
   return `${Number(m[1])}/${Number(m[2])}/${Number(m[3])}`;
 }
 
-// 願ってから叶うまでの日数（createdAt→achievedAt）。演出コピー用。
-export function daysToAchieve(vision) {
-  if (!vision || vision.createdAt == null || vision.achievedAt == null) return null;
-  const DAY = 24 * 60 * 60 * 1000;
-  return Math.max(0, Math.round((vision.achievedAt - vision.createdAt) / DAY));
-}
-
 // 旧スロット（v1）を新ビジョン（v2）へ移行。v2ならそのまま返す。
 export function migrateVision(slot, now = Date.now()) {
   if (!slot) return slot;

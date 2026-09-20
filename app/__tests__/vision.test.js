@@ -1,6 +1,6 @@
 import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
-  TIMING_PRESETS, timingLabel, formatTimingDate, daysToAchieve,
+  TIMING_PRESETS, timingLabel, formatTimingDate,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
   buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult,
   VISION_CATEGORY_SEED, CATEGORY_COLORS,
@@ -44,15 +44,6 @@ describe('timingLabel / formatTimingDate', () => {
   });
   test('プリセットは4種', () => {
     expect(TIMING_PRESETS.map((p) => p.key)).toEqual(['thisMonth', 'thisYear', 'halfYear', 'someday']);
-  });
-});
-
-describe('daysToAchieve', () => {
-  test('作成日→達成日の日数', () => {
-    const DAY = 24 * 60 * 60 * 1000;
-    expect(daysToAchieve({ createdAt: 0, achievedAt: 10 * DAY })).toBe(10);
-    expect(daysToAchieve({ createdAt: 0, achievedAt: null })).toBeNull();
-    expect(daysToAchieve(null)).toBeNull();
   });
 });
 
