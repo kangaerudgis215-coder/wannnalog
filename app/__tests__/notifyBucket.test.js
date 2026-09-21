@@ -1,4 +1,4 @@
-import { notifyBucket, NOTIFY_SECTIONS, groupNotifyItems } from '../notify';
+import { notifyBucket, NOTIFY_SECTIONS, groupNotifyItems, notifyTotalCount } from '../notify';
 
 const DAY = 86400000;
 
@@ -94,5 +94,25 @@ describe('groupNotifyItems', () => {
 
   test('nowを省略しても動く（現在時刻を使う）', () => {
     expect(groupNotifyItems([])).toEqual({ today: [], week: [], later: [] });
+  });
+});
+
+describe('notifyTotalCount', () => {
+  test('全区分が空なら0', () => {
+    expect(notifyTotalCount({ today: [], week: [], later: [] })).toBe(0);
+  });
+
+  test('各区分の件数を合計する', () => {
+    const groups = { today: [{ id: 'a' }], week: [{ id: 'b' }, { id: 'c' }], later: [{ id: 'd' }] };
+    expect(notifyTotalCount(groups)).toBe(4);
+  });
+
+  test('groupNotifyItemsの結果をそのまま渡しても数える', () => {
+    const now = new Date('2026-07-01T10:00:00').getTime();
+    const items = [
+      { id: 'todayItem', remind: 'at', remindAt: now + 1000 },
+      { id: 'laterItem', remind: 'at', remindAt: now + 30 * 24 * 60 * 60 * 1000 },
+    ];
+    expect(notifyTotalCount(groupNotifyItems(items, now))).toBe(2);
   });
 });

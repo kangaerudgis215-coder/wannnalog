@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
-import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch } from './notify';
+import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { DAY_MS, achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
 import { moveItem, reorderedItems } from './reorder';
@@ -1337,7 +1337,7 @@ function NotifyTab({ items, onOpen, onSnooze, onStop }) {
   const t = useTheme(); const s = useStyles();
   const now = Date.now();
   const groups = groupNotifyItems(items, now);
-  const total = groups.today.length + groups.week.length + groups.later.length;
+  const total = notifyTotalCount(groups);
   return (
     <View style={{ flex: 1 }}>
       <View style={s.topbar}>
