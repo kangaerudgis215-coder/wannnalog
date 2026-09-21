@@ -22,15 +22,6 @@ export function reminderSeconds(choice) {
   }
 }
 
-// 期限から既定の「思い出す時期」を決める
-export function defaultRemindForDue(dueTag) {
-  switch (dueTag) {
-    case 'thisWeek': return '3days';
-    case 'thisMonth': return 'week';
-    default: return '3days';
-  }
-}
-
 // 表示名
 export function remindLabel(choice) {
   const o = REMIND_OPTIONS.find((x) => x.key === choice);
