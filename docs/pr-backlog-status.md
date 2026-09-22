@@ -216,6 +216,14 @@
 - 結果：`npx jest --coverage` は 22 suites / 285 tests すべて成功（作業開始時は291 tests。使われていない関数のテストを削除したため件数が減少）。App.jsの構文もbabel（`babel-preset-expo`経由、`@babel/core`のtransformFileSyncで確認）。
 - App.js以外の純粋ロジック抽出はほぼ完全に出尽くした状態（今回、全モジュール・全コンポーネントを横断して再確認したが新規候補なし）。次回以降は死んだコード・重複ロジックの掃除を引き続き探しつつ、そろそろ新機能系PRの実機確認をオーナーにお願いしたい局面（特に#63のキーワード検索はMVP必須項目のまま1ヶ月以上未マージ）。
 
+## 2026-09-21（今回）
+
+- 前回（9/20）の整理PR #91（使われていない`currentStreak()`/`defaultRemindForDue()`の削除）を確認したところ、見た目・動作を変えない安全な変更だったため直接マージした。
+- 死んだコードの候補を2件見つけたが、どちらも意図的に残されている土台コードと判明し削除は見送った：`affiliate.js`の`buildAffiliateUrl`/`shopSearchUrl`は`docs/stage3-strategy/monetization-and-roadmap.md`に「あえてアプリ内では使わない設計（Apple規約対策）」と明記された将来のマネタイズ用の土台。`geo.js`の`parseGps`/`coordsMapsUrl`は、未マージPR #48（写真のGPS情報から地図を開く機能）のロジック部分が先行してtrunkに入ったものと判断した。
+- 代わりにApp.js内を見直し、`NotifyTab`（通知タブ）の中で「今日/今週/それ以降」の合計件数を`groups.today.length + groups.week.length + groups.later.length`と3つのキー名を直書きで計算していた箇所を発見。すぐ下のセクション表示では既に`notify.js`の`NOTIFY_SECTIONS`（セクション定義の単一の真実源）を使っているのに、合計件数だけキー名が二重管理になっていた。`notify.js`に`notifyTotalCount(groups)`として切り出し、テストを3件追加した（新規PR）。
+- 結果：`npx jest --coverage` は 22 suites / 288 tests すべて成功（作業開始時は285 tests）。`notify.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`babel-preset-expo`経由、`@babel/core`のtransformFileSyncで確認）。
+- App.js以外の純粋ロジック抽出はほぼ完全に出尽くしており、次回は改めて死んだコード・重複ロジックの掃除を探しつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
+
 ## 次にやること
 
 - オーナーが上記表を見て、欲しい機能のPRだけ実機（Expo Go）で試してマージ。同じ課題の複数案（#26/#37/#38、#20/#32）はどちらか一方を選んでもう片方をクローズ。

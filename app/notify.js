@@ -110,6 +110,11 @@ export function groupNotifyItems(items, now = Date.now()) {
   return groups;
 }
 
+// groupNotifyItems()の結果からNOTIFY_SECTIONSに沿って合計件数を出す（純粋関数）
+export function notifyTotalCount(groups) {
+  return NOTIFY_SECTIONS.reduce((n, sec) => n + groups[sec.key].length, 0);
+}
+
 // 「日時指定」の既定値：翌日9:00(ms)。ReminderEditorの日時ピッカーの初期値に使う。
 export function defaultReminderAt(now = Date.now()) {
   const d = new Date(now);
