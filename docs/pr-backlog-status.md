@@ -224,6 +224,13 @@
 - 結果：`npx jest --coverage` は 22 suites / 288 tests すべて成功（作業開始時は285 tests）。`notify.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`babel-preset-expo`経由、`@babel/core`のtransformFileSyncで確認）。
 - App.js以外の純粋ロジック抽出はほぼ完全に出尽くしており、次回は改めて死んだコード・重複ロジックの掃除を探しつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
 
+## 2026-09-22（今回）
+
+- 前回（9/21）の整理PR #92（通知タブの合計件数計算を`notify.js`へ分離）は既にtrunkへマージ済みだった。
+- 続けてApp.js内でまだ切り出されていない純粋ロジックを探し、マイページ（`MyPageTab`）の達成サマリー＋グラフ部分にあった「直近7日グラフの棒の高さ用の最大値（0除算防止で下駄1）」と「週間の達成合計数」の計算が、`stats.js`の`weeklyDoneCounts()`のすぐ後でインラインのまま残っているのを発見。`weeklyDoneCounts()`の戻り値に`max`・`weekTotal`を追加する形で`stats.js`側にまとめ、テストを2件追加した（新規PR）。
+- 結果：`npx jest --coverage` は 22 suites / 290 tests すべて成功（作業開始時は288 tests）。`stats.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`@babel/core`のtransformFileSyncで確認）。
+- App.js以外の純粋ロジック抽出・死んだコード掃除はほぼ出尽くしており（今回も別エージェントに全モジュール横断で調査してもらったが、新規の死んだコードは見つからなかった）、次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
+
 ## 次にやること
 
 - オーナーが上記表を見て、欲しい機能のPRだけ実機（Expo Go）で試してマージ。同じ課題の複数案（#26/#37/#38、#20/#32）はどちらか一方を選んでもう片方をクローズ。

@@ -1398,8 +1398,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
   // カテゴリ別の達成（そのカテゴリの中で叶えた割合）
   const byCat = categoryStats(items, CATEGORIES);
   // 直近7日の達成数バー
-  const { week, counts } = weeklyDoneCounts(done);
-  const max = Math.max(1, ...counts);
+  const { week, counts, max, weekTotal } = weeklyDoneCounts(done);
   const W = WEEKDAY_LABELS;
 
   return (
@@ -1502,7 +1501,7 @@ function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPho
             </View>
           ))}
         </View>
-        <Text style={s.statSub}>この1週間で {counts.reduce((a, b) => a + b, 0)} 個 達成</Text>
+        <Text style={s.statSub}>この1週間で {weekTotal} 個 達成</Text>
       </View>
 
       {/* カテゴリ別の達成バー（色分け） */}

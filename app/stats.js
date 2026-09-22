@@ -16,11 +16,14 @@ export function achievementRate(doneCount, total) {
 }
 
 // 直近7日（今日を含む）の達成数を、古い日→新しい日の順で返す。
+// max：グラフの棒の高さ用（0除算防止で最低1）。weekTotal：この7日間の達成数の合計。
 export function weeklyDoneCounts(done, now = Date.now()) {
   const today = startOfDay(now);
   const week = [...Array(7)].map((_, i) => today - (6 - i) * DAY_MS);
   const counts = week.map((d) => done.filter((it) => startOfDay(it.doneAt) === d).length);
-  return { week, counts };
+  const max = Math.max(1, ...counts);
+  const weekTotal = counts.reduce((a, b) => a + b, 0);
+  return { week, counts, max, weekTotal };
 }
 
 // カテゴリ別の達成状況（マイページの「カテゴリ別の達成」バーで使う）。

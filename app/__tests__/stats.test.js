@@ -52,6 +52,24 @@ describe('weeklyDoneCounts', () => {
     expect(counts[5]).toBe(2); // 昨日
     expect(counts.slice(0, 5).every((c) => c === 0)).toBe(true);
   });
+
+  test('達成が0件の週はグラフの高さ用maxが1になる（0除算防止）', () => {
+    const { max, weekTotal } = weeklyDoneCounts([]);
+    expect(max).toBe(1);
+    expect(weekTotal).toBe(0);
+  });
+
+  test('maxは1週間で最も多く達成した日の件数になる', () => {
+    const now = new Date(2026, 5, 21, 10, 0, 0).getTime();
+    const done = [
+      { doneAt: new Date(2026, 5, 21, 9, 0, 0).getTime() },
+      { doneAt: new Date(2026, 5, 21, 18, 0, 0).getTime() },
+      { doneAt: new Date(2026, 5, 20, 9, 0, 0).getTime() },
+    ];
+    const { max, weekTotal } = weeklyDoneCounts(done, now);
+    expect(max).toBe(2); // 今日2件・昨日1件のうち最大
+    expect(weekTotal).toBe(3); // 週の合計
+  });
 });
 
 
