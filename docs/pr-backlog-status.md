@@ -231,6 +231,13 @@
 - 結果：`npx jest --coverage` は 22 suites / 290 tests すべて成功（作業開始時は288 tests）。`stats.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`@babel/core`のtransformFileSyncで確認）。
 - App.js以外の純粋ロジック抽出・死んだコード掃除はほぼ出尽くしており（今回も別エージェントに全モジュール横断で調査してもらったが、新規の死んだコードは見つからなかった）、次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
 
+## 2026-09-23（今回）
+
+- 前回（9/22）の整理PR #93（マイページの週間グラフ最大値・合計をstats.jsへ分離）を確認したところ、見た目・動作を変えない安全な変更だったため直接マージした。
+- 続けてApp.js内の全importを洗い出し、実際に使われているか確認したところ、`garden.js`からimportしている`stageForCount`がApp.js側では一度も直接呼ばれておらず（import文だけ）、使われているのは内部で`stageForCount`を呼んでいる`growthProgress()`だけだと判明。呼び出し元の無いimportをApp.jsから削除した（`garden.js`側の`stageForCount`本体は`growthProgress`が引き続き使うため残す。見た目・動作の変化なし）。
+- 結果：`npx jest --coverage` は 22 suites / 290 tests すべて成功（削除前と同数。もともとテストの無い未使用importだったため）。App.jsの構文もbabel（`babel-preset-expo`経由、`@babel/core`のtransformSyncで確認）。
+- App.js以外の純粋ロジック抽出・死んだコード掃除はほぼ出尽くした状態が続いている。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
+
 ## 次にやること
 
 - オーナーが上記表を見て、欲しい機能のPRだけ実機（Expo Go）で試してマージ。同じ課題の複数案（#26/#37/#38、#20/#32）はどちらか一方を選んでもう片方をクローズ。
