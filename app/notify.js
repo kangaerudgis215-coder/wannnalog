@@ -150,3 +150,8 @@ export function reminderTimePickerMs(value, now = Date.now()) {
 export function resetReminderPatch(item, reminder) {
   return { ...item, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null, ...(reminder || {}) };
 }
+
+// 通知タブの「あとで（スヌーズ）」を押したときのパッチ（純粋関数）。単純に24時間後に再通知する。
+export function snoozeReminderPatch(now = Date.now()) {
+  return { remind: 'at', remindAt: now + DAY_MS };
+}

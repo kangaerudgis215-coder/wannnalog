@@ -238,6 +238,13 @@
 - 結果：`npx jest --coverage` は 22 suites / 290 tests すべて成功（削除前と同数。もともとテストの無い未使用importだったため）。App.jsの構文もbabel（`babel-preset-expo`経由、`@babel/core`のtransformSyncで確認）。
 - App.js以外の純粋ロジック抽出・死んだコード掃除はほぼ出尽くした状態が続いている。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
 
+## 2026-09-24（今回）
+
+- 前回（9/23）の整理PR #94（App.jsの未使用import`stageForCount`を削除）を確認したところ、見た目・動作を変えない安全な変更だったため直接マージした。
+- 続けてApp.js内でまだ切り出されていない純粋ロジックを探し、通知タブの「あとで（スヌーズ）」ボタンを押したときの処理`onSnooze={(id) => applyReminder(id, { remind: 'at', remindAt: Date.now() + DAY_MS })}`が、`notify.js`の他の通知パッチ関数（`resetReminderPatch`など）と同じ「純粋な計算」なのにApp.js内にインラインのまま残っているのを発見。`notify.js`に`snoozeReminderPatch(now)`として切り出し、テストを2件追加した（新規PR）。あわせて、この1箇所だけで使われていた`DAY_MS`のApp.js側import（`./stats`から）も不要になったので削除した。
+- 結果：`npx jest --coverage` は 22 suites / 292 tests すべて成功（作業開始時は290 tests）。`notify.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`@babel/core`のtransformFileSyncで確認）。
+- App.js以外の純粋ロジック抽出・死んだコード掃除はほぼ出尽くした状態が続いている（今回も別エージェントに全モジュール横断で死んだコードの調査をしてもらったが、新規候補は見つからなかった）。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
+
 ## 次にやること
 
 - オーナーが上記表を見て、欲しい機能のPRだけ実機（Expo Go）で試してマージ。同じ課題の複数案（#26/#37/#38、#20/#32）はどちらか一方を選んでもう片方をクローズ。
