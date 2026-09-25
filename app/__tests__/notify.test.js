@@ -1,4 +1,5 @@
-import { reminderSeconds, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch } from '../notify';
+import { reminderSeconds, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch } from '../notify';
+import { DAY_MS } from '../stats';
 
 const DAY = 24 * 60 * 60;
 
@@ -181,5 +182,20 @@ describe('resetReminderPatch', () => {
     expect(resetReminderPatch(item, undefined)).toEqual({
       ...item, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null,
     });
+  });
+});
+
+describe('snoozeReminderPatch', () => {
+  test('24時間後に日時指定で再通知するパッチを返す', () => {
+    const now = 1000;
+    expect(snoozeReminderPatch(now)).toEqual({ remind: 'at', remindAt: now + DAY_MS });
+  });
+  test('nowを省略した場合は現在時刻の24時間後になる', () => {
+    const before = Date.now();
+    const patch = snoozeReminderPatch();
+    const after = Date.now();
+    expect(patch.remind).toBe('at');
+    expect(patch.remindAt).toBeGreaterThanOrEqual(before + DAY_MS);
+    expect(patch.remindAt).toBeLessThanOrEqual(after + DAY_MS);
   });
 });
