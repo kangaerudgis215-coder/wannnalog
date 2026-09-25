@@ -23,7 +23,7 @@ import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyT
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
 import { moveItem, reorderedItems } from './reorder';
-import { homeBlocks } from './layout';
+import { homeBlocks, splitMasonryCols } from './layout';
 import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
 import { giftableItems, giftShareMessage } from './gift';
 import { parseSnsLink, snsMeta } from './sns';
@@ -440,8 +440,7 @@ function FadeInView({ index = 0, children }) {
 }
 function Masonry({ items, renderTile }) {
   const s = useStyles();
-  const cols = [[], []];
-  items.forEach((it, i) => cols[i % 2].push({ it, i }));
+  const cols = splitMasonryCols(items);
   return (
     <View style={s.masonryRow}>
       {cols.map((col, c) => (

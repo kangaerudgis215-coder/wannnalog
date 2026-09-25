@@ -14,3 +14,10 @@ export function homeBlocks(visible) {
   flush();
   return blocks;
 }
+
+// Masonry表示用：アイテムを2列に交互振り分け（元のindexは保持）
+export function splitMasonryCols(items) {
+  const cols = [[], []];
+  items.forEach((it, i) => cols[i % 2].push({ it, i }));
+  return cols;
+}
