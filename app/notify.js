@@ -155,3 +155,14 @@ export function resetReminderPatch(item, reminder) {
 export function snoozeReminderPatch(now = Date.now()) {
   return { remind: 'at', remindAt: now + DAY_MS };
 }
+
+// 予約プラン(reminderPlanの戻り値) → expo-notificationsのtrigger形式（純粋関数）。
+// Tはexpo-notificationsのSchedulableTriggerInputTypes（呼び出し側から渡してもらう）。
+export function reminderTrigger(plan, T) {
+  if (!plan) return null;
+  if (plan.kind === 'interval') return { type: T.TIME_INTERVAL, seconds: plan.seconds, repeats: false };
+  if (plan.kind === 'date') return { type: T.DATE, date: new Date(plan.at) };
+  if (plan.kind === 'daily') return { type: T.DAILY, hour: plan.hour, minute: plan.minute };
+  if (plan.kind === 'weekly') return { type: T.WEEKLY, weekday: plan.weekday, hour: plan.hour, minute: plan.minute };
+  return null;
+}
