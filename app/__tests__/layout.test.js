@@ -1,4 +1,4 @@
-import { homeBlocks, FEATURE_GAP } from '../layout';
+import { homeBlocks, FEATURE_GAP, splitMasonryCols } from '../layout';
 
 function makeItems(heats) {
   return heats.map((heat, i) => ({ id: String(i), heat, createdAt: i }));
@@ -28,5 +28,27 @@ describe('homeBlocks', () => {
 
   test('空配列は空配列を返す', () => {
     expect(homeBlocks([])).toEqual([]);
+  });
+});
+
+describe('splitMasonryCols', () => {
+  test('偶数indexは左列、奇数indexは右列に振り分ける（元のindexも保持）', () => {
+    const items = ['a', 'b', 'c'];
+    expect(splitMasonryCols(items)).toEqual([
+      [{ it: 'a', i: 0 }, { it: 'c', i: 2 }],
+      [{ it: 'b', i: 1 }],
+    ]);
+  });
+
+  test('空配列を渡すと空の2列を返す', () => {
+    expect(splitMasonryCols([])).toEqual([[], []]);
+  });
+
+  test('偶数個の場合は両列が同じ件数になる', () => {
+    const items = ['a', 'b', 'c', 'd'];
+    expect(splitMasonryCols(items)).toEqual([
+      [{ it: 'a', i: 0 }, { it: 'c', i: 2 }],
+      [{ it: 'b', i: 1 }, { it: 'd', i: 3 }],
+    ]);
   });
 });
