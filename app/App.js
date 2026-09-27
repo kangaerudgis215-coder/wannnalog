@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
-import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch } from './notify';
+import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
 import { moveItem, reorderedItems } from './reorder';
@@ -123,14 +123,8 @@ async function _schedule(item, trigger) {
 // アイテムの通知設定（remind/at/daily/weekly）に従って予約
 async function scheduleReminder(item) {
   const plan = reminderPlan(item);
-  if (!plan) return null;
-  const T = Notifications.SchedulableTriggerInputTypes;
-  let trigger;
-  if (plan.kind === 'interval') trigger = { type: T.TIME_INTERVAL, seconds: plan.seconds, repeats: false };
-  else if (plan.kind === 'date') trigger = { type: T.DATE, date: new Date(plan.at) };
-  else if (plan.kind === 'daily') trigger = { type: T.DAILY, hour: plan.hour, minute: plan.minute };
-  else if (plan.kind === 'weekly') trigger = { type: T.WEEKLY, weekday: plan.weekday, hour: plan.hour, minute: plan.minute };
-  else return null;
+  const trigger = reminderTrigger(plan, Notifications.SchedulableTriggerInputTypes);
+  if (!trigger) return null;
   return await _schedule(item, trigger);
 }
 async function scheduleInSeconds(item, seconds) {

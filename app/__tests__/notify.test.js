@@ -1,4 +1,4 @@
-import { reminderSeconds, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch } from '../notify';
+import { reminderSeconds, remindLabel, REMIND_OPTIONS, reminderPlan, remindSummary, defaultReminderAt, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger } from '../notify';
 import { DAY_MS } from '../stats';
 
 const DAY = 24 * 60 * 60;
@@ -197,5 +197,36 @@ describe('snoozeReminderPatch', () => {
     expect(patch.remind).toBe('at');
     expect(patch.remindAt).toBeGreaterThanOrEqual(before + DAY_MS);
     expect(patch.remindAt).toBeLessThanOrEqual(after + DAY_MS);
+  });
+});
+
+describe('reminderTrigger', () => {
+  // expo-notificationsのSchedulableTriggerInputTypesを模したダミー
+  const T = { TIME_INTERVAL: 'timeInterval', DATE: 'date', DAILY: 'daily', WEEKLY: 'weekly' };
+
+  test('planがnullなら予約しない', () => {
+    expect(reminderTrigger(null, T)).toBeNull();
+  });
+  test('interval：秒数指定・繰り返しなし', () => {
+    expect(reminderTrigger({ kind: 'interval', seconds: 3600 }, T)).toEqual({
+      type: 'timeInterval', seconds: 3600, repeats: false,
+    });
+  });
+  test('date：日時をDateに変換する', () => {
+    const at = 1_700_000_000_000;
+    expect(reminderTrigger({ kind: 'date', at }, T)).toEqual({ type: 'date', date: new Date(at) });
+  });
+  test('daily：時・分をそのまま渡す', () => {
+    expect(reminderTrigger({ kind: 'daily', hour: 9, minute: 30 }, T)).toEqual({
+      type: 'daily', hour: 9, minute: 30,
+    });
+  });
+  test('weekly：曜日・時・分をそのまま渡す', () => {
+    expect(reminderTrigger({ kind: 'weekly', weekday: 2, hour: 8, minute: 0 }, T)).toEqual({
+      type: 'weekly', weekday: 2, hour: 8, minute: 0,
+    });
+  });
+  test('未知のkindはnull', () => {
+    expect(reminderTrigger({ kind: 'yearly' }, T)).toBeNull();
   });
 });
