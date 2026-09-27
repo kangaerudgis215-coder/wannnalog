@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem, doneItemPatch } from './draft';
 import { PLANT, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, achieveGarden, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, timingLabelToRemember, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
 import { baseFamily } from './font';
 import { buildBackupPayload, isValidBackupPayload } from './backup';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -270,12 +270,12 @@ export default function App() {
   async function addVision(data) {
     const v = buildNewVision(data, visionSlots);
     // 独自ラベルの時期は再利用リストに保存
-    if (v.timing && v.timing.kind === 'label' && v.timing.text) await rememberTimingLabel(v.timing.text);
+    const label = timingLabelToRemember(v.timing); if (label) await rememberTimingLabel(label);
     await persistVision([...visionSlots, v]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
   async function updateVision(id, patch) {
-    if (patch.timing && patch.timing.kind === 'label' && patch.timing.text) await rememberTimingLabel(patch.timing.text);
+    const label = timingLabelToRemember(patch.timing); if (label) await rememberTimingLabel(label);
     await persistVision(visionSlots.map((v) => (v.id === id ? { ...v, ...patch } : v)));
   }
   async function removeVision(id) { await persistVision(visionSlots.filter((v) => v.id !== id)); }

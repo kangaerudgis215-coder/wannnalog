@@ -259,6 +259,13 @@
 - 結果：`npx jest --coverage` は 22 suites / 301 tests すべて成功（作業開始時は295 tests）。`notify.js`は statements/branches/functions/lines すべて100%。App.jsの構文もbabel（`@babel/core`のtransformFileSyncで確認）。
 - App.js以外の純粋ロジック抽出・死んだコード掃除はほぼ出尽くした状態が続いている（今回も別エージェントに全モジュール横断で調査してもらったが、死んだコードの新規候補は見つからなかった）。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
 
+## 2026-09-27（今回）
+
+- 前回（9/26）の整理PR #97（通知予約のtrigger変換ロジックを`notify.js`へ分離）を確認したところ、見た目・動作を変えない安全な変更だったため直接マージした。
+- 続けてApp.js内でまだ切り出されていない純粋ロジック・重複を探し、ビジョン追加（`addVision`）とビジョン更新（`updateVision`）の中に、それぞれ独立に書かれていた「timingが独自ラベル(kind:'label')なら、そのテキストを再利用リストに覚えておく」という同じ判定（`if (x.timing && x.timing.kind === 'label' && x.timing.text) ...`）が重複して残っているのを発見。`vision.js`に`timingLabelToRemember(timing)`として1箇所にまとめ、App.js側の2箇所を置き換え、テストを4件追加した（新規PR）。
+- 結果：`npx jest --coverage` は 22 suites / 304 tests すべて成功（作業開始時は301 tests）。App.jsの構文もbabel（`@babel/core`のtransformFileSyncで確認）。
+- `vision.js`は残り1分岐（`timingLabel()`のtiming.kindが想定外の値のときのnullフォールバック、line60）が未テストのまま。今回の変更とは無関係な既存の抜けなので対象外としたが、次回以降の候補として残す。App.js以外の純粋ロジック抽出・死んだコード掃除はほぼ出尽くした状態が続いている。次回以降も同じ探し方を続けつつ、引き続き#63（キーワード検索、MVP仕様の必須項目）を含む未マージの新機能PRをオーナーに実機確認してもらいたい。
+
 ## 次にやること
 
 - オーナーが上記表を見て、欲しい機能のPRだけ実機（Expo Go）で試してマージ。同じ課題の複数案（#26/#37/#38、#20/#32）はどちらか一方を選んでもう片方をクローズ。
