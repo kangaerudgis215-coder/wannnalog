@@ -66,6 +66,11 @@ export function formatTimingDate(dateStr) {
   if (!m) return dateStr;
   return `${Number(m[1])}/${Number(m[2])}/${Number(m[3])}`;
 }
+// timingが独自ラベル（kind:'label'）なら、再利用リストに覚えておくテキストを返す（無ければnull）。
+export function timingLabelToRemember(timing) {
+  if (timing && timing.kind === 'label' && timing.text) return timing.text;
+  return null;
+}
 
 // 旧スロット（v1）を新ビジョン（v2）へ移行。v2ならそのまま返す。
 export function migrateVision(slot, now = Date.now()) {

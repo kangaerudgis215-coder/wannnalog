@@ -1,6 +1,6 @@
 import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
-  TIMING_PRESETS, timingLabel, formatTimingDate,
+  TIMING_PRESETS, timingLabel, formatTimingDate, timingLabelToRemember,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
   buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult,
   VISION_CATEGORY_SEED, CATEGORY_COLORS,
@@ -44,6 +44,20 @@ describe('timingLabel / formatTimingDate', () => {
   });
   test('プリセットは4種', () => {
     expect(TIMING_PRESETS.map((p) => p.key)).toEqual(['thisMonth', 'thisYear', 'halfYear', 'someday']);
+  });
+});
+
+describe('timingLabelToRemember', () => {
+  test('独自ラベル(kind:label)ならそのテキストを返す', () => {
+    expect(timingLabelToRemember({ kind: 'label', text: '30歳まで' })).toBe('30歳まで');
+  });
+  test('プリセット・日付・無しはnull', () => {
+    expect(timingLabelToRemember({ kind: 'preset', key: 'thisYear' })).toBeNull();
+    expect(timingLabelToRemember({ kind: 'date', date: '2026-08-05' })).toBeNull();
+    expect(timingLabelToRemember(null)).toBeNull();
+  });
+  test('kind:labelでもテキストが空ならnull', () => {
+    expect(timingLabelToRemember({ kind: 'label', text: '' })).toBeNull();
   });
 });
 
