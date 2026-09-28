@@ -22,7 +22,7 @@ import { actionLinks, detailLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
-import { moveItem, reorderedItems } from './reorder';
+import { moveItem, reorderedItems, patchById } from './reorder';
 import { homeBlocks, splitMasonryCols } from './layout';
 import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
 import { giftableItems, giftShareMessage } from './gift';
@@ -276,7 +276,7 @@ export default function App() {
   }
   async function updateVision(id, patch) {
     if (patch.timing && patch.timing.kind === 'label' && patch.timing.text) await rememberTimingLabel(patch.timing.text);
-    await persistVision(visionSlots.map((v) => (v.id === id ? { ...v, ...patch } : v)));
+    await persistVision(patchById(visionSlots, id, patch));
   }
   async function removeVision(id) { await persistVision(visionSlots.filter((v) => v.id !== id)); }
   // 写真をタップ→トリミングして差し替え（1ビジョン1枚）。
@@ -300,7 +300,7 @@ export default function App() {
     await persistCats([...visionCats, c]);
     return c;
   }
-  async function updateCategory(id, patch) { await persistCats(visionCats.map((c) => (c.id === id ? { ...c, ...patch } : c))); }
+  async function updateCategory(id, patch) { await persistCats(patchById(visionCats, id, patch)); }
   async function removeCategory(id) {
     const patch = removeCategoryPatch(visionSlots, visionCats, id);
     await persistVision(patch.visions);
@@ -348,7 +348,7 @@ export default function App() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCeleb(result.celeb);
   }
-  async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
+  async function updateItem(id, patch) { await persist(patchById(items, id, patch)); }
   // 手動並べ替え：未達成カードを指定順に並べ、達成済みは末尾に保持して保存。
   async function reorderItems(activeIds) {
     await persist(reorderedItems(items, activeIds));
