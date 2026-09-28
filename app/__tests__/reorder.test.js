@@ -1,4 +1,4 @@
-import { moveItem, reorderedItems } from '../reorder';
+import { moveItem, reorderedItems, patchById } from '../reorder';
 
 describe('moveItem', () => {
   test('下へ移動できる', () => {
@@ -45,5 +45,20 @@ describe('reorderedItems', () => {
 
   test('達成済みが無ければ未達成のみを返す', () => {
     expect(reorderedItems([a, b], ['b', 'a']).map((it) => it.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('patchById', () => {
+  const list = [{ id: 'a', n: 1 }, { id: 'b', n: 2 }];
+  test('一致する1件だけ上書きする', () => {
+    expect(patchById(list, 'b', { n: 9, x: true })).toEqual([{ id: 'a', n: 1 }, { id: 'b', n: 9, x: true }]);
+  });
+  test('元の配列は壊さない', () => {
+    patchById(list, 'a', { n: 5 });
+    expect(list[0].n).toBe(1);
+  });
+  test('一致なし・未指定でも落ちない', () => {
+    expect(patchById(list, 'zzz', { n: 0 })).toEqual(list);
+    expect(patchById(undefined, 'a', {})).toEqual([]);
   });
 });

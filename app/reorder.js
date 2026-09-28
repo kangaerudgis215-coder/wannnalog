@@ -17,3 +17,8 @@ export function reorderedItems(items, activeIds) {
   const done = items.filter((it) => it.doneAt);
   return [...active, ...done];
 }
+
+// 一覧のうち id が一致する1件だけに patch を上書きした新しい配列を返す（元配列は壊さない）。
+export function patchById(list, id, patch) {
+  return (list || []).map((x) => (x.id === id ? { ...x, ...patch } : x));
+}
