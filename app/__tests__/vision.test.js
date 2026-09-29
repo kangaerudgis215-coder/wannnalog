@@ -2,7 +2,7 @@ import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
   TIMING_PRESETS, timingLabel, formatTimingDate,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
-  buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult,
+  buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult, addTimingLabel,
   VISION_CATEGORY_SEED, CATEGORY_COLORS,
 } from '../vision';
 
@@ -258,5 +258,26 @@ describe('visionAchievedResult', () => {
   });
   test('対象が見つからなければnull', () => {
     expect(visionAchievedResult(visions, 'missing', 10 * DAY)).toBeNull();
+  });
+});
+
+describe('addTimingLabel', () => {
+  test('前後の空白を除いて先頭に追加する', () => {
+    expect(addTimingLabel(['a'], '  b ')).toEqual(['b', 'a']);
+  });
+  test('空文字・空白のみ・undefinedは追加しない（null）', () => {
+    expect(addTimingLabel(['a'], '   ')).toBeNull();
+    expect(addTimingLabel(['a'], '')).toBeNull();
+    expect(addTimingLabel(['a'], undefined)).toBeNull();
+  });
+  test('すでにあるラベルは追加しない（null）', () => {
+    expect(addTimingLabel(['a', 'b'], ' a ')).toBeNull();
+  });
+  test('12件を超えたら古いものから落とす', () => {
+    const labels = Array.from({ length: 12 }, (_, i) => `l${i}`);
+    const next = addTimingLabel(labels, 'new');
+    expect(next).toHaveLength(12);
+    expect(next[0]).toBe('new');
+    expect(next).not.toContain('l11');
   });
 });

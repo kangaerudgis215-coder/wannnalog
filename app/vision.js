@@ -170,3 +170,10 @@ export function buildVisionTabView(visions, categories, filter = 'all', sortMode
 
   return { shown, sections, filterOptions };
 }
+
+// 「いつ叶えたい？」のよく使うラベル：前後の空白を除いて先頭に追加（空・重複なら null、最大12件）。
+export function addTimingLabel(labels, text) {
+  const t = (text || '').trim();
+  if (!t || labels.includes(t)) return null;
+  return [t, ...labels].slice(0, 12);
+}

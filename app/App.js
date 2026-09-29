@@ -31,7 +31,7 @@ import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './
 import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem, doneItemPatch } from './draft';
 import { PLANT, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, achieveGarden, dayPeriod } from './garden';
 import { cardAspect } from './hash';
-import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
+import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult, addTimingLabel } from './vision';
 import { baseFamily } from './font';
 import { buildBackupPayload, isValidBackupPayload } from './backup';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -307,8 +307,8 @@ export default function App() {
     await persistCats(patch.categories);
   }
   async function rememberTimingLabel(text) {
-    const t2 = (text || '').trim(); if (!t2 || timingLabels.includes(t2)) return;
-    await persistTimingLabels([t2, ...timingLabels].slice(0, 12));
+    const next = addTimingLabel(timingLabels, text); if (!next) return;
+    await persistTimingLabels(next);
   }
 
   async function persist(next) { setItems(next); await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
