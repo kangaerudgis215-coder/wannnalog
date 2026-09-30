@@ -33,7 +33,7 @@ import { PLANT, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainin
 import { cardAspect } from './hash';
 import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
 import { baseFamily } from './font';
-import { buildBackupPayload, isValidBackupPayload } from './backup';
+import { buildBackupPayload, isValidBackupPayload, restoreValuesFromBackup } from './backup';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -239,16 +239,17 @@ export default function App() {
             withNotif.push({ ...it, notifId });
           }
           await persist(withNotif);
-          if (data.vision) {
-            await persistVision(migrateVisions(data.vision.slots || VISION_SEED));
-            if (data.vision.categories) await persistCats(data.vision.categories);
-            if (data.vision.timingLabels) await persistTimingLabels(data.vision.timingLabels);
-            await saveVisionTitle(data.vision.title || 'MY VISION');
+          const r = restoreValuesFromBackup(data);
+          if (r.vision) {
+            await persistVision(migrateVisions(r.vision.slots || VISION_SEED));
+            if (r.vision.categories) await persistCats(r.vision.categories);
+            if (r.vision.timingLabels) await persistTimingLabels(r.vision.timingLabels);
+            await saveVisionTitle(r.vision.title);
           }
-          if (data.profile?.name) await saveName(data.profile.name);
-          if (data.garden) await persistGarden(data.garden);
-          if (data.prefs?.theme) { setMode(data.prefs.theme); await AsyncStorage.setItem(THEME_KEY, data.prefs.theme); }
-          if (data.prefs?.density) await setDensityPref(data.prefs.density);
+          if (r.profileName) await saveName(r.profileName);
+          if (r.garden) await persistGarden(r.garden);
+          if (r.theme) { setMode(r.theme); await AsyncStorage.setItem(THEME_KEY, r.theme); }
+          if (r.density) await setDensityPref(r.density);
           Alert.alert('復元しました', 'バックアップからデータを読み込みました。');
         } },
       ]);
