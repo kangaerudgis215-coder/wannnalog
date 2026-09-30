@@ -1,4 +1,4 @@
-import { buildBackupPayload, isValidBackupPayload } from '../backup';
+import { buildBackupPayload, isValidBackupPayload, restoreValuesFromBackup } from '../backup';
 
 describe('buildBackupPayload', () => {
   const state = {
@@ -59,5 +59,26 @@ describe('isValidBackupPayload', () => {
     expect(isValidBackupPayload({})).toBe(false);
     expect(isValidBackupPayload({ items: 'not-an-array' })).toBe(false);
     expect(isValidBackupPayload({ items: null })).toBe(false);
+  });
+});
+
+describe('restoreValuesFromBackup', () => {
+  it('全項目あれば取り出す', () => {
+    const data = {
+      items: [],
+      vision: { slots: [1], title: 'T', categories: [2], timingLabels: [3] },
+      profile: { name: 'たろう' }, garden: { points: 5 },
+      prefs: { theme: 'dark', density: 'compact' },
+    };
+    expect(restoreValuesFromBackup(data)).toEqual({
+      vision: { slots: [1], title: 'T', categories: [2], timingLabels: [3] },
+      profileName: 'たろう', garden: { points: 5 }, theme: 'dark', density: 'compact',
+    });
+  });
+  it('項目が無ければ null、ビジョン題名は既定値', () => {
+    expect(restoreValuesFromBackup({ items: [] })).toEqual({
+      vision: null, profileName: null, garden: null, theme: null, density: null,
+    });
+    expect(restoreValuesFromBackup({ items: [], vision: {} }).vision.title).toBe('MY VISION');
   });
 });
