@@ -10,6 +10,11 @@ export function startOfDay(ts) {
   return d.getTime();
 }
 
+// 達成済み（doneAtがある）のアイテムだけを返す。
+export function doneItems(items) {
+  return items.filter((it) => it.doneAt);
+}
+
 // 達成率（%）。保存が0件のときは0。
 export function achievementRate(doneCount, total) {
   return total > 0 ? Math.round((doneCount / total) * 100) : 0;

@@ -21,7 +21,7 @@ import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith,
 import { actionLinks, detailLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
-import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats } from './stats';
+import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats, doneItems } from './stats';
 import { moveItem, reorderedItems } from './reorder';
 import { homeBlocks, splitMasonryCols } from './layout';
 import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
@@ -369,7 +369,7 @@ export default function App() {
   }
 
   const selected = items.find((it) => it.id === selectedId);
-  const doneCount = items.filter((it) => it.doneAt).length;
+  const doneCount = doneItems(items).length;
   const activeCount = items.length - doneCount;
   const openItem = (it) => { Haptics.selectionAsync(); setSelectedId(it.id); };
 
@@ -1383,7 +1383,7 @@ function CatStatBar({ c }) {
 }
 function MyPageTab({ items, doneCount, garden, name, onName, photoUri, onPickPhoto, density, onDensity, onExport, onImport, mode, onToggleMode, onOpen, onOpenGift, onOpenGarden }) {
   const t = useTheme(); const s = useStyles();
-  const done = items.filter((it) => it.doneAt);
+  const done = doneItems(items);
   const publicCount = giftableItems(items).length;
   const plantStage = growthProgress((garden && garden.points) || 0);
   const total = items.length;
