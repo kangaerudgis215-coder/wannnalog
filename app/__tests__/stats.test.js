@@ -1,4 +1,4 @@
-import { DAY_MS, WEEKDAY_LABELS, startOfDay, achievementRate, weeklyDoneCounts, categoryStats } from '../stats';
+import { DAY_MS, WEEKDAY_LABELS, startOfDay, achievementRate, doneActiveCounts, weeklyDoneCounts, categoryStats } from '../stats';
 
 describe('startOfDay', () => {
   test('時刻を00:00:00に揃える', () => {
@@ -112,4 +112,14 @@ test('WEEKDAY_LABELSは日〜土の7要素', () => {
 
 test('DAY_MSは24時間のミリ秒', () => {
   expect(DAY_MS).toBe(24 * 60 * 60 * 1000);
+});
+
+describe('doneActiveCounts', () => {
+  test('達成済みとのこりを数える', () => {
+    const items = [{ doneAt: 1 }, { doneAt: null }, {}, { doneAt: 5 }];
+    expect(doneActiveCounts(items)).toEqual({ doneCount: 2, activeCount: 2 });
+  });
+  test('空なら両方0', () => {
+    expect(doneActiveCounts([])).toEqual({ doneCount: 0, activeCount: 0 });
+  });
 });
