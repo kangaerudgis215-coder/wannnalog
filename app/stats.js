@@ -10,6 +10,12 @@ export function startOfDay(ts) {
   return d.getTime();
 }
 
+// 叶えた数とのこりの数。ホームの「叶えた N ・ のこり M」表示用。
+export function doneActiveCounts(items) {
+  const doneCount = items.filter((it) => it.doneAt).length;
+  return { doneCount, activeCount: items.length - doneCount };
+}
+
 // 達成率（%）。保存が0件のときは0。
 export function achievementRate(doneCount, total) {
   return total > 0 ? Math.round((doneCount / total) * 100) : 0;
