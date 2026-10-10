@@ -37,3 +37,9 @@ export function categoryStats(items, categories) {
     })
     .filter((c) => c.total > 0);
 }
+
+// 達成済み／これから（未達成）の件数。ホーム・マイページの数字で使う。
+export function doneActiveCounts(items) {
+  const doneCount = items.filter((it) => it.doneAt).length;
+  return { doneCount, activeCount: items.length - doneCount };
+}
