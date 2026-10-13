@@ -45,3 +45,8 @@ export function buildNewItem(data, now = Date.now()) {
     ...rem, notifId: null, createdAt: now, doneAt: null,
   };
 }
+
+// 一覧のうち、idが一致する1件だけに patch を上書きして返す（他はそのまま）
+export function patchById(list, id, patch) {
+  return list.map((x) => (x.id === id ? { ...x, ...patch } : x));
+}

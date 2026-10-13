@@ -28,7 +28,7 @@ import { visibleItems, snsPlatformsPresent, upcomingItems } from './filter';
 import { giftableItems, giftShareMessage } from './gift';
 import { parseSnsLink, snsMeta } from './sns';
 import { fetchOgp, cleanTitle, isUrl, isMapsUrl, guessCategoryFromUrl } from './ogp';
-import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem, doneItemPatch } from './draft';
+import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem, doneItemPatch, patchById } from './draft';
 import { PLANT, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainingWaterToday, waterGarden, achieveGarden, dayPeriod } from './garden';
 import { cardAspect } from './hash';
 import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult } from './vision';
@@ -276,7 +276,7 @@ export default function App() {
   }
   async function updateVision(id, patch) {
     if (patch.timing && patch.timing.kind === 'label' && patch.timing.text) await rememberTimingLabel(patch.timing.text);
-    await persistVision(visionSlots.map((v) => (v.id === id ? { ...v, ...patch } : v)));
+    await persistVision(patchById(visionSlots, id, patch));
   }
   async function removeVision(id) { await persistVision(visionSlots.filter((v) => v.id !== id)); }
   // 写真をタップ→トリミングして差し替え（1ビジョン1枚）。
@@ -300,7 +300,7 @@ export default function App() {
     await persistCats([...visionCats, c]);
     return c;
   }
-  async function updateCategory(id, patch) { await persistCats(visionCats.map((c) => (c.id === id ? { ...c, ...patch } : c))); }
+  async function updateCategory(id, patch) { await persistCats(patchById(visionCats, id, patch)); }
   async function removeCategory(id) {
     const patch = removeCategoryPatch(visionSlots, visionCats, id);
     await persistVision(patch.visions);
@@ -348,7 +348,7 @@ export default function App() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCeleb(result.celeb);
   }
-  async function updateItem(id, patch) { await persist(items.map((it) => (it.id === id ? { ...it, ...patch } : it))); }
+  async function updateItem(id, patch) { await persist(patchById(items, id, patch)); }
   // 手動並べ替え：未達成カードを指定順に並べ、達成済みは末尾に保持して保存。
   async function reorderItems(activeIds) {
     await persist(reorderedItems(items, activeIds));
