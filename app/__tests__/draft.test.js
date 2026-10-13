@@ -1,4 +1,4 @@
-import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem, doneItemPatch } from '../draft';
+import { buildQuickCaptureItem, resolveSaveImageAndLink, buildNewItem, doneItemPatch, patchById } from '../draft';
 
 describe('buildQuickCaptureItem', () => {
   test('タイトル・カテゴリ・画像・リンクをそのまま反映する', () => {
@@ -115,5 +115,21 @@ describe('doneItemPatch', () => {
     const before = Date.now();
     const result = doneItemPatch(items, 'i1');
     expect(result.celeb.item.doneAt).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe('patchById', () => {
+  const list = [{ id: 'a', n: 1, k: 'x' }, { id: 'b', n: 2, k: 'y' }];
+  test('idが一致する1件だけ上書きし、他はそのまま', () => {
+    const out = patchById(list, 'b', { n: 9 });
+    expect(out).toEqual([{ id: 'a', n: 1, k: 'x' }, { id: 'b', n: 9, k: 'y' }]);
+    expect(out[0]).toBe(list[0]);
+  });
+  test('元の配列は変更しない', () => {
+    patchById(list, 'a', { n: 5 });
+    expect(list[0].n).toBe(1);
+  });
+  test('一致するidが無ければ内容は変わらない', () => {
+    expect(patchById(list, 'zzz', { n: 0 })).toEqual(list);
   });
 });
