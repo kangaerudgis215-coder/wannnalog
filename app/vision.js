@@ -66,6 +66,11 @@ export function formatTimingDate(dateStr) {
   if (!m) return dateStr;
   return `${Number(m[1])}/${Number(m[2])}/${Number(m[3])}`;
 }
+// timingが独自ラベル（kind:'label'）なら、再利用リストに覚えておくテキストを返す（無ければnull）。
+export function timingLabelToRemember(timing) {
+  if (timing && timing.kind === 'label' && timing.text) return timing.text;
+  return null;
+}
 
 // 旧スロット（v1）を新ビジョン（v2）へ移行。v2ならそのまま返す。
 export function migrateVision(slot, now = Date.now()) {
@@ -169,4 +174,11 @@ export function buildVisionTabView(visions, categories, filter = 'all', sortMode
   const noneN = active.filter((v) => catOf(v) === '__none').length; if (noneN) filterOptions.push({ id: '__none', name: '未分類', count: noneN });
 
   return { shown, sections, filterOptions };
+}
+
+// 「いつ叶えたい？」のよく使うラベル：前後の空白を除いて先頭に追加（空・重複なら null、最大12件）。
+export function addTimingLabel(labels, text) {
+  const t = (text || '').trim();
+  if (!t || labels.includes(t)) return null;
+  return [t, ...labels].slice(0, 12);
 }

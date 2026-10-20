@@ -1,8 +1,8 @@
 import {
   VISION_FONTS, visionFont, VISION_STAGES, visionStage, stageAccent,
-  TIMING_PRESETS, timingLabel, formatTimingDate,
+  TIMING_PRESETS, timingLabel, formatTimingDate, timingLabelToRemember,
   migrateVision, migrateVisions, buildVisionTabView, achievedGallery, getCategoryById,
-  buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult,
+  buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult, addTimingLabel,
   VISION_CATEGORY_SEED, CATEGORY_COLORS,
 } from '../vision';
 
@@ -44,6 +44,20 @@ describe('timingLabel / formatTimingDate', () => {
   });
   test('プリセットは4種', () => {
     expect(TIMING_PRESETS.map((p) => p.key)).toEqual(['thisMonth', 'thisYear', 'halfYear', 'someday']);
+  });
+});
+
+describe('timingLabelToRemember', () => {
+  test('独自ラベル(kind:label)ならそのテキストを返す', () => {
+    expect(timingLabelToRemember({ kind: 'label', text: '30歳まで' })).toBe('30歳まで');
+  });
+  test('プリセット・日付・無しはnull', () => {
+    expect(timingLabelToRemember({ kind: 'preset', key: 'thisYear' })).toBeNull();
+    expect(timingLabelToRemember({ kind: 'date', date: '2026-08-05' })).toBeNull();
+    expect(timingLabelToRemember(null)).toBeNull();
+  });
+  test('kind:labelでもテキストが空ならnull', () => {
+    expect(timingLabelToRemember({ kind: 'label', text: '' })).toBeNull();
   });
 });
 
@@ -258,5 +272,26 @@ describe('visionAchievedResult', () => {
   });
   test('対象が見つからなければnull', () => {
     expect(visionAchievedResult(visions, 'missing', 10 * DAY)).toBeNull();
+  });
+});
+
+describe('addTimingLabel', () => {
+  test('前後の空白を除いて先頭に追加する', () => {
+    expect(addTimingLabel(['a'], '  b ')).toEqual(['b', 'a']);
+  });
+  test('空文字・空白のみ・undefinedは追加しない（null）', () => {
+    expect(addTimingLabel(['a'], '   ')).toBeNull();
+    expect(addTimingLabel(['a'], '')).toBeNull();
+    expect(addTimingLabel(['a'], undefined)).toBeNull();
+  });
+  test('すでにあるラベルは追加しない（null）', () => {
+    expect(addTimingLabel(['a', 'b'], ' a ')).toBeNull();
+  });
+  test('12件を超えたら古いものから落とす', () => {
+    const labels = Array.from({ length: 12 }, (_, i) => `l${i}`);
+    const next = addTimingLabel(labels, 'new');
+    expect(next).toHaveLength(12);
+    expect(next[0]).toBe('new');
+    expect(next).not.toContain('l11');
   });
 });
