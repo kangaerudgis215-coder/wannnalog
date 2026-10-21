@@ -41,6 +41,7 @@ describe('timingLabel / formatTimingDate', () => {
     expect(timingLabel(null)).toBeNull();
     expect(timingLabel({ kind: 'preset', key: 'zzz' })).toBeNull();
     expect(timingLabel({ kind: 'label', text: '   ' })).toBeNull();
+    expect(timingLabel({ kind: 'unknown' })).toBeNull();
   });
   test('プリセットは4種', () => {
     expect(TIMING_PRESETS.map((p) => p.key)).toEqual(['thisMonth', 'thisYear', 'halfYear', 'someday']);
