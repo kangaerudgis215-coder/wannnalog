@@ -15,6 +15,12 @@ export function doneItems(items) {
   return items.filter((it) => it.doneAt);
 }
 
+// 達成済みの数と、まだ叶えていない（のこり）数。
+export function itemCounts(items) {
+  const done = doneItems(items).length;
+  return { done, remaining: items.length - done };
+}
+
 // 達成率（%）。保存が0件のときは0。
 export function achievementRate(doneCount, total) {
   return total > 0 ? Math.round((doneCount / total) * 100) : 0;
