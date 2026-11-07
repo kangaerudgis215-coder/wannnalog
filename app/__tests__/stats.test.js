@@ -1,4 +1,4 @@
-import { DAY_MS, WEEKDAY_LABELS, startOfDay, achievementRate, weeklyDoneCounts, categoryStats, doneItems } from '../stats';
+import { DAY_MS, WEEKDAY_LABELS, startOfDay, achievementRate, weeklyDoneCounts, categoryStats, doneItems, itemCounts } from '../stats';
 
 describe('startOfDay', () => {
   test('時刻を00:00:00に揃える', () => {
@@ -121,5 +121,14 @@ describe('doneItems', () => {
   });
   test('空の配列なら空を返す', () => {
     expect(doneItems([])).toEqual([]);
+  });
+});
+
+describe('itemCounts', () => {
+  test('達成数とのこり数を数える', () => {
+    expect(itemCounts([{ id: 'a', doneAt: 1 }, { id: 'b' }, { id: 'c' }])).toEqual({ done: 1, remaining: 2 });
+  });
+  test('空なら0と0', () => {
+    expect(itemCounts([])).toEqual({ done: 0, remaining: 0 });
   });
 });
