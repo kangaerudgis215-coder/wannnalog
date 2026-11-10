@@ -166,21 +166,24 @@ describe('resetReminderPatch', () => {
   };
 
   test('古い通知フィールドをリセットしてから新しい設定をマージする', () => {
-    expect(resetReminderPatch(item, { remind: '3days' })).toEqual({
-      ...item, remind: '3days', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null,
+    expect(resetReminderPatch(item, { remind: '3days' }, 5000)).toEqual({
+      ...item, remind: '3days', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null, remindSetAt: 5000,
     });
   });
   test('remindAt指定（日時指定）の場合はそれを残す', () => {
-    expect(resetReminderPatch(item, { remind: 'at', remindAt: 999 })).toEqual({
-      ...item, remind: 'at', remindAt: 999, remindHour: null, remindMinute: null, remindWeekday: null,
+    expect(resetReminderPatch(item, { remind: 'at', remindAt: 999 }, 5000)).toEqual({
+      ...item, remind: 'at', remindAt: 999, remindHour: null, remindMinute: null, remindWeekday: null, remindSetAt: 5000,
     });
   });
   test('item以外のフィールドはそのまま保持する', () => {
     expect(resetReminderPatch(item, { remind: 'none' }).title).toBe('鎌倉の海カフェ');
   });
+  test('設定し直した時刻(remindSetAt)を記録する（通知タブの並びの基準になる）', () => {
+    expect(resetReminderPatch(item, { remind: 'tomorrow' }, 7777).remindSetAt).toBe(7777);
+  });
   test('reminderを省略してもリセットだけは行う', () => {
-    expect(resetReminderPatch(item, undefined)).toEqual({
-      ...item, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null,
+    expect(resetReminderPatch(item, undefined, 5000)).toEqual({
+      ...item, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null, remindSetAt: 5000,
     });
   });
 });

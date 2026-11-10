@@ -236,7 +236,8 @@ export default function App() {
           for (const it of data.items) {
             let notifId = null;
             if (!it.doneAt && it.remind && it.remind !== 'none') { try { notifId = await scheduleReminder(it); } catch (e) {} }
-            withNotif.push({ ...it, notifId });
+            // 「明日/3日後」などは今から数え直して予約されるので、基準時刻も今にそろえる
+            withNotif.push(notifId ? { ...it, notifId, remindSetAt: Date.now() } : { ...it, notifId });
           }
           await persist(withNotif);
           const r = restoreValuesFromBackup(data);
