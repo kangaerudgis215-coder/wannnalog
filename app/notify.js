@@ -47,7 +47,8 @@ export function reminderPlan(item, now = Date.now()) {
 }
 
 // 次に思い出す予定の時刻(ms)を推定（純粋関数・通知画面の時系列グループ分けに使う）。
-// interval(明日/3日後/1週間後)は createdAt を基準に概算する。
+// interval(明日/3日後/1週間後)は「通知を設定した時刻(remindSetAt)」を基準に概算する。
+// 古いデータで remindSetAt が無いときは createdAt（保存した時刻）を使う。
 export function nextRemindAt(item, now = Date.now()) {
   const r = (item && item.remind) || 'none';
   if (r === 'none') return null;
@@ -67,7 +68,7 @@ export function nextRemindAt(item, now = Date.now()) {
   }
   const secs = reminderSeconds(r);
   if (secs == null) return null;
-  return (item.createdAt || now) + secs * 1000;
+  return (item.remindSetAt || item.createdAt || now) + secs * 1000;
 }
 
 // 表示用の要約（純粋関数）
@@ -147,8 +148,10 @@ export function reminderTimePickerMs(value, now = Date.now()) {
 
 // 通知設定を丸ごと差し替えるときの更新後アイテム（純粋関数）。
 // 古い通知関連フィールドを一旦リセットしてから、新しい設定をマージする。
-export function resetReminderPatch(item, reminder) {
-  return { ...item, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null, ...(reminder || {}) };
+// remindSetAt：設定し直した時刻。「明日/3日後/1週間後」は実際の通知がこの時刻から数えて届くため、
+// 通知タブの並び（nextRemindAt）もこの時刻を基準にする。
+export function resetReminderPatch(item, reminder, now = Date.now()) {
+  return { ...item, remind: 'none', remindAt: null, remindHour: null, remindMinute: null, remindWeekday: null, remindSetAt: now, ...(reminder || {}) };
 }
 
 // 通知タブの「あとで（スヌーズ）」を押したときのパッチ（純粋関数）。単純に24時間後に再通知する。

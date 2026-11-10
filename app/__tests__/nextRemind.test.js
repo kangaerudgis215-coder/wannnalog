@@ -89,4 +89,10 @@ describe('nextRemindAt', () => {
   test('nowを省略しても動く（現在時刻を使う）', () => {
     expect(nextRemindAt({ remind: 'none' })).toBe(null);
   });
+  test('interval は通知を設定し直した時刻(remindSetAt)を createdAt より優先する', () => {
+    // 10日前に保存したアイテムを、今日「明日」に設定し直したケース
+    const setAt = now;
+    const created = now - 10 * DAY;
+    expect(nextRemindAt({ remind: 'tomorrow', createdAt: created, remindSetAt: setAt }, now)).toBe(now + DAY);
+  });
 });
