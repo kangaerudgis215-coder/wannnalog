@@ -97,13 +97,23 @@ describe('doneItemPatch', () => {
   test('対象を達成済みにし、達成日時を記録する', () => {
     const result = doneItemPatch(items, 'i1', 1000);
     expect(result.items).toEqual([
-      { id: 'i1', title: '鎌倉の海カフェ', doneAt: 1000 },
+      { id: 'i1', title: '鎌倉の海カフェ', doneAt: 1000, notifId: null },
       items[1],
     ]);
   });
   test('お祝い演出用のデータ（達成後のアイテム情報）を返す', () => {
     const result = doneItemPatch(items, 'i1', 1000);
     expect(result.celeb).toEqual({ item: { id: 'i1', title: '鎌倉の海カフェ', doneAt: 1000 } });
+  });
+  test('予約中の通知があれば、取り消すべき通知IDを返し、一覧側のnotifIdは空にする', () => {
+    const withNotif = [{ id: 'i1', title: '毎日思い出す', remind: 'daily', notifId: 'n-123', doneAt: null }];
+    const result = doneItemPatch(withNotif, 'i1', 1000);
+    expect(result.cancelNotifId).toBe('n-123');
+    expect(result.items[0].notifId).toBeNull();
+    expect(result.items[0].remind).toBe('daily'); // 通知の設定そのものは残す（未達成に戻したとき再予約できるように）
+  });
+  test('通知が予約されていなければ、取り消す通知IDはnull', () => {
+    expect(doneItemPatch(items, 'i1', 1000).cancelNotifId).toBeNull();
   });
   test('対象が見つからなければnull', () => {
     expect(doneItemPatch(items, 'missing', 1000)).toBeNull();

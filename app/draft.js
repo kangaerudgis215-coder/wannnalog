@@ -24,13 +24,15 @@ export function resolveSaveImageAndLink({ image, sns, link }) {
 }
 
 // 達成にする更新差分：達成日時を記録した一覧と、お祝い演出用データ（達成後のアイテム情報）をまとめて返す。
-// 対象が見つからなければnull（何もしない）。
+// 叶ったものに「思い出して」通知が届き続けないよう、取り消すべき通知ID（cancelNotifId）も返し、
+// 一覧側の notifId は null にしておく。対象が見つからなければnull（何もしない）。
 export function doneItemPatch(items, id, now = Date.now()) {
   const it0 = (items || []).find((x) => x.id === id);
   if (!it0) return null;
   return {
-    items: items.map((it) => (it.id === id ? { ...it, doneAt: now } : it)),
+    items: items.map((it) => (it.id === id ? { ...it, doneAt: now, notifId: null } : it)),
     celeb: { item: { ...it0, doneAt: now } },
+    cancelNotifId: it0.notifId || null,
   };
 }
 
