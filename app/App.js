@@ -344,12 +344,21 @@ export default function App() {
 
   async function markDone(id) {
     const result = doneItemPatch(items, id); if (!result) return;
+    // 叶ったものの通知は止める（毎日/毎週の通知がずっと届き続けるのを防ぐ）
+    if (result.cancelNotifId) { try { await Notifications.cancelScheduledNotificationAsync(result.cancelNotifId); } catch (e) {} }
     await persist(result.items);
     await persistGarden(achieveGarden(garden)); // 達成ボーナスで植物が大きく育つ
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCeleb(result.celeb);
   }
   async function updateItem(id, patch) { await persist(patchById(items, id, patch)); }
+  // 「未達成に戻す」：達成日時を消し、通知設定が残っていれば予約し直す
+  async function markUndone(id) {
+    const it = items.find((x) => x.id === id); if (!it) return;
+    const updated = { ...it, doneAt: null };
+    const notifId = await scheduleReminder(updated);
+    await persist(patchById(items, id, { doneAt: null, notifId }));
+  }
   // 手動並べ替え：未達成カードを指定順に並べ、達成済みは末尾に保持して保存。
   async function reorderItems(activeIds) {
     await persist(reorderedItems(items, activeIds));
@@ -389,6 +398,7 @@ export default function App() {
             onBack={() => { setSelectedId(null); setDetailStartEdit(false); }}
             onDone={() => { markDone(selected.id); setSelectedId(null); }}
             onUpdate={(patch) => updateItem(selected.id, patch)}
+            onUndone={() => markUndone(selected.id)}
             onReminder={(reminder) => applyReminder(selected.id, reminder)}
             onOpenLink={openInBrowser}
             onDelete={() => { deleteItem(selected.id); setSelectedId(null); }}
@@ -2233,7 +2243,7 @@ function GardenModal({ visible, onClose, garden, doneCount, onWater }) {
 }
 
 /* ---------- 詳細 ---------- */
-function DetailScreen({ item, startInEdit, onBack, onDone, onUpdate, onReminder, onOpenLink, onDelete }) {
+function DetailScreen({ item, startInEdit, onBack, onDone, onUndone, onUpdate, onReminder, onOpenLink, onDelete }) {
   const t = useTheme(); const s = useStyles();
   const cat = getCategory(item.category);
   const done = !!item.doneAt;
@@ -2391,7 +2401,7 @@ function DetailScreen({ item, startInEdit, onBack, onDone, onUpdate, onReminder,
           // 編集（入力）中は「完了」。入力の時点で達成しているわけではないので達成ボタンは出さない。
           <Pressable style={({ pressed }) => [s.doneBtn, pressed && s.doneBtnPressed]} onPress={() => setEditMode(false)}><Ionicons name="checkmark" size={22} color="#fff" /><Text style={s.doneText}>完了</Text></Pressable>
         ) : done ? (
-          <Pressable style={s.undoneBtn} onPress={() => onUpdate({ doneAt: null })}><Text style={s.undoneText}>未達成に戻す</Text></Pressable>
+          <Pressable style={s.undoneBtn} onPress={onUndone}><Text style={s.undoneText}>未達成に戻す</Text></Pressable>
         ) : (
           <Pressable style={({ pressed }) => [s.doneBtn, pressed && s.doneBtnPressed]} onPress={onDone}><Ionicons name="checkmark-circle" size={24} color="#fff" /><Text style={s.doneText}>達成した！</Text></Pressable>
         )}
