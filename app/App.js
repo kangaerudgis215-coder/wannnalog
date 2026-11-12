@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
-import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger } from './notify';
+import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger, notificationItemId } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats, doneItems } from './stats';
 import { moveItem, reorderedItems, patchById } from './reorder';
@@ -186,8 +186,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // アプリが完全に閉じている状態で通知をタップして起動したときは、
+    // 下のリスナーが間に合わないことがあるので、起動のきっかけになった通知も見る。
+    const launchId = notificationItemId(Notifications.getLastNotificationResponse());
+    if (launchId) {
+      setSelectedId(launchId);
+      Notifications.clearLastNotificationResponse(); // 次に開いたとき同じ画面に飛ばないよう消しておく
+    }
     const sub = Notifications.addNotificationResponseReceivedListener((res) => {
-      const id = res.notification.request.content.data?.id;
+      const id = notificationItemId(res);
       if (id) setSelectedId(id);
     });
     return () => sub.remove();

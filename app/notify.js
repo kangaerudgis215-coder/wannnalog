@@ -166,3 +166,10 @@ export function reminderTrigger(plan, T) {
   if (plan.kind === 'weekly') return { type: T.WEEKLY, weekday: plan.weekday, hour: plan.hour, minute: plan.minute };
   return null;
 }
+
+// 通知をタップしたときの応答から、開くべきアイテムのidを取り出す（純粋関数）。
+// 応答が無い・idが入っていないときは null。
+export function notificationItemId(response) {
+  const id = response?.notification?.request?.content?.data?.id;
+  return id ? String(id) : null;
+}
