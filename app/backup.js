@@ -26,3 +26,9 @@ export function restoreValuesFromBackup(data) {
     density: data.prefs?.density || null,
   };
 }
+
+// 上書き復元の前に取り消すべき、今のアイテムの通知予約IDを集める。
+// （取り消さないと、消えるはずの古いアイテムの通知が届き続けてしまう）
+export function notifIdsToCancel(items) {
+  return (items || []).map((it) => it && it.notifId).filter(Boolean);
+}

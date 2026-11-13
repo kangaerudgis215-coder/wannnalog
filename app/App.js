@@ -33,7 +33,7 @@ import { PLANT, growthProgress, coinsForCount, WATER_MAX, ACHIEVE_GAIN, remainin
 import { cardAspect } from './hash';
 import { VISION_FONTS, visionFont, VISION_CATEGORY_SEED, CATEGORY_COLORS, VISION_STAGES, visionStage, stageAccent, TIMING_PRESETS, timingLabel, timingLabelToRemember, migrateVisions, achievedGallery, getCategoryById, buildVisionTabView, buildNewVision, visionStagePatch, buildNewCategory, removeCategoryPatch, visionAchievedResult, addTimingLabel } from './vision';
 import { baseFamily } from './font';
-import { buildBackupPayload, isValidBackupPayload, restoreValuesFromBackup } from './backup';
+import { buildBackupPayload, isValidBackupPayload, restoreValuesFromBackup, notifIdsToCancel } from './backup';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -231,6 +231,8 @@ export default function App() {
       Alert.alert('読み込みますか？', '今のデータは上書きされます。よろしいですか？', [
         { text: 'キャンセル', style: 'cancel' },
         { text: '上書きして復元', style: 'destructive', onPress: async () => {
+          // 今のアイテムの通知予約を先に取り消す（上書きで消えるアイテムの通知が残らないように）
+          for (const nid of notifIdsToCancel(items)) { try { await Notifications.cancelScheduledNotificationAsync(nid); } catch (e) {} }
           // 通知はバックアップ元の予約が無効なので、未達成アイテムは貼り直す
           const withNotif = [];
           for (const it of data.items) {

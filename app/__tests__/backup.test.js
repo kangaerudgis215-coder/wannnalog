@@ -1,4 +1,4 @@
-import { buildBackupPayload, isValidBackupPayload, restoreValuesFromBackup } from '../backup';
+import { buildBackupPayload, isValidBackupPayload, restoreValuesFromBackup, notifIdsToCancel } from '../backup';
 
 describe('buildBackupPayload', () => {
   const state = {
@@ -80,5 +80,17 @@ describe('restoreValuesFromBackup', () => {
       vision: null, profileName: null, garden: null, theme: null, density: null,
     });
     expect(restoreValuesFromBackup({ items: [], vision: {} }).vision.title).toBe('MY VISION');
+  });
+});
+
+describe('notifIdsToCancel', () => {
+  it('通知予約IDを持つアイテムだけ集める', () => {
+    const items = [{ id: 'a', notifId: 'n1' }, { id: 'b', notifId: null }, { id: 'c' }, { id: 'd', notifId: 'n2' }];
+    expect(notifIdsToCancel(items)).toEqual(['n1', 'n2']);
+  });
+  it('空や未指定でも落ちない', () => {
+    expect(notifIdsToCancel([])).toEqual([]);
+    expect(notifIdsToCancel(undefined)).toEqual([]);
+    expect(notifIdsToCancel([null])).toEqual([]);
   });
 });
