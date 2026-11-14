@@ -82,32 +82,45 @@ export function remindSummary(item) {
   return remindLabel(r);
 }
 
-// 通知画面のセクション見出し（今日/今週/それ以降）
+// 通知画面のセクション見出し（今日/今週/それ以降/お知らせ済み）
+// past：1回きりの通知（明日/3日後/1週間後/日時指定）で、もう時刻が過ぎたもの。
 export const NOTIFY_SECTIONS = [
   { key: 'today', label: '今日' },
   { key: 'week', label: '今週' },
   { key: 'later', label: 'それ以降' },
+  { key: 'past', label: 'お知らせ済み' },
 ];
 
 // 次に思い出す時刻(ms) → どのセクションに入れるか（純粋関数）
+// 時刻が過ぎていれば past（毎日/毎週は nextRemindAt が常に未来を返すので past にならない）
 export function notifyBucket(at, now = Date.now()) {
   if (at == null) return 'later';
+  if (at <= now) return 'past';
   const startTomorrow = startOfDay(now) + DAY_MS;
   if (at < startTomorrow) return 'today';
   if (at < startOfDay(now) + 7 * DAY_MS) return 'week';
   return 'later';
 }
 
-// 通知画面のアイテムを「今日/今週/それ以降」に振り分ける（純粋関数）。
+// 通知画面のアイテムを「今日/今週/それ以降/お知らせ済み」に振り分ける（純粋関数）。
 // 未達成かつ通知ONのアイテムだけを対象にし、次に思い出す時刻が早い順に並べる。
+// お知らせ済みだけは、最近届いたものが上に来るよう新しい順にする。
 export function groupNotifyItems(items, now = Date.now()) {
   const reminders = items
     .filter((it) => !it.doneAt && it.remind && it.remind !== 'none')
     .map((it) => ({ it, at: nextRemindAt(it, now) }))
     .sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
-  const groups = { today: [], week: [], later: [] };
+  const groups = { today: [], week: [], later: [], past: [] };
   reminders.forEach((r) => groups[notifyBucket(r.at, now)].push(r.it));
+  groups.past.reverse();
   return groups;
+}
+
+// 通知タブの各行の説明文（純粋関数）。時刻が過ぎた1回きりの通知は「お知らせ済み」と表示する。
+export function notifySubText(item, now = Date.now()) {
+  const at = nextRemindAt(item, now);
+  if (at != null && at <= now) return `${remindSummary(item)}にお知らせ済み`;
+  return `${remindSummary(item)}に思い出します`;
 }
 
 // groupNotifyItems()の結果からNOTIFY_SECTIONSに沿って合計件数を出す（純粋関数）
