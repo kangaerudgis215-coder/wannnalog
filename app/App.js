@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
-import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger } from './notify';
+import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger, notifySubText } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats, doneItems } from './stats';
 import { moveItem, reorderedItems, patchById } from './reorder';
@@ -1320,7 +1320,7 @@ function NotifyRow({ item, onOpen, onSnooze, onStop }) {
         <View style={[s.notifyIcon, { backgroundColor: cat.color }]}><VIcon set={cat.iconSet} name={cat.icon} size={18} color="#fff" /></View>
         <View style={{ flex: 1 }}>
           <Text style={s.notifyTitle} numberOfLines={1}>{item.title}</Text>
-          <Text style={s.notifySub}>{remindSummary(item)}に思い出します</Text>
+          <Text style={s.notifySub}>{notifySubText(item)}</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={t.sub} />
       </Pressable>
