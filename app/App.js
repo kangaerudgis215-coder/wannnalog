@@ -20,6 +20,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
 import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger } from './notify';
+import { reminderContentChanged, keepTimingPlan } from './notifyRefresh';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats, doneItems } from './stats';
 import { moveItem, reorderedItems, patchById } from './reorder';
@@ -361,7 +362,20 @@ export default function App() {
     if (it.notifId) { try { await Notifications.cancelScheduledNotificationAsync(it.notifId); } catch (e) {} }
     const updated = resetReminderPatch(it, reminder);
     const notifId = await scheduleReminder(updated);
-    await persist(items.map((x) => (x.id === id ? { ...updated, notifId } : x)));
+    const next = { ...updated, notifId };
+    await persist(items.map((x) => (x.id === id ? next : x)));
+    return next;
+  }
+  // 詳細画面でタイトル/カテゴリを変えたら、通知を同じタイミングのまま予約し直す
+  // （予約済みの通知は予約した時点の名前で届くため。before＝今の通知を予約した時点のアイテム）
+  async function refreshReminderContent(before) {
+    const after = before && items.find((x) => x.id === before.id);
+    if (!reminderContentChanged(before, after)) return;
+    const trigger = reminderTrigger(keepTimingPlan(after), Notifications.SchedulableTriggerInputTypes);
+    if (!trigger) return; // もう届いた後などは、今の予約に触らない
+    try { await Notifications.cancelScheduledNotificationAsync(after.notifId); } catch (e) {}
+    const notifId = await _schedule(after, trigger);
+    await persist(patchById(items, after.id, { notifId }));
   }
   async function deleteItem(id) {
     const it = items.find((x) => x.id === id);
@@ -370,6 +384,9 @@ export default function App() {
   }
 
   const selected = items.find((it) => it.id === selectedId);
+  // 詳細画面を開いた時点のアイテム（閉じるときに、通知の名前を予約し直すか比べる）
+  const detailBefore = useRef(null);
+  useEffect(() => { detailBefore.current = selectedId ? (items.find((x) => x.id === selectedId) || null) : null; }, [selectedId]);
   const doneCount = doneItems(items).length;
   const activeCount = items.length - doneCount;
   const openItem = (it) => { Haptics.selectionAsync(); setSelectedId(it.id); };
@@ -386,10 +403,10 @@ export default function App() {
         {selected ? (
           <DetailScreen
             key={selected.id} item={selected} startInEdit={detailStartEdit}
-            onBack={() => { setSelectedId(null); setDetailStartEdit(false); }}
+            onBack={() => { refreshReminderContent(detailBefore.current); setSelectedId(null); setDetailStartEdit(false); }}
             onDone={() => { markDone(selected.id); setSelectedId(null); }}
             onUpdate={(patch) => updateItem(selected.id, patch)}
-            onReminder={(reminder) => applyReminder(selected.id, reminder)}
+            onReminder={async (reminder) => { const next = await applyReminder(selected.id, reminder); if (next) detailBefore.current = next; }}
             onOpenLink={openInBrowser}
             onDelete={() => { deleteItem(selected.id); setSelectedId(null); }}
           />
