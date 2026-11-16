@@ -166,3 +166,13 @@ export function reminderTrigger(plan, T) {
   if (plan.kind === 'weekly') return { type: T.WEEKLY, weekday: plan.weekday, hour: plan.hour, minute: plan.minute };
   return null;
 }
+
+// 保存直後に出す「保存しました」のメッセージ（純粋関数）。
+// scheduled：実際に通知を予約できたか（notifIdがあるか）。
+// 日時指定で過去の日時を選んだときなどは予約されないので、「思い出させます」とは言わずにそう伝える。
+export function savedAlertMessage(item, scheduled) {
+  const r = (item && item.remind) || 'none';
+  if (r === 'none') return 'ボードに追加しました。';
+  if (!scheduled) return 'ボードに追加しました。\n通知の日時がすでに過ぎているため、通知は予約していません（詳細画面から設定し直せます）。';
+  return `${remindSummary(item)} に思い出させます。`;
+}
