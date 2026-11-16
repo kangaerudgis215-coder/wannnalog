@@ -19,7 +19,7 @@ import { GestureHandlerRootView, ScrollView as GHScrollView, Swipeable, Gesture,
 
 import { palettes, CATEGORIES, getCategory, reminderBody, WITH_OPTIONS, getWith, catSoft } from './theme';
 import { actionLinks, detailLinks, dueLabel } from './links';
-import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger } from './notify';
+import { reminderPlan, remindSummary, groupNotifyItems, NOTIFY_SECTIONS, notifyTotalCount, reminderChoicePatch, reminderAtPickerMs, reminderTimePickerMs, resetReminderPatch, snoozeReminderPatch, reminderTrigger, savedAlertMessage } from './notify';
 import { HEAT_OPTIONS, heatLabel, defaultRemindForHeat } from './heat';
 import { achievementRate, weeklyDoneCounts, WEEKDAY_LABELS, categoryStats, doneItems } from './stats';
 import { moveItem, reorderedItems, patchById } from './reorder';
@@ -329,7 +329,7 @@ export default function App() {
     await persist([item, ...items]);
     if (!opts.silent) { // クイック保存は独自アニメがあるのでAlert抑制
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('保存しました', item.remind === 'none' ? 'ボードに追加しました。' : `${remindSummary(item)} に思い出させます。`);
+      Alert.alert('保存しました', savedAlertMessage(item, !!item.notifId));
     }
     return item.id;
   }
@@ -1649,7 +1649,7 @@ function ReminderEditor({ value, onChange }) {
       {remind === 'at' && (
         <View style={s.reminderPickRow}>
           <Text style={s.reminderHint}>日時</Text>
-          <DateTimePicker value={atDate} mode="datetime" display="compact"
+          <DateTimePicker value={atDate} mode="datetime" display="compact" minimumDate={new Date()}
             themeVariant={t.mode} accentColor={t.accent}
             onChange={(e, d) => { if (d) set({ remindAt: d.getTime() }); }} />
         </View>
